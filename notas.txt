@@ -1,0 +1,15 @@
+cd "C:\Users\nunov\OneDrive\Ambiente de Trabalho\Python\ourfinancetracker"
+source ourfinancetracker/Scripts/activate
+
+./ourfinancetracker/Scripts/python.exe -m pip install python-dotenv
+
+
+
+python manage.py runserver
+
+
+
+
+
+
+http://127.0.0.1:8000/

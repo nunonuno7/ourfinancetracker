@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transações</title>
+</head>
+<body>
+    <h1>Transações</h1>
+    <a href="{% url 'nova_transacao' %}">+ Nova Transação</a>
+    <ul>
+        {% for t in transacoes %}
+            <li>{{ t.data }} - {{ t.descricao }} - €{{ t.valor }}</li>
+        {% empty %}
+            <li>Sem transações ainda.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
