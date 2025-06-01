@@ -1,0 +1,18 @@
+# Ambiente virtual
+ourfinancetracker/
+
+# Ficheiro de variáveis secretas
+.env
+
+# Base de dados SQLite local
+db.sqlite3
+
+# Cache e ficheiros temporários
+__pycache__/
+*.py[cod]
+*.log
+*.pot
+*.pyc
+
+# VS Code
+.vscode/
