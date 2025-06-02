@@ -1,6 +1,12 @@
-cd "C:\Users\nunov\OneDrive\Ambiente de Trabalho\Python\ourfinancetracker"
-
+cd "C:\Users\up657272\OneDrive\Ambiente de Trabalho\Python\ourfinancetracker"
 source ourfinancetracker/Scripts/activate
+python manage.py runserver
+
+python manage.py migrate
+
+http://127.0.0.1:8000/
+
+
 conda deactivate
 
 
@@ -11,7 +17,7 @@ ourfinancetracker/Scripts/python.exe -m pip list
 
 
 
-python manage.py runserver
+
 
 ## atualizar requirements.txt 
     pip freeze > requirements.txt
@@ -20,7 +26,7 @@ python manage.py runserver
 
 
 
-http://127.0.0.1:8000/
+
 
 
 
