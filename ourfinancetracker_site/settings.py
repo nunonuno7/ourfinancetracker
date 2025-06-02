@@ -30,10 +30,13 @@ SECRET_KEY = "django-insecure-8icb2_0x#s_iw^ql-kb!)3k%+s80k+=)3ojs+q^i%(b_dmcv4j
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "ourfinancetracker.onrender.com",
-    "localhost",
-    "127.0.0.1",
+    'ourfinancetracker.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    'ourfinancetracker.com',
+    'www.ourfinancetracker.com',
 ]
+
 
 # permitir por variável de ambiente:
 if host := os.getenv("RENDER_EXTERNAL_HOSTNAME"):
