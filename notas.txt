@@ -1,7 +1,13 @@
 cd "C:\Users\nunov\OneDrive\Ambiente de Trabalho\Python\ourfinancetracker"
+
 source ourfinancetracker/Scripts/activate
+conda deactivate
+
 
 ./ourfinancetracker/Scripts/python.exe -m pip install python-dotenv
+
+ourfinancetracker/Scripts/python.exe -m pip list
+
 
 
 
@@ -15,3 +21,15 @@ python manage.py runserver
 
 
 http://127.0.0.1:8000/
+
+
+
+git
+
+pip freeze > requirements.txt
+    ourfinancetracker/Scripts/python.exe -m pip freeze > requirements.txt
+
+git add requirements.txt .gitignore
+git commit -m "Atualizar requirements.txt e .gitignore"
+git push
+
