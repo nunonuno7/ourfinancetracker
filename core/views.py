@@ -182,72 +182,84 @@ class AccountUpdateView(
 #                           Account balance view                               #
 ################################################################################
 
+# core/views.py   (substitui TODO o bloco actual)
+
 @login_required
 def account_balance_view(request):
-    """Create/update account balances for a selected month."""
-
+    """
+    Lista e actualiza os saldos de cada conta no último dia do mês seleccionado.
+    – garante 1 saldo por (conta, mês)
+    – permite criar contas “on-the-fly” via AccountBalanceForm
+    """
     today = date.today()
-    year = int(request.GET.get("year", today.year))
+    year  = int(request.GET.get("year",  today.year))
     month = int(request.GET.get("month", today.month))
 
     first_day = date(year, month, 1)
-    last_day = date(year, month, monthrange(year, month)[1])
+    last_day  = date(year, month, monthrange(year, month)[1])
 
-    qs_base = AccountBalance.objects.filter(
-        account__user=request.user,
-        balance_date=last_day,
-    ).select_related("account", "account__account_type")
+    # queryset base (o que já existe na BD para esse mês)
+    qs_base = (
+        AccountBalance.objects
+        .filter(account__user=request.user, balance_date=last_day)
+        .select_related("account", "account__account_type")
+    )
 
+    # ---------------------------- POST (guardar) ---------------------------
     if request.method == "POST":
         formset = AccountBalanceFormSet(
             request.POST,
             queryset=qs_base,
             user=request.user,
         )
+
         if formset.is_valid():
+            # 1) criar / actualizar
             for inst in formset.save(commit=False):
                 inst.balance_date = last_day
+
+                # se for conta nova, certificar-se de que pertence ao utilizador
+                if inst.account.user_id is None:
+                    inst.account.user = request.user
+                    inst.account.save()
+
+                # idempotente – 1 saldo por (conta, mês)
                 AccountBalance.objects.update_or_create(
-                    account=inst.account,
-                    balance_date=inst.balance_date,
-                    defaults={
-                        "reported_balance": inst.reported_balance,
-                    },
+                    account       = inst.account,
+                    balance_date  = inst.balance_date,
+                    defaults      = {"reported_balance": inst.reported_balance},
                 )
+
+            # 2) apagar linhas marcadas
             for obj in formset.deleted_objects:
                 obj.delete()
 
-            _merge_duplicate_accounts(user=request.user)
+            # 3) fundir eventuais duplicados de contas
+            _merge_duplicate_accounts(request.user)
+
             messages.success(request, "Balances saved!")
             return redirect(f"{request.path}?year={year}&month={month:02d}")
+
+        # se nao for válido, devolvemos o formset com erros → cai no render() em baixo
+
+    # ---------------------------- GET (listar) -----------------------------
     else:
-        initial_instances = list(qs_base)
-
-        if not initial_instances:
-            prev_qs = AccountBalance.objects.filter(
-                account__user=request.user,
-                balance_date=date(year - 1, month, monthrange(year - 1, month)[1]),
-            ).select_related("account", "account__account_type")
-
-            existing = {ab.account_id for ab in initial_instances}
-            for prev in prev_qs:
-                if prev.account_id not in existing:
-                    prev.pk = None
-                    prev.balance_date = last_day
-                    initial_instances.append(prev)
+        # se não houver para o mês corrente, tenta “herdar” do mesmo mês no ano anterior
+        if not qs_base.exists():
+            prev_last_day = date(year - 1, month, monthrange(year - 1, month)[1])
+            for prev in AccountBalance.objects.filter(
+                account__user=request.user, balance_date=prev_last_day
+            ):
+                prev.pk            = None          # clona
+                prev.balance_date  = last_day
+                prev.save()
 
         formset = AccountBalanceFormSet(
-            queryset=qs_base,
-            initial=[
-                {
-                    "account": ab.account.name,
-                    "reported_balance": ab.reported_balance,
-                }
-                for ab in initial_instances
-            ],
+            queryset=qs_base,      # já inclui os que clonámos acima
             user=request.user,
         )
 
+    # ---------------------------- render -----------------------------------
     context = {
         "formset": formset,
         "year": year,
@@ -255,6 +267,10 @@ def account_balance_view(request):
         "selected_month": first_day,
     }
     return render(request, "core/account_balance.html", context)
+
+
+
+
 
 def _merge_duplicate_accounts(user):
     """Procura contas duplicadas com o mesmo nome (case-insensitive) e funde tudo numa só."""
