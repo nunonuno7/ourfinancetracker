@@ -1,4 +1,4 @@
-"""Views for the *ourfinancetracker* core app.
+"""""Views for the *ourfinancetracker* core app.
 
 The file was rewritten to:
 • remove duplicated imports
@@ -13,14 +13,16 @@ from __future__ import annotations
 from calendar import monthrange
 from datetime import date
 from typing import Any, Dict
-
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import QuerySet
+from django.http import JsonResponse, Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -36,10 +38,9 @@ from .forms import (
     CategoryForm,
     CustomUserCreationForm,
     TransactionForm,
-    AccountBalance,
 )
 from .models import Account, AccountBalance, Category, Transaction
-
+from django.http import HttpResponseForbidden
 
 ################################################################################
 #                               Shared mix‑ins                                 #
@@ -184,15 +185,8 @@ class AccountUpdateView(
 #                           Account balance view                               #
 ################################################################################
 
-# core/views.py   (substitui TODO o bloco actual)
-
 @login_required
 def account_balance_view(request):
-    """
-    Lista e actualiza os saldos de cada conta no mês selecionado.
-    – garante 1 saldo por (conta, ano, mês)
-    – permite criar contas “on-the-fly” via AccountBalanceForm
-    """
     today = date.today()
     year = int(request.GET.get("year", today.year))
     month = int(request.GET.get("month", today.month))
@@ -213,10 +207,11 @@ def account_balance_view(request):
 
             instances = formset.save(commit=False)
 
-            for inst in instances:
-                if form.cleaned_data.get("DELETE", False):
+            for form in formset:
+                if form.cleaned_data.get("DELETE"):
                     continue
 
+                inst = form.save(commit=False)
                 inst.year = year
                 inst.month = month
 
@@ -224,13 +219,20 @@ def account_balance_view(request):
                     inst.account.user = request.user
                     inst.account.save()
 
-                inst.save()
-                print(f"💾 Guardado: {inst.account.name} = {inst.reported_balance}")
 
-            if hasattr(formset, 'deleted_forms'):
-                for form in formset.deleted_forms:
-                    if form.instance.pk:
-                        form.instance.delete()
+                existing = AccountBalance.objects.filter(
+                    account=inst.account,
+                    year=inst.year,
+                    month=inst.month
+                ).first()
+
+                if existing:
+                    existing.reported_balance = inst.reported_balance
+                    existing.save()
+                else:
+                    inst.save()
+
+                print(f"💾 Guardado: {inst.account.name} = {inst.reported_balance}")
 
             _merge_duplicate_accounts(request.user)
 
@@ -255,8 +257,24 @@ def account_balance_view(request):
     }
     return render(request, "core/account_balance.html", context)
 
+
+@require_POST
+@login_required
+def delete_account_balance(request):
+    balance_id = request.POST.get("id")
+    if not balance_id:
+        return JsonResponse({"error": "Missing balance ID."}, status=400)
+
+    try:
+        obj = AccountBalance.objects.get(pk=balance_id, account__user=request.user)
+    except AccountBalance.DoesNotExist:
+        raise Http404("AccountBalance not found.")
+
+    obj.delete()
+    return JsonResponse({"success": True})
+
+
 def _merge_duplicate_accounts(user):
-    """Procura contas duplicadas com o mesmo nome (case-insensitive) e funde tudo numa só."""
     from .models import Account, AccountBalance
 
     seen = {}
@@ -274,8 +292,6 @@ def _merge_duplicate_accounts(user):
 ################################################################################
 
 def signup(request):
-    """Very small wrapper around ``CustomUserCreationForm`` for now."""
-
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
@@ -297,3 +313,27 @@ class LogoutView(RedirectView):
 
 class HomeView(TemplateView):
     template_name = "core/home.html"
+
+
+@require_POST
+@csrf_exempt  # se quiseres evitar erro CSRF num POST via fetch, ou substitui por @csrf_protect com token no JS
+@login_required
+def delete_account_balance(request, pk):
+    try:
+        obj = AccountBalance.objects.get(pk=pk, account__user=request.user)
+        obj.delete()
+        return JsonResponse({"success": True})
+    except AccountBalance.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Not found"}, status=404)
+    
+
+class AccountDeleteView(OwnerQuerysetMixin, DeleteView):
+    model = Account
+    template_name = "core/account_confirm_delete.html"
+    success_url = reverse_lazy("account_list")
+
+    def dispatch(self, request, *args, **kwargs):
+        account = self.get_object()
+        if account.name.lower() == "cash":
+            return HttpResponseForbidden("Default account cannot be deleted.")
+        return super().dispatch(request, *args, **kwargs)

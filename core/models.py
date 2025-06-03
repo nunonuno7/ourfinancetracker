@@ -111,14 +111,14 @@ class Account(models.Model):
     account_type = models.ForeignKey(
         AccountType,
         on_delete=models.PROTECT,
-        default=get_default_account_type,  # noqa: B008
+        default=get_default_account_type,  # ← tentará usar "Savings"
     )
     currency = models.ForeignKey(
         Currency,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        default=get_default_currency,  # noqa: B008
+        default=get_default_currency,  # ← tentará usar "EUR"
     )
     created_at = models.DateField(auto_now_add=True)
 
@@ -126,18 +126,23 @@ class Account(models.Model):
         unique_together = (("user", "name"),)
         ordering = ("name",)
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"{self.name} – {self.user}"
 
-    # ------------------------------------------------------------ save/clean
-
-    def save(self, *args, **kwargs):  # noqa: D401
-        """Ensure `currency` is never NULL at business‑logic level."""
-        if self.currency_id is None:
-            # tenta apanhar das definições do utilizador
+    def save(self, *args, **kwargs):
+        """Ensure `account_type` and `currency` are not null when saving."""
+        if not self.account_type_id:
+            self.account_type = get_default_account_type() or AccountType.objects.first()
+        if not self.currency_id:
             default_curr = getattr(getattr(self.user, "settings", None), "default_currency", None)
             self.currency = default_curr or get_default_currency()
         super().save(*args, **kwargs)
+
+    def is_default(self) -> bool:
+        """Returns True if this account is the default 'Cash' account."""
+        return self.name.strip().lower() == "cash"
+
+    
 
 
 class AccountBalance(models.Model):
