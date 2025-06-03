@@ -141,19 +141,20 @@ class Account(models.Model):
 
 
 class AccountBalance(models.Model):
-    """Snapshot of an account's balance on a given day."""
+    """Snapshot of an account's balance for a given month."""
 
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="balances")
-    balance_date = models.DateField()
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
     reported_balance = models.DecimalField(max_digits=14, decimal_places=2)
 
     class Meta:
-        unique_together = (("account", "balance_date"),)
-        ordering = ("-balance_date",)
+        unique_together = (("account", "year", "month"),)
+        ordering = ("-year", "-month")
 
-    def __str__(self) -> str:  # pragma: no cover
-        return f"{self.account} @ {self.balance_date}: {self.reported_balance}"
-
+    def __str__(self) -> str:
+        return f"{self.account} @ {self.year}-{self.month:02d}: {self.reported_balance}"
+    
 
 class Category(models.Model):
     """User‑specific tree of categories and sub‑categories."""
@@ -272,11 +273,12 @@ class UserSettings(models.Model):
 
 
 @receiver(post_save, sender=Account)
-def _create_initial_balance_on_account_creation(sender, instance: Account, created: bool, **kwargs):  # noqa: D401
-    """Initialise account balance to 0 on creation."""
+def _create_initial_balance_on_account_creation(sender, instance: Account, created: bool, **kwargs):
     if created:
+        today = timezone.now().date()
         AccountBalance.objects.create(
             account=instance,
-            balance_date=timezone.now().date(),
+            year=today.year,
+            month=today.month,
             reported_balance=Decimal("0.00"),
         )
