@@ -1,0 +1,65 @@
+# core/urls.py
+from django.urls import path
+from django.contrib.auth import views as auth_views
+from django.views.generic import RedirectView
+from django.contrib.auth import logout as auth_logout
+
+from .views import (
+    HomeView,
+    signup,
+    LogoutView,
+
+    # Transactions
+    TransactionListView,
+    TransactionCreateView,
+    TransactionUpdateView,
+    TransactionDeleteView,
+
+    # Categories
+    CategoryListView,
+    CategoryCreateView,
+    CategoryUpdateView,
+    CategoryDeleteView,
+
+    # Accounts
+    AccountListView,
+    AccountCreateView,
+    AccountUpdateView,
+    account_balance_view,
+)
+
+# 👇 Logout via GET (evita erro 405 nos testes e links)
+class LogoutView(RedirectView):
+    pattern_name = "login"
+
+    def get(self, request, *args, **kwargs):
+        auth_logout(request)
+        return super().get(request, *args, **kwargs)
+
+urlpatterns = [
+    # ───────────── Home ─────────────
+    path("", HomeView.as_view(), name="home"),
+
+    # ───────────── Auth ─────────────
+    path("signup/", signup, name="signup"),
+    path("login/", auth_views.LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
+
+    # ───────── Transactions ─────────
+    path("transactions/", TransactionListView.as_view(), name="transaction_list"),
+    path("transactions/new/", TransactionCreateView.as_view(), name="transaction_create"),
+    path("transactions/<int:pk>/edit/", TransactionUpdateView.as_view(), name="transaction_update"),
+    path("transactions/<int:pk>/delete/", TransactionDeleteView.as_view(), name="transaction_delete"),
+
+    # ────────── Categories ──────────
+    path("categories/", CategoryListView.as_view(), name="category_list"),
+    path("categories/new/", CategoryCreateView.as_view(), name="category_create"),
+    path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_update"),
+    path("categories/<int:pk>/delete/", CategoryDeleteView.as_view(), name="category_delete"),
+
+    # ─────────── Accounts ───────────
+    path("accounts/", AccountListView.as_view(), name="account_list"),
+    path("accounts/new/", AccountCreateView.as_view(), name="account_create"),
+    path("accounts/<int:pk>/edit/", AccountUpdateView.as_view(), name="account_update"),
+    path("account-balance/", account_balance_view, name="account_balance"),
+]

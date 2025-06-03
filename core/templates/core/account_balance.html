@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block extra_head %}
+<style>
+  .replica { background-color:#fff9d6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Account balances</h2>
+
+<!-- YEAR / MONTH NAV -->
+<div class="d-flex align-items-center mb-3">
+  <a class="btn btn-outline-secondary me-2"
+     href="?year={{ year }}&month={{ month|add:'-1' }}">
+    ‹
+  </a>
+  <input type="month" id="selector"
+         value="{{ year }}-{{ month|stringformat:'02d' }}"
+         onchange="window.location='?month='+this.value.split('-')[1]+'&year='+this.value.split('-')[0];">
+  <a class="btn btn-outline-secondary ms-2"
+     href="?year={{ year }}&month={{ month|add:'1' }}">
+    ›
+  </a>
+</div>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {{ formset.management_form }}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th class="text-end">Balance (€)</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="balance-body">
+    {% for form in formset %}
+      <tr class="{% if not form.instance.pk %}replica{% endif %}">
+        <td>
+          {% render_field form.account class="form-control" %}
+        </td>
+        <td class="text-end">
+          {% render_field form.reported_balance class="form-control text-end" %}
+        </td>
+        <td>
+          {{ form.DELETE }}
+          <button type="button" class="btn btn-sm btn-outline-danger delete-row">&times;</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <button type="button" id="add-row" class="btn btn-sm btn-outline-primary">+ Add account</button>
+  <a href="{% url 'account_list' %}" class="btn btn-sm btn-outline-secondary ms-2">Manage Accounts</a>
+  <button type="submit" class="btn btn-success float-end">Save</button>
+</form>
+
+<!-- Hidden empty form template for cloning -->
+<table class="d-none">
+  <tbody id="row-template">
+    <tr>
+      <td>
+        {% render_field formset.empty_form.account class="form-control" %}
+      </td>
+      <td class="text-end">
+        {% render_field formset.empty_form.reported_balance class="form-control text-end" %}
+      </td>
+      <td>
+        {{ formset.empty_form.DELETE }}
+        <button type="button" class="btn btn-sm btn-outline-danger delete-row">&times;</button>
+      </td>
+    </tr>
+  </tbody>
+</table>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Add dynamic row
+  document.getElementById("add-row").addEventListener("click", () => {
+    const tmpl = document.querySelector("#row-template tr").cloneNode(true);
+    const tbody = document.querySelector("#balance-body");
+    tbody.appendChild(tmpl);
+
+    const totalForms = document.querySelector('input[name$="TOTAL_FORMS"]');
+    const currentCount = parseInt(totalForms.value, 10);
+    totalForms.value = currentCount + 1;
+
+    tmpl.querySelectorAll("input,select").forEach(el => {
+      if (el.name) {
+        el.name = el.name.replace("__prefix__", currentCount);
+      }
+      if (el.id) {
+        el.id = el.id.replace("__prefix__", currentCount);
+      }
+    });
+  });
+
+  // Delete row
+  document.addEventListener("click", function(event) {
+    if (event.target.classList.contains("delete-row")) {
+      const row = event.target.closest("tr");
+      const deleteCheckbox = row.querySelector("input[type='checkbox'][name$='-DELETE']");
+      if (deleteCheckbox) {
+        deleteCheckbox.checked = true;
+        row.style.display = "none";
+      }
+    }
+  });
+</script>
+{% endblock %}

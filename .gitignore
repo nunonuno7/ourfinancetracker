@@ -1,0 +1,34 @@
+
+# ✅ Ambiente virtual (se estiver dentro do projeto)
+ourfinancetracker/
+
+# ✅ Variáveis de ambiente (segurança)
+.env
+
+# ✅ Base de dados SQLite local
+db.sqlite3
+
+# ✅ Cache e ficheiros compilados do Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ✅ Ficheiros temporários e logs
+*.log
+*.pot
+
+# ✅ VSCode configs (individuais)
+.vscode/
+
+# ✅ Outras exclusões comuns (ex: backups ou sistema operativo)
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+
+
+notebook.py
+roadmap_detalhado.ipynb
+roadmap_notebook.py
+notas.txt
