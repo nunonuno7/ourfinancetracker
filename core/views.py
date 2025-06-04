@@ -19,6 +19,8 @@ from django.db.models import Sum, F
 from django.utils.functional import cached_property
 
 from django.contrib import messages
+from django.contrib.messages import get_messages
+
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -28,7 +30,7 @@ from django.http import JsonResponse, Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.views.generic import (
     CreateView, DeleteView, ListView, RedirectView, TemplateView,
     UpdateView, View
@@ -312,6 +314,10 @@ def account_balance_view(request):
     year = int(request.GET.get("year", today.year))
     month = int(request.GET.get("month", today.month))
 
+    # 🧼 Limpa mensagens pendentes (ex: vindas do copy)
+    if request.method == "GET":
+        list(get_messages(request))
+
     qs_base = AccountBalance.objects.filter(
         account__user=request.user,
         year=year,
@@ -365,6 +371,7 @@ def account_balance_view(request):
         "selected_month": date(year, month, 1),
     }
     return render(request, "core/account_balance.html", context)
+
 
 
 @require_POST
@@ -432,3 +439,46 @@ def delete_account_balance(request, pk):
         return JsonResponse({"success": True})
     except AccountBalance.DoesNotExist:
         return JsonResponse({"success": False, "error": "Not found"}, status=404)
+
+
+@require_GET
+@login_required
+def copy_previous_balances_view(request):
+    """Copies balances from the previous month if they do not already exist."""
+    year = int(request.GET.get("year"))
+    month = int(request.GET.get("month"))
+
+    # Calcula mês anterior
+    if month == 1:
+        prev_month = 12
+        prev_year = year - 1
+    else:
+        prev_month = month - 1
+        prev_year = year
+
+    created_count = 0
+    user = request.user
+
+    previous_balances = AccountBalance.objects.filter(
+        account__user=user,
+        year=prev_year,
+        month=prev_month
+    ).select_related("account")
+
+    for bal in previous_balances:
+        exists = AccountBalance.objects.filter(
+            account=bal.account,
+            year=year,
+            month=month
+        ).exists()
+
+        if not exists:
+            AccountBalance.objects.create(
+                account=bal.account,
+                year=year,
+                month=month,
+                reported_balance=bal.reported_balance
+            )
+            created_count += 1
+
+    return JsonResponse({"success": True, "created": created_count})

@@ -25,14 +25,14 @@ from .views import (
     AccountListView,
     AccountCreateView,
     AccountUpdateView,
+    AccountDeleteView,
+    AccountMergeView,
+
+    # Balances
     account_balance_view,
     delete_account_balance,
-    AccountDeleteView,
-    AccountMergeView,)
-
-
-    
-
+    copy_previous_balances_view,
+)
 
 # 👇 Logout via GET (evita erro 405 nos testes e links)
 class LogoutView(RedirectView):
@@ -67,13 +67,11 @@ urlpatterns = [
     path("accounts/", AccountListView.as_view(), name="account_list"),
     path("accounts/new/", AccountCreateView.as_view(), name="account_create"),
     path("accounts/<int:pk>/edit/", AccountUpdateView.as_view(), name="account_update"),
-    path("account-balance/", account_balance_view, name="account_balance"),
-    path("account-balance/delete/<int:pk>/", delete_account_balance, name="account_balance_delete"),
     path("accounts/<int:pk>/delete/", AccountDeleteView.as_view(), name="account_delete"),
     path("accounts/merge/<int:source_pk>/<int:target_pk>/", AccountMergeView.as_view(), name="account_merge"),
 
-
-
-
-
+    # ────────── Balances ────────────
+    path("account-balance/", account_balance_view, name="account_balance"),
+    path("account-balance/delete/<int:pk>/", delete_account_balance, name="account_balance_delete"),
+    path("account-balance/copy/", copy_previous_balances_view, name="account_balance_copy"),
 ]

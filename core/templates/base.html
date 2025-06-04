@@ -1,4 +1,4 @@
-{% load static %}  {# permite usar {% static 'path/file.css' %} #}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,7 +25,6 @@
 <body>
     <!-- ===== NAVBAR ===================================================== -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4" role="navigation" aria-label="Main navigation">
-
         <div class="container-fluid">
             <a class="navbar-brand fw-semibold" href="{% url 'transaction_list' %}">
                 💰 ourfinancetracker
@@ -108,6 +107,8 @@
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
       defer
     ></script>
-    {% block extra_js %}{% endblock %}
+    {% block extra_js %}
+<script src="{% static 'js/main.js' %}"></script>
+{% endblock %}
 </body>
 </html>
