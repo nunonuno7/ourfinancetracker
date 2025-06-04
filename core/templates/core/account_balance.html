@@ -7,60 +7,75 @@
 
 <div class="d-flex align-items-center mb-3">
   <a class="btn btn-outline-secondary me-2"
-     href="?year={{ year }}&month={{ month|add:'-1' }}">
-    ‹
-  </a>
+     href="?year={{ year }}&month={{ month|add:'-1' }}">‹</a>
   <input type="month" id="selector"
          value="{{ year }}-{{ month|stringformat:'02d' }}"
          onchange="window.location='?month='+this.value.split('-')[1]+'&year='+this.value.split('-')[0];">
   <a class="btn btn-outline-secondary ms-2"
-     href="?year={{ year }}&month={{ month|add:'1' }}">
-    ›
-  </a>
+     href="?year={{ year }}&month={{ month|add:'1' }}">›</a>
 </div>
 
 <form method="post">
   {% csrf_token %}
   {{ formset.management_form }}
 
-  <table class="table align-middle">
-    <thead>
-      <tr>
-        <th style="width: 30px;">⇅</th>
-        <th>Account</th>
-        <th class="text-end">Balance (€)</th>
-        <th style="width: 40px;"></th>
-      </tr>
-    </thead>
+  {% for key, forms in grouped_forms.items %}
+    {% with account_type=key.0 currency=key.1 %}
+      <h5 class="mt-4">💼 {{ account_type }} – {{ currency }}</h5>
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width: 30px;">⇅</th>
+            <th>Account</th>
+            <th class="text-end">Balance</th>
+            <th style="width: 40px;"></th>
+          </tr>
+        </thead>
+        <tbody class="sortable-table" data-reorder-url="{% url 'account_reorder' %}" {% if account_type == "Savings" and currency == "EUR" %}id="balance-table"{% endif %}>
+          {% with subtotal=0 %}
+          {% for form in forms %}
+            {% with balance=form.instance.reported_balance %}
+              <tr class="form-row" data-id="{{ form.instance.account.id }}">
+                <td class="text-center handle">⋮⋮</td>
+                <td>
+                  {{ form.account }}{{ form.id }}
+                </td>
+                <td class="text-end">
+                  {{ form.reported_balance }}
+                </td>
+                <td>
+                  {% if form.instance.pk %}
+                    {{ form.DELETE.as_hidden }}
+                    <button type="button"
+                            class="btn btn-sm btn-outline-danger delete-btn"
+                            data-id="{{ form.instance.pk }}">×</button>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endwith %}
+          {% endfor %}
+          {% endwith %}
+          <!-- Subtotal -->
+          <tr class="table-light">
+            <td colspan="2"><strong>Total</strong></td>
+<td class="text-end fw-bold">
+  {{ totals_by_group|get_item:key|formatar_moeda }}
+</td>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    {% endwith %}
+  {% endfor %}
 
-<tbody id="balance-table" class="sortable-table" data-reorder-url="{% url 'account_reorder' %}">
-      {% for form in formset %}
-      <tr class="form-row" data-id="{{ form.instance.account.id }}">
-        <td class="text-center handle">⋮⋮</td>
-        <td>
-          {{ form.account }}
-          {{ form.id }}
-        </td>
-        <td class="text-end">
-          {{ form.reported_balance }}
-        </td>
-        <td>
-          {% if form.instance.pk %}
-            {{ form.DELETE.as_hidden }}
-            <button type="button"
-                    class="btn btn-sm btn-outline-danger delete-btn"
-                    data-id="{{ form.instance.pk }}">
-              ×
-            </button>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    
-  </table>
+  <!-- Grand Total -->
+<h5 class="mt-4 text-end">
+  💰 Grand Total:
+  <strong>{{ grand_total|formatar_moeda }}</strong>
+</h5>
 
-  <!-- Template para nova linha -->
+  <!-- Template invisível (inserido em EUR + Savings) -->
   <template id="empty-form-template">
     <tr class="form-row">
       <td class="text-center handle">⋮⋮</td>
@@ -94,7 +109,7 @@
   <a href="{% url 'account_list' %}" class="btn btn-outline-secondary">⚙ Manage Accounts</a>
 </div>
 
-<!-- JavaScript -->
+<!-- JS -->
 <script src="{% static 'js/account_balance.js' %}" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="{% static 'js/drag_reorder.js' %}" defer></script>

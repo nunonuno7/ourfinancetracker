@@ -335,7 +335,6 @@ def account_balance_view(request):
     year = int(request.GET.get("year", today.year))
     month = int(request.GET.get("month", today.month))
 
-    # 🧼 Limpa mensagens pendentes (ex: vindas do copy)
     if request.method == "GET":
         list(get_messages(request))
 
@@ -343,7 +342,7 @@ def account_balance_view(request):
         account__user=request.user,
         year=year,
         month=month
-    ).select_related("account", "account__account_type")
+    ).select_related("account", "account__account_type", "account__currency")
 
     if request.method == "POST":
         formset = AccountBalanceFormSet(request.POST, queryset=qs_base, user=request.user)
@@ -381,18 +380,35 @@ def account_balance_view(request):
             return redirect(f"{request.path}?year={year}&month={month:02d}")
 
         messages.error(request, "Erro ao guardar os saldos. Verifica os campos.")
-
     else:
         formset = AccountBalanceFormSet(queryset=qs_base, user=request.user)
 
+    # 🔄 Agrupar e calcular totais
+    grouped_forms = {}
+    totals_by_group = {}
+    grand_total = 0
+
+    for form in formset:
+        account = form.instance.account
+        key = (account.account_type.name, account.currency.code)
+        grouped_forms.setdefault(key, []).append(form)
+
+    for key, forms in grouped_forms.items():
+        subtotal = sum((f.instance.reported_balance or 0) for f in forms)
+        totals_by_group[key] = subtotal
+        grand_total += subtotal
+
     context = {
         "formset": formset,
+        "grouped_forms": grouped_forms,
+        "totals_by_group": totals_by_group,  # 👈 para subtotais no template
+        "grand_total": grand_total,          # 👈 para total global no fim
         "year": year,
         "month": month,
         "selected_month": date(year, month, 1),
     }
-    return render(request, "core/account_balance.html", context)
 
+    return render(request, "core/account_balance.html", context)
 
 
 def _merge_duplicate_accounts(user):
