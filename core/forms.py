@@ -180,7 +180,9 @@ class AccountBalanceForm(forms.ModelForm):
             instance.account = self.cleaned_data["account"]
 
         # 🔐 Garante que o saldo é atualizado mesmo se já existir
-        instance.reported_balance = self.cleaned_data["reported_balance"]
+        reported = self.cleaned_data.get("reported_balance")
+        if reported is not None:
+            instance.reported_balance = reported
 
         if commit:
             instance.save()
