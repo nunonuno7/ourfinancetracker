@@ -4,14 +4,12 @@ function addRow() {
   const newIndex = parseInt(totalForms.value);
 
   const template = document.getElementById("empty-form-template");
-  const newRow = template.cloneNode(true);
-  newRow.classList.remove("d-none");
-  newRow.id = "";
-  newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, newIndex);
+  const newRow = template.content.cloneNode(true).children[0];
+  const html = newRow.innerHTML.replace(/__prefix__/g, newIndex);
+  newRow.innerHTML = html;
 
   table.appendChild(newRow);
   totalForms.value = newIndex + 1;
-
   updateTotalBalance();
 }
 
@@ -80,7 +78,6 @@ function copyPreviousMonth() {
       alert("❌ Network error while copying balances.");
     });
 }
-
 
 function resetFormChanges() {
   if (confirm("Are you sure you want to discard all changes?")) {

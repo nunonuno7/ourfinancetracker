@@ -310,6 +310,7 @@ class AccountMergeView(OwnerQuerysetMixin, View):
 
 @login_required
 def account_balance_view(request):
+    list(get_messages(request))
     today = date.today()
     year = int(request.GET.get("year", today.year))
     month = int(request.GET.get("month", today.month))
