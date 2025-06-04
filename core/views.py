@@ -1,4 +1,4 @@
-"""""Views for the *ourfinancetracker* core app.
+"""Views for the *ourfinancetracker* core app.
 
 The file was rewritten to:
 • remove duplicated imports
@@ -7,31 +7,31 @@ The file was rewritten to:
   the account CBVs
 • tighten querysets so a user can only access her own data
 • add docstrings and type hints for easier maintenance
+• introduce a MergeView for account fusion with confirmation
 """
 from __future__ import annotations
-
-from django.core.exceptions import ValidationError
 
 from calendar import monthrange
 from datetime import date
 from typing import Any, Dict
-from django.views.decorators.csrf import csrf_exempt
+
+from django.db.models import Sum, F
+from django.utils.functional import cached_property
+
 from django.contrib import messages
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
-from django.http import JsonResponse, Http404
+from django.http import JsonResponse, Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import (
-    CreateView,
-    DeleteView,
-    ListView,
-    RedirectView,
-    TemplateView,
-    UpdateView,
+    CreateView, DeleteView, ListView, RedirectView, TemplateView,
+    UpdateView, View
 )
 
 from .forms import (
@@ -42,7 +42,6 @@ from .forms import (
     TransactionForm,
 )
 from .models import Account, AccountBalance, Category, Transaction
-from django.http import HttpResponseForbidden
 
 ################################################################################
 #                               Shared mix‑ins                                 #
@@ -75,7 +74,7 @@ class TransactionListView(LoginRequiredMixin, ListView):
     template_name = "core/transaction_list.html"
     context_object_name = "transactions"
 
-    def get_queryset(self) -> QuerySet:  # noqa: D401
+    def get_queryset(self) -> QuerySet:
         return (
             super()
             .get_queryset()  # type: ignore[misc]
@@ -95,9 +94,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
         return super().form_valid(form)
 
 
-class TransactionUpdateView(
-    OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView
-):
+class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
@@ -106,7 +103,7 @@ class TransactionUpdateView(
 
 class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
     model = Transaction
-    template_name = "core/transaction_confirm_delete.html"
+    template_name = "core/confirms/transaction_confirm_delete.html"
     success_url = reverse_lazy("transaction_list")
 
 ################################################################################
@@ -119,7 +116,7 @@ class CategoryListView(LoginRequiredMixin, ListView):
     template_name = "core/category_list.html"
     context_object_name = "categories"
 
-    def get_queryset(self) -> QuerySet:  # noqa: D401
+    def get_queryset(self) -> QuerySet:
         return super().get_queryset().filter(user=self.request.user)  # type: ignore[misc]
 
 
@@ -134,9 +131,7 @@ class CategoryCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
         return super().form_valid(form)
 
 
-class CategoryUpdateView(
-    OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView
-):
+class CategoryUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Category
     form_class = CategoryForm
     template_name = "core/category_form.html"
@@ -145,7 +140,7 @@ class CategoryUpdateView(
 
 class CategoryDeleteView(OwnerQuerysetMixin, DeleteView):
     model = Category
-    template_name = "core/category_confirm_delete.html"
+    template_name = "core/confirms/category_confirm_delete.html"
     success_url = reverse_lazy("category_list")
 
 ################################################################################
@@ -158,8 +153,24 @@ class AccountListView(LoginRequiredMixin, ListView):
     template_name = "core/account_list.html"
     context_object_name = "accounts"
 
-    def get_queryset(self) -> QuerySet:  # noqa: D401
-        return super().get_queryset().filter(user=self.request.user)  # type: ignore[misc]
+    def get_queryset(self) -> QuerySet:
+        qs = super().get_queryset().filter(user=self.request.user)
+        q = self.request.GET.get("q")
+        if q:
+            qs = qs.filter(name__icontains=q)
+        return qs.select_related("account_type", "currency").order_by("name")
+
+# views.py
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        # Protege o acesso à relação OneToOne
+        default_currency = getattr(user, "settings", None)
+        context["default_currency"] = getattr(default_currency, "default_currency", "€")
+
+        # (Resto da lógica permanece igual)
+        return context
 
 
 class AccountCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
@@ -169,11 +180,25 @@ class AccountCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     success_url = reverse_lazy("account_list")
 
     def form_valid(self, form):
+        existing = form.find_duplicate()
+
+        if existing:
+            new_account = form.save(commit=False)
+            new_account.user = self.request.user
+            new_account.save()
+
+            return redirect(
+                "account_merge",
+                source_pk=new_account.pk,
+                target_pk=existing.pk
+            )
+
         try:
             self.object = form.save()
         except ValidationError as e:
             form.add_error(None, e.message)
             return self.form_invalid(form)
+
         return super().form_valid(form)
 
 
@@ -185,12 +210,97 @@ class AccountUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     success_url = reverse_lazy("account_list")
 
     def form_valid(self, form):
+        # Verifica se há outra conta com o mesmo nome (ignorando maiúsculas/minúsculas)
+        new_name = form.cleaned_data["name"].strip()
+        existing = Account.objects.filter(
+            user=self.request.user,
+            name__iexact=new_name
+        ).exclude(pk=self.object.pk).first()
+
+        if existing:
+            # Guarda o objeto editado para depois fundir
+            form.save(commit=False)  # não guardamos já no DB
+            return redirect(
+                "account_merge",
+                source_pk=self.object.pk,
+                target_pk=existing.pk
+            )
+
         try:
             self.object = form.save()
         except ValidationError as e:
             form.add_error(None, e.message)
             return self.form_invalid(form)
+
         return super().form_valid(form)
+
+
+class AccountDeleteView(OwnerQuerysetMixin, DeleteView):
+    model = Account
+    template_name = "core/confirms/account_confirm_delete.html"
+    success_url = reverse_lazy("account_list")
+
+    def dispatch(self, request, *args, **kwargs):
+        account = self.get_object()
+        if account.name.lower() == "cash":
+            return HttpResponseForbidden("Default account cannot be deleted.")
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AccountMergeView(OwnerQuerysetMixin, View):
+    template_name = "core/confirms/account_confirm_merge.html"
+    success_url = reverse_lazy("account_list")
+
+    def get(self, request, *args, **kwargs):
+        self.source = self.get_source_account()
+        self.target = self.get_target_account()
+
+        if not self.source or not self.target:
+            raise Http404("One or both accounts not found.")
+
+        if not self.source or not self.target:
+            messages.error(request, "Accounts not found for merging.")
+            return redirect("account_list")
+
+        return render(request, self.template_name, {
+            "source": self.source,
+            "target": self.target,
+        })
+
+
+    def post(self, request, *args, **kwargs):
+        target = self.get_target_account()
+        source = self.get_source_account()
+
+        if not source or not target or source == target:
+            messages.error(request, "Invalid merge.")
+            return redirect("account_list")
+
+        # Reconciliar saldos duplicados
+        for bal in AccountBalance.objects.filter(account=source):
+            existing = AccountBalance.objects.filter(
+                account=target, year=bal.year, month=bal.month
+            ).first()
+
+            if existing:
+                # Exemplo: somar os saldos
+                existing.reported_balance += bal.reported_balance
+                existing.save()
+                bal.delete()
+            else:
+                bal.account = target
+                bal.save()
+
+        source.delete()
+        messages.success(request, f"Merged account '{source.name}' into '{target.name}'")
+        return redirect(self.success_url)
+
+
+    def get_source_account(self):
+        return Account.objects.filter(user=self.request.user, pk=self.kwargs["source_pk"]).first()
+
+    def get_target_account(self):
+        return Account.objects.filter(user=self.request.user, pk=self.kwargs["target_pk"]).first()
 
 ################################################################################
 #                           Account balance view                               #
@@ -212,10 +322,6 @@ def account_balance_view(request):
         formset = AccountBalanceFormSet(request.POST, queryset=qs_base, user=request.user)
 
         if formset.is_valid():
-            print("✅ DEBUG: cleaned_data das linhas submetidas:")
-            for form in formset:
-                print(form.cleaned_data)
-
             instances = formset.save(commit=False)
 
             for form in formset:
@@ -230,7 +336,6 @@ def account_balance_view(request):
                     inst.account.user = request.user
                     inst.account.save()
 
-
                 existing = AccountBalance.objects.filter(
                     account=inst.account,
                     year=inst.year,
@@ -243,19 +348,12 @@ def account_balance_view(request):
                 else:
                     inst.save()
 
-                print(f"💾 Guardado: {inst.account.name} = {inst.reported_balance}")
-
             _merge_duplicate_accounts(request.user)
 
             messages.success(request, "Balances saved!")
             return redirect(f"{request.path}?year={year}&month={month:02d}")
 
-        else:
-            print("❌ Formset inválido — erros:")
-            for i, form in enumerate(formset):
-                if form.errors:
-                    print(f"[form {i}] {form.errors}")
-            messages.error(request, "Erro ao guardar os saldos. Verifica os campos.")
+        messages.error(request, "Erro ao guardar os saldos. Verifica os campos.")
 
     else:
         formset = AccountBalanceFormSet(queryset=qs_base, user=request.user)
@@ -286,8 +384,6 @@ def delete_account_balance(request):
 
 
 def _merge_duplicate_accounts(user):
-    from .models import Account, AccountBalance
-
     seen = {}
     for acc in Account.objects.filter(user=user).order_by("name"):
         name = acc.name.strip().lower()
@@ -317,7 +413,7 @@ def signup(request):
 class LogoutView(RedirectView):
     pattern_name = "login"
 
-    def get(self, request, *args, **kwargs):  # noqa: D401
+    def get(self, request, *args, **kwargs):
         auth_logout(request)
         return super().get(request, *args, **kwargs)
 
@@ -327,7 +423,7 @@ class HomeView(TemplateView):
 
 
 @require_POST
-@csrf_exempt  # se quiseres evitar erro CSRF num POST via fetch, ou substitui por @csrf_protect com token no JS
+@csrf_exempt
 @login_required
 def delete_account_balance(request, pk):
     try:
@@ -336,15 +432,3 @@ def delete_account_balance(request, pk):
         return JsonResponse({"success": True})
     except AccountBalance.DoesNotExist:
         return JsonResponse({"success": False, "error": "Not found"}, status=404)
-    
-
-class AccountDeleteView(OwnerQuerysetMixin, DeleteView):
-    model = Account
-    template_name = "core/account_confirm_delete.html"
-    success_url = reverse_lazy("account_list")
-
-    def dispatch(self, request, *args, **kwargs):
-        account = self.get_object()
-        if account.name.lower() == "cash":
-            return HttpResponseForbidden("Default account cannot be deleted.")
-        return super().dispatch(request, *args, **kwargs)

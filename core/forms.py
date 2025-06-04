@@ -229,6 +229,18 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
 
     def clean_name(self) -> str:
         return self.cleaned_data["name"].strip()
+    
+    def find_duplicate(self) -> Account | None:
+        """Returns an existing account with the same name (case-insensitive), if any."""
+        name = self.cleaned_data.get("name", "").strip()
+        return Account.objects.filter(
+            user=self.user,
+            name__iexact=name
+        ).exclude(pk=self.instance.pk).first()
+
+
+
+
 
     def save(self, commit: bool = True) -> Account:
         from .models import AccountBalance
