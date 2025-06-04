@@ -1,10 +1,10 @@
-"""Views for the *ourfinancetracker* core app.
+"""
+Views for the *ourfinancetracker* core app.
 
 The file was rewritten to:
 • remove duplicated imports
 • share common behaviour in mix‑ins (user injection & ownership filtering)
-• add a dedicated ``AccountForm`` (see ``core/forms.py``) and reuse it in
-  the account CBVs
+• add a dedicated ``AccountForm`` (see ``core/forms.py``) and reuse it in the account CBVs
 • tighten querysets so a user can only access her own data
 • add docstrings and type hints for easier maintenance
 • introduce a MergeView for account fusion with confirmation
@@ -15,20 +15,17 @@ from calendar import monthrange
 from datetime import date
 from typing import Any, Dict
 
-from django.db.models import Sum, F
-from django.utils.functional import cached_property
-
 from django.contrib import messages
 from django.contrib.messages import get_messages
-
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Sum, F
 from django.http import JsonResponse, Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
+from django.utils.functional import cached_property
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 from django.views.generic import (
@@ -44,6 +41,23 @@ from .forms import (
     TransactionForm,
 )
 from .models import Account, AccountBalance, Category, Transaction
+
+################################################################################
+#                               Menu config API                                #
+################################################################################
+
+@login_required
+def menu_config(request):
+    return JsonResponse({
+        "username": request.user.username,
+        "links": [
+            {"name": "Dashboard", "url": reverse("transaction_list")},
+            {"name": "New Transaction", "url": reverse("transaction_create")},
+            {"name": "Categories", "url": reverse("category_list")},
+            {"name": "Account Balances", "url": reverse("account_balance")},
+        ]
+    })
+
 
 ################################################################################
 #                               Shared mix‑ins                                 #
@@ -70,7 +84,6 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
 #                             Transaction views                                #
 ################################################################################
 
-
 class TransactionListView(LoginRequiredMixin, ListView):
     model = Transaction
     template_name = "core/transaction_list.html"
@@ -78,8 +91,7 @@ class TransactionListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self) -> QuerySet:
         return (
-            super()
-            .get_queryset()  # type: ignore[misc]
+            super().get_queryset()
             .filter(user=self.request.user)
             .order_by("-date")
         )
@@ -91,7 +103,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     template_name = "core/transaction_form.html"
     success_url = reverse_lazy("transaction_list")
 
-    def form_valid(self, form):  # type: ignore[override]
+    def form_valid(self, form):
         form.instance.user = self.request.user
         return super().form_valid(form)
 
@@ -258,9 +270,6 @@ class AccountMergeView(OwnerQuerysetMixin, View):
         self.target = self.get_target_account()
 
         if not self.source or not self.target:
-            raise Http404("One or both accounts not found.")
-
-        if not self.source or not self.target:
             messages.error(request, "Accounts not found for merging.")
             return redirect("account_list")
 
@@ -373,22 +382,6 @@ def account_balance_view(request):
     }
     return render(request, "core/account_balance.html", context)
 
-
-
-@require_POST
-@login_required
-def delete_account_balance(request):
-    balance_id = request.POST.get("id")
-    if not balance_id:
-        return JsonResponse({"error": "Missing balance ID."}, status=400)
-
-    try:
-        obj = AccountBalance.objects.get(pk=balance_id, account__user=request.user)
-    except AccountBalance.DoesNotExist:
-        raise Http404("AccountBalance not found.")
-
-    obj.delete()
-    return JsonResponse({"success": True})
 
 
 def _merge_duplicate_accounts(user):

@@ -1,16 +1,34 @@
 {% extends "base.html" %}
+{% load static %}
+
 {% block content %}
-  <h1>Categories</h1>
-  <a href="{% url 'category_create' %}">Add New Category</a>
-  <ul>
-    {% for category in categories %}
-      <li>
-        {{ category.name }}
-        (<a href="{% url 'category_update' category.pk %}">edit</a> |
-         <a href="{% url 'category_delete' category.pk %}">delete</a>)
-      </li>
-    {% empty %}
-      <li>No categories yet.</li>
-    {% endfor %}
-  </ul>
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Categories</h2>
+    <a href="{% url 'category_create' %}" class="btn btn-success">➕ Add New</a>
+  </div>
+
+  {% if categories %}
+    <ul class="list-group">
+      {% for category in categories %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ category.name }}</strong>
+          </div>
+          <div class="btn-group">
+            <a href="{% url 'category_update' category.pk %}" class="btn btn-sm btn-outline-primary">✏️ Edit</a>
+            <form method="post" action="{% url 'category_delete' category.pk %}" class="delete-form" data-name="{{ category.name }}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Delete</button>
+            </form>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="alert alert-info">No categories yet.</div>
+  {% endif %}
+</div>
+
+<script src="{% static 'core/js/category_list.js' %}"></script>
 {% endblock %}

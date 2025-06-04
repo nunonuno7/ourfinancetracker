@@ -68,7 +68,7 @@
             <div class="d-flex flex-wrap gap-2">
               <a href="{% url 'account_update' account.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
               {% if account.name|lower != "cash" %}
-              <form method="post" action="{% url 'account_delete' account.pk %}" onsubmit="return confirm('⚠ Confirm delete {{ account.name }}?');">
+              <form method="post" action="{% url 'account_delete' account.pk %}" class="delete-form" data-name="{{ account.name }}">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">🗑</button>
               </form>
@@ -84,5 +84,7 @@
   <div class="alert alert-info">No accounts found.</div>
   {% endif %}
 </div>
-{% endblock %}
 
+<!-- JavaScript separado para confirmar deleção -->
+<script src="{% static 'core/js/account_list.js' %}"></script>
+{% endblock %}

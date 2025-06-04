@@ -115,3 +115,8 @@ input[type="date"],
     background-position: right 0.75rem center;
     background-size: 20px 20px;
 }
+
+.btn-glow {
+    box-shadow: 0 0 12px rgba(0, 123, 255, 0.5);
+    transition: box-shadow 0.3s ease-in-out;
+}
