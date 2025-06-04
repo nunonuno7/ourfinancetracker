@@ -1,10 +1,18 @@
 function addRow() {
+  console.log("🟢 addRow() chamada");
+
   const table = document.getElementById("balance-table");
   const totalForms = document.getElementById("id_form-TOTAL_FORMS");
   const newIndex = parseInt(totalForms.value);
 
   const template = document.getElementById("empty-form-template");
-  const newRow = template.content.cloneNode(true).children[0];
+  if (!template) {
+    console.error("❌ Template não encontrado");
+    return;
+  }
+
+  const clone = template.content.cloneNode(true);
+  const newRow = clone.querySelector("tr");
   const html = newRow.innerHTML.replace(/__prefix__/g, newIndex);
   newRow.innerHTML = html;
 
@@ -105,7 +113,19 @@ function toggleZeroBalances() {
 
 // ───── Bind estático + delegação ─────
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("add-row-btn")?.addEventListener("click", addRow);
+  console.log("✅ DOM carregado — JS ativo");
+
+  const addBtn = document.getElementById("add-row-btn");
+  if (addBtn) {
+    console.log("🎯 Botão + Add Account encontrado");
+    addBtn.addEventListener("click", () => {
+      console.log("🖱 Botão + Add Account clicado");
+      addRow();
+    });
+  } else {
+    console.warn("⚠️ Botão + Add Account não encontrado no DOM");
+  }
+
   document.getElementById("reset-btn")?.addEventListener("click", resetFormChanges);
   document.getElementById("copy-previous-btn")?.addEventListener("click", copyPreviousMonth);
   document.getElementById("toggle-zeros-btn")?.addEventListener("click", toggleZeroBalances);
@@ -119,7 +139,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click", function (event) {
     const target = event.target;
 
-    // Botão "×" para apagar saldo existente
     if (target.classList.contains("delete-btn")) {
       const balanceId = target.dataset.id;
       if (balanceId) {
@@ -127,7 +146,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Botão "×" para apagar linha nova (sem pk)
     if (target.classList.contains("remove-row-btn")) {
       target.closest("tr").remove();
       updateTotalBalance();

@@ -55,7 +55,7 @@
     </tbody>
   </table>
 
-  <template id="empty-form-template">
+  <template id="empty-form-template"><tr class="form-row d-none">
     <tr class="form-row d-none">
       <td>
         <input type="text" name="form-__prefix__-account" class="form-control" />
@@ -89,5 +89,7 @@
 </div>
 
 <!-- JavaScript final -->
-<script src="{% static 'core/account_balance.js' %}" defer></script>
+<script src="{% static 'js/account_balance.js' %}" defer></script>
+
+
 {% endblock %}
