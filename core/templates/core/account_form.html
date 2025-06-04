@@ -4,7 +4,13 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h2 class="mb-4">{% if form.instance.pk %}Edit Account{% else %}New Account{% endif %}</h2>
+  <h2 class="mb-4">
+    {% if form.instance.pk %}
+      Edit Account
+    {% else %}
+      New Account
+    {% endif %}
+  </h2>
 
   <form method="post" id="account-form" novalidate>
     {% csrf_token %}
@@ -12,8 +18,7 @@
       {{ form.non_field_errors }}
     </div>
 
-    <input type="hidden" name="confirm_merge" id="confirm_merge" value="false">
-
+    {# Campos do formulário #}
     <div class="mb-3">
       <label for="{{ form.name.id_for_label }}" class="form-label">Name</label>
       {{ form.name|add_class:"form-control" }}
@@ -33,17 +38,24 @@
     </div>
 
     <div class="d-flex gap-2">
-      <button type="button" class="btn btn-success">💾 Save</button>
+      {# Botão de guardar (submit) #}
+      <button type="submit" class="btn btn-success">💾 Save</button>
 
       {% if form.instance.pk %}
-        <button type="button" class="btn btn-outline-danger" onclick="confirmDelete()">🗑️ Delete</button>
+        {# Botão “Delete” passa a ser link para a view de confirmação #}
+        <a href="{% url 'account_delete' form.instance.pk %}"
+           class="btn btn-outline-danger"
+           title="Delete">
+          🗑️ Delete
+        </a>
       {% endif %}
 
+      {# Botão de voltar para a lista de contas #}
       <a href="{% url 'account_list' %}" class="btn btn-secondary">← Back</a>
     </div>
   </form>
 </div>
 
-<!-- ⬇️ Script externo separado -->
-<script src="{% static 'core/js/account_form.js' %}"></script>
+{# Não é necessário carregar account_form.js apenas para confirmação, 
+   porque o Django já vai renderizar account_confirm_delete.html #}
 {% endblock %}

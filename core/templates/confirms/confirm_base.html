@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-5">
+
+  <h2 class="mb-4">{% block title %}Confirm Action{% endblock %}</h2>
+
+  <div class="alert alert-warning" role="alert">
+    {% block message %}
+      Are you sure you want to perform this action?
+    {% endblock %}
+    {% block extra_info %}{% endblock %}
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% block hidden_fields %}{% endblock %}
+    <button type="submit" class="btn btn-danger">
+      {% block action_label %}Confirm{% endblock %}
+    </button>
+    <a href="{% block cancel_url %}#{% endblock %}" class="btn btn-secondary">
+      ← Cancel
+    </a>
+  </form>
+
+</div>
+{% endblock %}

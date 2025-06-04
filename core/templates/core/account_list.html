@@ -66,12 +66,16 @@
           <td>{{ account.created_at|date:"Y-m-d" }}</td>
           <td>
             <div class="d-flex flex-wrap gap-2">
+              <!-- Botão de Edit -->
               <a href="{% url 'account_update' account.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
+
+              <!-- Botão de Delete agora aponta para a página de confirmação -->
               {% if account.name|lower != "cash" %}
-              <form method="post" action="{% url 'account_delete' account.pk %}" class="delete-form" data-name="{{ account.name }}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">🗑</button>
-              </form>
+                <a href="{% url 'account_delete' account.pk %}"
+                   class="btn btn-sm btn-outline-danger"
+                   title="Delete">
+                  🗑
+                </a>
               {% endif %}
             </div>
           </td>
@@ -85,6 +89,5 @@
   {% endif %}
 </div>
 
-<!-- JavaScript separado para confirmar deleção -->
-<script src="{% static 'core/js/account_list.js' %}"></script>
+<!-- Nenhum .js adicional é necessário para confirmação, pois o Django vai renderizar account_confirm_delete.html -->
 {% endblock %}

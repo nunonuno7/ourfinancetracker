@@ -1,0 +1,15 @@
+{% extends "core/partials/confirm_base.html" %}
+
+{% block title %}Delete Account{% endblock %}
+
+{% block message %}
+Are you sure you want to delete the account <strong>{{ object.name }}</strong>?
+{% endblock %}
+
+{% block extra_info %}
+<p class="mt-2 mb-0"><strong>This action cannot be undone.</strong></p>
+{% endblock %}
+
+{% block action_label %}🗑 Confirm Delete{% endblock %}
+
+{% block cancel_url %}{% url 'account_list' %}{% endblock %}

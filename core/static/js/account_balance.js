@@ -36,8 +36,10 @@ function deleteAccount(balanceId, button) {
 function updateTotalBalance() {
   let total = 0;
   document.querySelectorAll("input[name$='-reported_balance']").forEach(input => {
-    total += parseFloat(input.value || 0);
+    const val = parseFloat(input.value);
+    if (!isNaN(val)) total += val;
   });
+
   document.getElementById("total-balance").innerText = total.toLocaleString("pt-PT", {
     style: "currency",
     currency: "EUR"
@@ -101,6 +103,7 @@ function toggleZeroBalances() {
   btn.dataset.state = show ? "all" : "hide";
 }
 
+// ───── Bind estático + delegação ─────
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("add-row-btn")?.addEventListener("click", addRow);
   document.getElementById("reset-btn")?.addEventListener("click", resetFormChanges);
@@ -110,5 +113,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.querySelector("form")?.addEventListener("submit", function (e) {
     if (!validateForm()) e.preventDefault();
+  });
+
+  // ───── Delegação para botões dinâmicos ─────
+  document.addEventListener("click", function (event) {
+    const target = event.target;
+
+    // Botão "×" para apagar saldo existente
+    if (target.classList.contains("delete-btn")) {
+      const balanceId = target.dataset.id;
+      if (balanceId) {
+        deleteAccount(balanceId, target);
+      }
+    }
+
+    // Botão "×" para apagar linha nova (sem pk)
+    if (target.classList.contains("remove-row-btn")) {
+      target.closest("tr").remove();
+      updateTotalBalance();
+    }
   });
 });
