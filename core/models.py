@@ -121,7 +121,7 @@ class Account(models.Model):
         default=get_default_currency,  # ← tentará usar "EUR"
     )
     created_at = models.DateField(auto_now_add=True)
-
+    position = models.PositiveIntegerField(default=0)
     class Meta:
         unique_together = (("user", "name"),)
         ordering = ("name",)
@@ -192,6 +192,19 @@ class Category(models.Model):
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.parent} / {self.name}" if self.parent else self.name
 
+
+@receiver(post_save, sender=User)
+def _create_cash_account(sender, instance: User, created: bool, **kwargs):
+    if created:
+        from django.apps import apps
+        Account = apps.get_model("core", "Account")  # 👈 esta linha estava em falta
+        if not Account.objects.filter(user=instance, name__iexact="Cash").exists():
+            Account.objects.create(
+                user=instance,
+                name="Cash",
+                account_type=get_default_account_type(),
+                currency=getattr(instance.settings, "default_currency", None) or get_default_currency()
+            )
 
 # ---------------------------------------------------------------------------
 # Transactions

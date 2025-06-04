@@ -3,6 +3,7 @@
 
 {% block content %}
 <div class="container mt-4">
+
   <!-- Header + Ações -->
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
     <h2 class="mb-2">Accounts</h2>
@@ -44,12 +45,19 @@
     {% endfor %}
   </div>
 
+<!-- CSRF token para JavaScript -->
+<form style="display: none;">
+  {% csrf_token %}
+</form>
+
+
   <!-- Tabela de contas -->
   {% if accounts %}
   <div class="table-responsive">
     <table class="table table-bordered table-hover align-middle">
       <thead class="table-light">
         <tr>
+          <th style="width: 30px;">⇅</th>
           <th>Name</th>
           <th>Type</th>
           <th>Currency</th>
@@ -57,25 +65,19 @@
           <th style="width: 180px;">Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="account-table" class="sortable-table" data-reorder-url="{% url 'account_reorder' %}">
         {% for account in accounts %}
-        <tr>
+        <tr data-id="{{ account.pk }}">
+          <td class="text-center handle">⋮⋮</td>
           <td><strong>{{ account.name }}</strong></td>
           <td>{{ account.account_type.name }}</td>
           <td>{{ account.currency.code }}</td>
           <td>{{ account.created_at|date:"Y-m-d" }}</td>
           <td>
             <div class="d-flex flex-wrap gap-2">
-              <!-- Botão de Edit -->
               <a href="{% url 'account_update' account.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
-
-              <!-- Botão de Delete agora aponta para a página de confirmação -->
               {% if account.name|lower != "cash" %}
-                <a href="{% url 'account_delete' account.pk %}"
-                   class="btn btn-sm btn-outline-danger"
-                   title="Delete">
-                  🗑
-                </a>
+                <a href="{% url 'account_delete' account.pk %}" class="btn btn-sm btn-outline-danger" title="Delete">🗑</a>
               {% endif %}
             </div>
           </td>
@@ -89,5 +91,8 @@
   {% endif %}
 </div>
 
-<!-- Nenhum .js adicional é necessário para confirmação, pois o Django vai renderizar account_confirm_delete.html -->
+<!-- JS: Sortable + Reorder script -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="{% static 'js/drag_reorder.js' %}" defer></script>
+
 {% endblock %}

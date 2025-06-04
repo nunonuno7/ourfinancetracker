@@ -23,7 +23,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import QuerySet, Sum, F
 from django.http import JsonResponse, Http404, HttpResponseForbidden
-from django.shortcuts import redirect, render
+from django.shortcuts import render, redirect, get_object_or_404
+
 from django.urls import reverse_lazy, reverse
 from django.utils.functional import cached_property
 from django.views.decorators.csrf import csrf_exempt
@@ -41,6 +42,13 @@ from .forms import (
     TransactionForm,
 )
 from .models import Account, AccountBalance, Category, Transaction
+
+
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import json
+from .models import Account
+from django.contrib.auth.decorators import login_required
 
 ################################################################################
 #                               Menu config API                                #
@@ -162,18 +170,21 @@ class CategoryDeleteView(OwnerQuerysetMixin, DeleteView):
 ################################################################################
 
 
+
+
+
 class AccountListView(LoginRequiredMixin, ListView):
     model = Account
     template_name = "core/account_list.html"
     context_object_name = "accounts"
 
     def get_queryset(self) -> QuerySet:
-        qs = super().get_queryset().filter(user=self.request.user)
-        q = self.request.GET.get("q")
-        if q:
-            qs = qs.filter(name__icontains=q)
-        return qs.select_related("account_type", "currency").order_by("name")
-
+        return (
+            super()
+            .get_queryset()
+            .filter(user=self.request.user)
+            .order_by("position", "name")
+        )
 # views.py
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -476,3 +487,38 @@ def copy_previous_balances_view(request):
             created_count += 1
 
     return JsonResponse({"success": True, "created": created_count})
+
+@login_required
+def move_account_up(request, pk):
+    account = get_object_or_404(Account, pk=pk, user=request.user)
+    above = Account.objects.filter(user=request.user, position__lt=account.position).order_by("-position").first()
+    if above:
+        account.position, above.position = above.position, account.position
+        account.save()
+        above.save()
+    return redirect("account_list")
+
+@login_required
+def move_account_down(request, pk):
+    account = get_object_or_404(Account, pk=pk, user=request.user)
+    below = Account.objects.filter(user=request.user, position__gt=account.position).order_by("position").first()
+    if below:
+        account.position, below.position = below.position, account.position
+        account.save()
+        below.save()
+    return redirect("account_list")
+
+@csrf_exempt  # Ou substitui por @login_required + token se estiver a funcionar corretamente
+@login_required
+def account_reorder(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            order = data.get("order", [])
+            for item in order:
+                Account.objects.filter(pk=item["id"], user=request.user).update(position=item["position"])
+            return JsonResponse({"status": "ok"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse({"error": "invalid method"}, status=405)

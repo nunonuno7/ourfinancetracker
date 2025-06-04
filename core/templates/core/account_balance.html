@@ -22,57 +22,64 @@
 <form method="post">
   {% csrf_token %}
   {{ formset.management_form }}
+
   <table class="table align-middle">
     <thead>
       <tr>
+        <th style="width: 30px;">⇅</th>
         <th>Account</th>
         <th class="text-end">Balance (€)</th>
-        <th></th>
+        <th style="width: 40px;"></th>
       </tr>
     </thead>
-    <tbody id="balance-table">
+
+<tbody id="balance-table" class="sortable-table" data-reorder-url="{% url 'account_reorder' %}">
       {% for form in formset %}
-        <tr class="form-row">
-          <td>
-            {{ form.account }}
-            {{ form.id }}
-          </td>
-          <td class="text-end">
-            {{ form.reported_balance }}
-          </td>
-          <td>
-            {% if form.instance.pk %}
-              {{ form.DELETE.as_hidden }}
-              <button type="button"
-                      class="btn btn-sm btn-outline-danger delete-btn"
-                      data-id="{{ form.instance.pk }}">
-                ×
-              </button>
-            {% endif %}
-          </td>
-        </tr>
+      <tr class="form-row" data-id="{{ form.instance.account.id }}">
+        <td class="text-center handle">⋮⋮</td>
+        <td>
+          {{ form.account }}
+          {{ form.id }}
+        </td>
+        <td class="text-end">
+          {{ form.reported_balance }}
+        </td>
+        <td>
+          {% if form.instance.pk %}
+            {{ form.DELETE.as_hidden }}
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger delete-btn"
+                    data-id="{{ form.instance.pk }}">
+              ×
+            </button>
+          {% endif %}
+        </td>
+      </tr>
       {% endfor %}
     </tbody>
+    
   </table>
 
-<template id="empty-form-template">
-  <tr class="form-row">
-    <td>
-      <input type="text" name="form-__prefix__-account" class="form-control" />
-      <input type="hidden" name="form-__prefix__-id" />
-    </td>
-    <td class="text-end">
-      <input type="number" step="0.01" name="form-__prefix__-reported_balance" class="form-control text-end" />
-    </td>
-    <td>
-      <button type="button" class="btn btn-sm btn-outline-danger remove-row-btn">×</button>
-    </td>
-  </tr>
-</template>
+  <!-- Template para nova linha -->
+  <template id="empty-form-template">
+    <tr class="form-row">
+      <td class="text-center handle">⋮⋮</td>
+      <td>
+        <input type="text" name="form-__prefix__-account" class="form-control" />
+        <input type="hidden" name="form-__prefix__-id" />
+      </td>
+      <td class="text-end">
+        <input type="number" step="0.01" name="form-__prefix__-reported_balance" class="form-control text-end" />
+      </td>
+      <td>
+        <button type="button" class="btn btn-sm btn-outline-danger remove-row-btn">×</button>
+      </td>
+    </tr>
+  </template>
 
   <div class="d-flex justify-content-between align-items-center">
     <div>
-      <button type="submit" class="btn btn-primary">💾 Save</button>
+      <button type="submit" class="btn btn-primary">📂 Save</button>
     </div>
     <div>
       <span id="total-balance" class="me-3 fw-bold"></span>
@@ -87,8 +94,8 @@
   <a href="{% url 'account_list' %}" class="btn btn-outline-secondary">⚙ Manage Accounts</a>
 </div>
 
-<!-- JavaScript final -->
+<!-- JavaScript -->
 <script src="{% static 'js/account_balance.js' %}" defer></script>
-
-
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="{% static 'js/drag_reorder.js' %}" defer></script>
 {% endblock %}

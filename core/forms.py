@@ -128,7 +128,7 @@ class AccountBalanceForm(forms.ModelForm):
     account = forms.CharField(
         label="Account",
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Account name"}),
-        max_length=150,
+        max_length=70,
     )
 
     class Meta:
@@ -152,6 +152,8 @@ class AccountBalanceForm(forms.ModelForm):
         name = self.cleaned_data.get("account", "").strip()
         if not name:
             raise ValidationError("Account name is required.")
+        if len(name) > 100:
+            raise ValidationError("Account name cannot exceed 100 characters.")
 
         account_qs = Account.objects.filter(user=self.user, name__iexact=name)
         if account_qs.exists():
