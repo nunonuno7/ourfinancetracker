@@ -231,21 +231,62 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         return self.cleaned_data["name"].strip()
 
     def save(self, commit: bool = True) -> Account:
+        from .models import AccountBalance
+
         new_name = self.cleaned_data["name"].strip()
-        clash_qs = Account.objects.filter(
+        self.cleaned_data["name"] = new_name
+        self.instance.name = new_name
+        self.instance.user = self.user
+
+        # Procurar conta com o mesmo nome (ignorando maiúsculas)
+        existing_qs = Account.objects.filter(
             user=self.user,
-            name__iexact=new_name,
+            name__iexact=new_name
         ).exclude(pk=self.instance.pk)
 
-        if self.instance.pk and clash_qs.exists():
-            primary = clash_qs.first()
-            from .models import AccountBalance
-            AccountBalance.objects.filter(account=self.instance).update(account=primary)
-            self.instance.delete()
-            return primary
+        if existing_qs.exists():
+            existing = existing_qs.first()
 
-        account: Account = super().save(commit=False)
-        account.user = self.user
+            # ⚠️ Impedir fusão com conta 'Cash'
+            if existing.name.strip().lower() == "cash":
+                raise ValidationError("Não é permitido fundir com a conta 'Cash'.")
+
+            # ⚠️ Incompatível se tiver moeda ou tipo diferente
+            if (
+                existing.currency_id != self.cleaned_data["currency"].id or
+                existing.account_type_id != self.cleaned_data["account_type"].id
+            ):
+                raise ValidationError("Já existe uma conta com esse nome, mas com tipo ou moeda diferente. Não é possível fundir.")
+
+            # ⚠️ Verificar se o utilizador confirmou
+            confirm_merge = self.data.get("confirm_merge", "").lower() == "true"
+            if not confirm_merge:
+                self.add_error(None, "Já existe uma conta com esse nome. Queres fundir os saldos?")
+                return self.instance  # Não salvar ainda
+
+            # ✅ Fundir saldos: combinar valores por (ano, mês)
+            for balance in AccountBalance.objects.filter(account=self.instance):
+                existing_balance = AccountBalance.objects.filter(
+                    account=existing,
+                    year=balance.year,
+                    month=balance.month
+                ).first()
+
+                if existing_balance:
+                    existing_balance.amount += balance.amount
+                    existing_balance.save()
+                    balance.delete()
+                else:
+                    balance.account = existing
+                    balance.save()
+
+            # Se estiver a editar uma conta existente, apagar após a fusão
+            if self.instance.pk:
+                self.instance.delete()
+
+            return existing
+
+        # ✅ Sem conflito — guardar normalmente
         if commit:
-            account.save()
-        return account
+            self.instance.save()
+        return self.instance

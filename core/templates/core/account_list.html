@@ -26,10 +26,15 @@
           <td>{{ account.account_type.name }}</td>
           <td>{{ account.currency.code }}</td>
           <td>{{ account.created_at|date:"Y-m-d" }}</td>
-          <td>
+          <td class="d-flex gap-2">
             <a href="{% url 'account_update' account.pk %}" class="btn btn-sm btn-outline-primary">✏️ Edit</a>
-            <!-- Optionally add Delete here -->
-            {# <a href="{% url 'account_delete' account.pk %}" class="btn btn-sm btn-outline-danger">🗑 Delete</a> #}
+
+            {% if account.name|lower != "cash" %}
+            <form method="post" action="{% url 'account_delete' account.pk %}" onsubmit="return confirm('⚠ Tens a certeza que queres apagar a conta {{ account.name }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Delete</button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

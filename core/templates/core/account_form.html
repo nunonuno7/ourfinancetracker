@@ -5,9 +5,13 @@
 <div class="container mt-4">
   <h2 class="mb-4">{% if form.instance.pk %}Edit Account{% else %}New Account{% endif %}</h2>
 
-  <form method="post" novalidate>
+  <form method="post" id="account-form" novalidate>
     {% csrf_token %}
-    {{ form.non_field_errors }}
+    <div style="display:none">
+  {{ form.non_field_errors }}
+</div>
+
+    <input type="hidden" name="confirm_merge" id="confirm_merge" value="false">
 
     <div class="mb-3">
       <label for="{{ form.name.id_for_label }}" class="form-label">Name</label>
@@ -27,8 +31,37 @@
       {{ form.currency.errors }}
     </div>
 
-    <button type="submit" class="btn btn-success">💾 Save</button>
-    <a href="{% url 'account_list' %}" class="btn btn-secondary">← Back</a>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-success" onclick="confirmAccountMerge()">💾 Save</button>
+
+      {% if form.instance.pk %}
+        <button type="button" class="btn btn-outline-danger" onclick="confirmDelete()">🗑️ Delete</button>
+      {% endif %}
+
+      <a href="{% url 'account_list' %}" class="btn btn-secondary">← Back</a>
+    </div>
   </form>
 </div>
+
+<script>
+function confirmAccountMerge() {
+  const form = document.getElementById("account-form");
+  const confirmField = document.getElementById("confirm_merge");
+
+  const errorEl = document.querySelector(".nonfield ul li");
+  const isMergeWarning = errorEl && errorEl.innerText.includes("Queres fundir os saldos");
+
+  if (isMergeWarning) {
+    if (confirm("⚠ Já existe uma conta com esse nome. Queres fundir os saldos?")) {
+      confirmField.value = "true";
+      form.submit();
+    }
+    return;
+  }
+
+  form.submit();
+}
+</script>
+
+
 {% endblock %}

@@ -10,6 +10,8 @@ The file was rewritten to:
 """
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
+
 from calendar import monthrange
 from datetime import date
 from typing import Any, Dict
@@ -160,26 +162,35 @@ class AccountListView(LoginRequiredMixin, ListView):
         return super().get_queryset().filter(user=self.request.user)  # type: ignore[misc]
 
 
-class AccountCreateView(
-    LoginRequiredMixin, UserInFormKwargsMixin, CreateView
-):
+class AccountCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     model = Account
     form_class = AccountForm
     template_name = "core/account_form.html"
     success_url = reverse_lazy("account_list")
 
-    def form_valid(self, form):  # type: ignore[override]
-        form.instance.user = self.request.user
+    def form_valid(self, form):
+        try:
+            self.object = form.save()
+        except ValidationError as e:
+            form.add_error(None, e.message)
+            return self.form_invalid(form)
         return super().form_valid(form)
 
 
-class AccountUpdateView(
-    OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView
-):
+
+class AccountUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Account
     form_class = AccountForm
     template_name = "core/account_form.html"
     success_url = reverse_lazy("account_list")
+
+    def form_valid(self, form):
+        try:
+            self.object = form.save()
+        except ValidationError as e:
+            form.add_error(None, e.message)
+            return self.form_invalid(form)
+        return super().form_valid(form)
 
 ################################################################################
 #                           Account balance view                               #
