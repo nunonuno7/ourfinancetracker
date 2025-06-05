@@ -36,11 +36,20 @@ __all__ = [
     "AccountBalance",
     "Category",
     "Transaction",
+    "TransactionAttachment",
+    "TransactionTag",
+    "Tag",
+    "Budget",
+    "RecurringTransaction",
+    "ImportLog",
+    "ExchangeRate",
+    "DatePeriod",
     "UserSettings",
     # helpers
     "get_default_currency",
     "get_default_account_type",
 ]
+
 
 # ---------------------------------------------------------------------------
 # Helpers (re‑used in defaults)
@@ -161,36 +170,33 @@ class AccountBalance(models.Model):
         return f"{self.account} @ {self.year}-{self.month:02d}: {self.reported_balance}"
     
 
-class Category(models.Model):
-    """User‑specific tree of categories and sub‑categories."""
 
-    user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="categories")  # type: ignore[valid‑type]
-    name = models.CharField(max_length=64)
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="children",
-    )
+
+class Category(models.Model):
+    """User-defined flat category (no hierarchy)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="categories")  # type: ignore[valid-type]
+    name = models.CharField(max_length=100)
+    position = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = (("user", "name", "parent"),)
+        unique_together = (("user", "name"),)
+        ordering = ("position", "name")
         verbose_name_plural = "categories"
-        ordering = ("parent__name", "name")
 
-    # ------------------------------------------------------------ helpers
+    # ---------------------- helpers ------------------------
 
     @classmethod
     def get_default(cls, user: User) -> "Category":
-        """Return (create if needed) *Geral / Não Classificado*."""
-        with transaction.atomic():
-            general, _ = cls.objects.get_or_create(user=user, name="Geral", parent=None)
-            sub, _ = cls.objects.get_or_create(user=user, name="Não Classificado", parent=general)
-        return sub
+        """Return (create if needed) default category: Geral."""
+        return cls.objects.get_or_create(user=user, name="Geral")[0]
 
-    def __str__(self) -> str:  # pragma: no cover
-        return f"{self.parent} / {self.name}" if self.parent else self.name
+    def __str__(self) -> str:
+        return self.name
+
+
 
 
 @receiver(post_save, sender=User)
@@ -219,10 +225,20 @@ class Transaction(models.Model):
         EXPENSE = "EX", "Expense"
         INVESTMENT = "IV", "Investment"
 
-    user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")  # type: ignore[valid‑type]
+    user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")  # type: ignore[valid-type]
     date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     type = models.CharField(max_length=2, choices=Type.choices)
+
+    period = models.ForeignKey(
+        "DatePeriod",
+        on_delete=models.PROTECT,
+        related_name="transactions",
+        null=True,
+        blank=True,
+        help_text="Reference period (e.g. June 2025)",
+    )
+
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -250,17 +266,14 @@ class Transaction(models.Model):
         ]
         ordering = ("-date", "-id")
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"{self.date} {self.get_type_display()} {self.amount}"
 
-    # ------------------------------------------------------------ save/clean
-
-    def save(self, *args, **kwargs):  # noqa: D401
+    def save(self, *args, **kwargs):
         """Assign default category when missing."""
         if not self.category_id:
             self.category = Category.get_default(self.user)
         super().save(*args, **kwargs)
-
 
 # ---------------------------------------------------------------------------
 # User settings – lightweight, avoids custom user model
@@ -285,6 +298,202 @@ class UserSettings(models.Model):
         return f"Settings for {self.user}"
 
 
+
+
+
+
+class TransactionAttachment(models.Model):
+    transaction = models.ForeignKey("Transaction", on_delete=models.CASCADE, related_name="attachments")
+    file_path = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Attachment for transaction {self.transaction_id}"
+
+
+
+
+
+
+
+
+class Budget(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="budgets")
+    category = models.ForeignKey("Category", on_delete=models.CASCADE, related_name="budgets")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    rollover = models.BooleanField(default=False)
+    position = models.PositiveIntegerField(default=0)  # ← ADICIONADO
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.category} budget ({self.start_date} – {self.end_date})"
+
+
+
+
+
+
+class RecurringTransaction(models.Model):
+    class Frequency(models.TextChoices):
+        DAILY = "daily", "Daily"
+        WEEKLY = "weekly", "Weekly"
+        MONTHLY = "monthly", "Monthly"
+        YEARLY = "yearly", "Yearly"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recurring_transactions")
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    frequency = models.CharField(max_length=10, choices=Frequency.choices)
+    next_occurrence = models.DateField()
+
+    end_period = models.ForeignKey(
+        "DatePeriod",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_transactions",
+        help_text="Optional period when recurrence ends",
+    )
+
+    is_active = models.BooleanField(default=True)
+    template_transaction = models.ForeignKey(
+        "Transaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurrence_templates"
+    )
+    position = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user} – {self.amount} ({self.frequency})"
+
+class ImportLog(models.Model):
+    class Status(models.TextChoices):
+        SUCCESS = "success", "Success"
+        PARTIAL = "partial", "Partial"
+        ERROR = "error", "Error"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="import_logs")
+    source = models.CharField(max_length=80)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    num_records = models.PositiveIntegerField()
+    status = models.CharField(max_length=10, choices=Status.choices)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+
+class ExchangeRate(models.Model):
+    from_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="rates_from")
+    to_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="rates_to")
+    rate = models.DecimalField(max_digits=20, decimal_places=6)
+    rate_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (("from_currency", "to_currency", "rate_date"),)
+
+    def __str__(self):
+        return f"{self.from_currency} → {self.to_currency} @ {self.rate_date}: {self.rate}"
+
+
+
+class DatePeriod(models.Model):
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
+    label = models.CharField(max_length=20)  # Ex: "Junho 2025"
+
+    class Meta:
+        unique_together = (("year", "month"),)
+        ordering = ("-year", "-month")
+
+    def __str__(self):
+        return f"{self.label} ({self.year}-{self.month:02})"
+
+
+
+
+
+class Tag(models.Model):
+    name = models.CharField(max_length=100)
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ("position", "name")
+        verbose_name_plural = "tags"
+
+    def __str__(self):
+        return self.name
+
+
+
+
+
+class TransactionTag(models.Model):
+    transaction = models.ForeignKey("Transaction", on_delete=models.CASCADE, related_name="tag_links")
+    tag = models.ForeignKey("Tag", on_delete=models.CASCADE, related_name="transaction_links")
+
+    class Meta:
+        unique_together = (("transaction", "tag"),)
+        verbose_name = "Transaction Tag"
+        verbose_name_plural = "Transaction Tags"
+
+    def __str__(self):
+        return f"{self.transaction_id} → {self.tag.name}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ---------------------------------------------------------------------------
 # Signals
 # ---------------------------------------------------------------------------
@@ -300,3 +509,11 @@ def _create_initial_balance_on_account_creation(sender, instance: Account, creat
             month=today.month,
             reported_balance=Decimal("0.00"),
         )
+
+
+
+
+
+
+
+

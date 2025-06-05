@@ -11,13 +11,13 @@ from .models import (
     UserSettings,
 )
 
-# Registo simples (sem personalização específica)
+# Registo simples
 admin.site.register([Currency, AccountType, Account, AccountBalance, UserSettings])
 
 # Registo personalizado para Category
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "user", "parent")  # removido 'created_at'
+    list_display = ("name", "user", "position")
     list_filter = ("user",)
     search_fields = ("name",)
 
