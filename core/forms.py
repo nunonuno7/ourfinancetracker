@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any
-from .models import DatePeriod
+from datetime import date as dt_date, datetime
+
 from django import forms
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
-from django.core.exceptions import ValidationError
 from django.forms import BaseModelFormSet, modelformset_factory
 
 from .models import (
@@ -16,7 +17,11 @@ from .models import (
     Category,
     Currency,
     Transaction,
+    DatePeriod,
+    Tag,
 )
+from .mixins import UserAwareMixin  # se moveste o mixin para um ficheiro separado
+
 
 User = get_user_model()
 
@@ -35,14 +40,48 @@ class UserAwareMixin:
         self.user: User | None = user
 
 
+
+
+
+
+
+
+
+from datetime import date as dt_date, datetime
+from decimal import Decimal
+from typing import Any
+
+from django import forms
+from django.core.exceptions import ValidationError
+
+from .models import Transaction, Category, Account, DatePeriod, Tag
+from .mixins import UserAwareMixin
+
+
 class TransactionForm(UserAwareMixin, forms.ModelForm):
+    category = forms.CharField(
+        label="Category",
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"})
+    )
+
+    tags_input = forms.CharField(
+        label="Tags",
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "e.g. groceries, food, weekend",
+            "autocomplete": "off"
+        })
+    )
+
     class Meta:
         model = Transaction
         fields = [
             "amount",
             "date",
+            "period",
             "type",
-            "category",
             "account",
             "notes",
             "is_cleared",
@@ -50,24 +89,84 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
         widgets = {
             "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "period": forms.Select(attrs={"class": "form-control"}),
             "type": forms.Select(attrs={"class": "form-control"}),
-            "category": forms.Select(attrs={"class": "form-control"}),
             "account": forms.Select(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, user: Any = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
-        if self.user:
-            self.fields["category"].queryset = Category.objects.filter(user=self.user).order_by("name")
-            self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
+        self.user = user
+
+        # Filtros por utilizador
+        self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
+        self.fields["period"].queryset = DatePeriod.objects.order_by("-year", "-month")
+
+        # Defaults em nova instância
+        if not self.instance.pk:
+            today = dt_date.today()
+            self.initial.setdefault("date", today)
+            period, _ = DatePeriod.objects.get_or_create(
+                year=today.year,
+                month=today.month,
+                defaults={"label": today.strftime("%B %Y")},
+            )
+            self.initial.setdefault("period", period)
 
     def clean_amount(self) -> Decimal:
-        amount: Decimal = self.cleaned_data["amount"]
+        amount = self.cleaned_data["amount"]
         if amount == 0:
             raise ValidationError("Amount cannot be zero.")
         return amount
+
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean()
+
+        # Processar categoria (texto livre)
+        category_name = cleaned.get("category")
+        if category_name:
+            category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
+            if not category:
+                category = Category.objects.create(user=self.user, name=category_name)
+            cleaned["category"] = category
+
+        # Garantir que period é válido
+        period_str = self.data.get("period")
+        if not cleaned.get("period") and period_str:
+            try:
+                dt = datetime.strptime(period_str, "%Y-%m")
+                period, _ = DatePeriod.objects.get_or_create(
+                    year=dt.year,
+                    month=dt.month,
+                    defaults={"label": dt.strftime("%B %Y")}
+                )
+                cleaned["period"] = period
+            except ValueError:
+                raise ValidationError("Invalid period format (expected YYYY-MM).")
+
+        return cleaned
+
+    def save(self, commit: bool = True) -> Transaction:
+        instance: Transaction = super().save(commit=False)
+        instance.user = self.user
+        instance.category = self.cleaned_data.get("category", instance.category)
+
+        if commit:
+            instance.save()
+
+        # Processar tags
+        tags_raw = self.cleaned_data.get("tags_input", "")
+        tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        tag_objs = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
+        instance.tags.set(tag_objs)
+
+        return instance
+
+
+
+
 
 
 class CategoryForm(UserAwareMixin, forms.ModelForm):
@@ -75,26 +174,26 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         model = Category
         fields = ("name",)
         widgets = {
-            "name": forms.TextInput(attrs={"class": "form-control"})
+            "name": forms.TextInput(attrs={"class": "form-control"}),
         }
 
     def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
         self.instance.user = self.user
 
-    def clean(self) -> dict[str, Any]:
-        cleaned = super().clean()
+    def clean_name(self) -> str:
+        name = self.cleaned_data.get("name", "").strip()
         if (
             self.user
             and Category.objects.filter(
                 user=self.user,
-                name__iexact=cleaned.get("name"),
+                name__iexact=name,
             )
             .exclude(pk=self.instance.pk)
             .exists()
         ):
             raise ValidationError("A category with this name already exists.")
-        return cleaned
+        return name
 
     def save(self, commit: bool = True) -> Category:
         instance: Category = super().save(commit=False)
@@ -102,6 +201,11 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+
+
+
 
 
 class CustomUserCreationForm(UserCreationForm):

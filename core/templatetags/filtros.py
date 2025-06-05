@@ -13,3 +13,8 @@ def formatar_moeda(valor):
 def get_item(dictionary, key):
     """Permite aceder a valores de dicionários via template."""
     return dictionary.get(key)
+
+@register.filter
+def field_type(field):
+    """Retorna o tipo de widget do campo (ex: 'TextInput', 'CheckboxInput')."""
+    return field.field.widget.__class__.__name__

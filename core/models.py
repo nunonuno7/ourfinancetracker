@@ -28,6 +28,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
+
 User = get_user_model()
 from datetime import date
 
@@ -245,6 +246,8 @@ class Transaction(models.Model):
         blank=True,
         related_name="transactions",
     )
+    tags = models.ManyToManyField("Tag", blank=True, related_name="transactions")
+
     account = models.ForeignKey(
         Account,
         on_delete=models.SET_NULL,
@@ -269,10 +272,37 @@ class Transaction(models.Model):
         return f"{self.date} {self.get_type_display()} {self.amount}"
 
     def save(self, *args, **kwargs):
-        """Assign default category when missing."""
+        """Aplica defaults à transação antes de guardar."""
+
+        # Preenche o período com base na data, se ainda não existir
+        if not self.period and self.date:
+            self.period, _ = DatePeriod.objects.get_or_create(
+                year=self.date.year,
+                month=self.date.month,
+                defaults={"label": self.date.strftime("%B %Y")}
+            )
+
+        # Se não houver data mas houver período, usa o dia 1 desse mês
+        if not self.date and self.period:
+            self.date = date(self.period.year, self.period.month, 1)
+
+        # Tipo default: Expense
+        if not self.type:
+            self.type = self.Type.EXPENSE
+
+        # Categoria mais usada (ou fallback para "Geral")
         if not self.category_id:
-            self.category = Category.get_default(self.user)
+            most_used = (
+                Category.objects.filter(user=self.user)
+                .annotate(num=models.Count("transactions"))
+                .order_by("-num")
+                .first()
+            )
+            self.category = most_used or Category.get_default(self.user)
+
         super().save(*args, **kwargs)
+
+
 
 # ---------------------------------------------------------------------------
 # User settings – lightweight, avoids custom user model

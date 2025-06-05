@@ -110,10 +110,11 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
     success_url = reverse_lazy("transaction_list")
-
     def form_valid(self, form):
-        form.instance.user = self.request.user
-        return super().form_valid(form)
+        self.object = form.save()  # chama o save() do form que já trata tudo
+        return redirect(self.get_success_url())
+
+
 
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
@@ -553,3 +554,14 @@ def account_reorder(request):
             return JsonResponse({"error": str(e)}, status=400)
 
     return JsonResponse({"error": "invalid method"}, status=405)
+
+
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def category_autocomplete(request):
+    q = request.GET.get("q", "")
+    user = request.user
+    results = Category.objects.filter(user=user, name__icontains=q).order_by("name")
+    return JsonResponse([{"name": c.name} for c in results], safe=False)

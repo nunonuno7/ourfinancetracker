@@ -35,6 +35,9 @@ from .views import (
     delete_account_balance,
     copy_previous_balances_view,
     account_reorder,
+
+    #other
+    category_autocomplete,
 )
 
 # 👇 Logout via GET (evita erro 405 nos testes e links)
@@ -75,6 +78,8 @@ urlpatterns = [
     path("accounts/<int:pk>/up/", move_account_up, name="account_move_up"),
     path("accounts/<int:pk>/down/", move_account_down, name="account_move_down"),
     path("accounts/reorder/", account_reorder, name="account_reorder"),
+    path("categories/autocomplete/", category_autocomplete, name="category_autocomplete"),
+
 
         
 
