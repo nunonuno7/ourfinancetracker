@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const form = document.getElementById("account-form");
+  const form = document.getElementById("category-form");
   const confirmField = document.getElementById("confirm_merge");
   const submitBtn = document.getElementById("submit-btn");
 

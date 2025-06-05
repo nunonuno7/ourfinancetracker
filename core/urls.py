@@ -35,9 +35,11 @@ from .views import (
     delete_account_balance,
     copy_previous_balances_view,
     account_reorder,
+    
 
     #other
     category_autocomplete,
+    tag_autocomplete,
 )
 
 # 👇 Logout via GET (evita erro 405 nos testes e links)
@@ -68,6 +70,7 @@ urlpatterns = [
     path("categories/new/", CategoryCreateView.as_view(), name="category_create"),
     path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_update"),
     path("categories/<int:pk>/delete/", CategoryDeleteView.as_view(), name="category_delete"),
+    path("tags/autocomplete/", tag_autocomplete, name="tag_autocomplete"),
 
     # ─────────── Accounts ───────────
     path("accounts/", AccountListView.as_view(), name="account_list"),

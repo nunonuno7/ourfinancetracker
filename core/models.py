@@ -290,8 +290,8 @@ class Transaction(models.Model):
         if not self.type:
             self.type = self.Type.EXPENSE
 
-        # Categoria mais usada (ou fallback para "Geral")
-        if not self.category_id:
+        # Categoria mais usada (ou fallback para "Geral") — apenas se nova
+        if not self.pk and not self.category_id:
             most_used = (
                 Category.objects.filter(user=self.user)
                 .annotate(num=models.Count("transactions"))
@@ -299,7 +299,7 @@ class Transaction(models.Model):
                 .first()
             )
             self.category = most_used or Category.get_default(self.user)
-
+            
         super().save(*args, **kwargs)
 
 

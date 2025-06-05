@@ -70,12 +70,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // Tom Select para o campo de categoria (apenas uma)
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
-    new TomSelect(categoryInput, {
+    const currentValue = categoryInput.value.trim();  // valor já existente no input (ex: "Groceries")
+
+    const select = new TomSelect(categoryInput, {
       create: true,
       maxItems: 1,
       valueField: "name",
       labelField: "name",
       searchField: "name",
+      preload: true,
       load: function (query, callback) {
         if (!query.length) return callback();
         fetch(`/categories/autocomplete/?q=${encodeURIComponent(query)}`)
@@ -84,7 +87,14 @@ document.addEventListener("DOMContentLoaded", () => {
           .catch(() => callback());
       },
     });
+
+    // Adiciona a opção inicial manualmente se for necessário
+    if (currentValue && !select.options[currentValue]) {
+      select.addOption({ name: currentValue });  // ⚠️ só funciona se o campo for do tipo "name"
+      select.setValue(currentValue);
+    }
   }
+
 
   // Tom Select para o campo de tags (múltiplas)
   const tagsInput = document.getElementById("id_tags_input");

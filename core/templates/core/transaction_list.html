@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load filtros %}
 
 {% block content %}
 <div class="container mt-4">
@@ -17,6 +18,7 @@
           <th>Type</th>
           <th>Amount</th>
           <th>Category</th>
+          <th>Tags</th>
           <th>Account</th>
           <th style="width: 140px;">Actions</th>
         </tr>
@@ -24,17 +26,30 @@
       <tbody>
         {% for transaction in transactions %}
         <tr>
-          <td>{{ transaction.date }}</td>
+          <td>{{ transaction.date|date:"Y-m-d" }}</td>
           <td>{{ transaction.get_type_display }}</td>
-          <td>{{ transaction.amount }}</td>
-          <td>{{ transaction.category }}</td>
+          <td>
+            {{ transaction.amount|floatformat:2 }}
+            {% if transaction.account.currency.symbol %}
+              {{ transaction.account.currency.symbol }}
+            {% endif %}
+          </td>
+          <td>{{ transaction.category.name|default:"–" }}</td>
+
+          <td>
+            {% for tag in transaction.tags.all %}
+              <span class="badge bg-secondary">{{ tag.name }}</span>
+            {% empty %}
+              <span class="text-muted">–</span>
+            {% endfor %}
+          </td>
           <td>{{ transaction.account }}</td>
           <td>
             <div class="d-flex gap-2">
-              <a href="{% url 'transaction_update' transaction.pk %}" class="btn btn-sm btn-outline-primary">✏️</a>
+              <a href="{% url 'transaction_update' transaction.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
               <form method="post" action="{% url 'transaction_delete' transaction.pk %}" class="delete-form" data-name="transaction on {{ transaction.date }}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger">🗑</button>
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">🗑</button>
               </form>
             </div>
           </td>

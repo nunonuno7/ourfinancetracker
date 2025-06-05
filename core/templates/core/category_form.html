@@ -18,19 +18,30 @@
         {% csrf_token %}
 
         {% if form.non_field_errors %}
-          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+          </div>
         {% endif %}
 
+        <!-- Amount -->
         <div class="mb-3">
-          <label for="id_amount" class="form-label">Amount</label>
+          <label for="{{ form.amount.id_for_label }}" class="form-label">Amount</label>
           {{ form.amount|add_class:"form-control" }}
+          {% if form.amount.errors %}
+            <div class="text-danger small">{{ form.amount.errors|join:", " }}</div>
+          {% endif %}
         </div>
 
+        <!-- Date -->
         <div class="mb-3">
-          <label for="id_date" class="form-label">Date</label>
+          <label for="{{ form.date.id_for_label }}" class="form-label">Date</label>
           {{ form.date|add_class:"form-control" }}
+          {% if form.date.errors %}
+            <div class="text-danger small">{{ form.date.errors|join:", " }}</div>
+          {% endif %}
         </div>
 
+        <!-- Period -->
         <div class="mb-3">
           <label class="form-label">Period</label>
           <div class="d-flex align-items-center">
@@ -38,54 +49,52 @@
             <input type="month" class="form-control" id="period-selector" name="period-selector">
             <button type="button" class="btn btn-outline-secondary ms-2" id="next-month">›</button>
           </div>
-          {{ form.period }}
+          <input type="hidden" name="period" id="id_period">
         </div>
 
+        <!-- Type -->
         <div class="mb-3">
-          <label for="id_type" class="form-label">Type</label>
+          <label for="{{ form.type.id_for_label }}" class="form-label">Type</label>
           {{ form.type|add_class:"form-control" }}
+          {% if form.type.errors %}
+            <div class="text-danger small">{{ form.type.errors|join:", " }}</div>
+          {% endif %}
         </div>
 
+        <!-- Category -->
         <div class="mb-3">
           <label for="id_category" class="form-label">Category</label>
-          <input
-            type="text"
-            name="category"
-            id="id_category"
-            value="{{ form.initial.category|default:'' }}"
-            class="form-control"
-            autocomplete="off"
-          >
+          <input type="text" name="category" id="id_category" class="form-control" value="{{ form.initial.category|default:'' }}" autocomplete="off" />
         </div>
 
+        <!-- Tags -->
         <div class="mb-3">
-          <label for="id_account" class="form-label">Account</label>
+          <label for="id_tags_input" class="form-label">Tags</label>
+          <input type="text" name="tags_input" id="id_tags_input" class="form-control" autocomplete="off" placeholder="e.g. groceries, food, weekend" value="{{ form.initial.tags_input|default:'' }}" />
+        </div>
+
+        <!-- Account -->
+        <div class="mb-3">
+          <label for="{{ form.account.id_for_label }}" class="form-label">Account</label>
           {{ form.account|add_class:"form-control" }}
+          {% if form.account.errors %}
+            <div class="text-danger small">{{ form.account.errors|join:", " }}</div>
+          {% endif %}
         </div>
 
+        <!-- Notes -->
         <div class="mb-3">
-          <label for="id_notes" class="form-label">Notes</label>
+          <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
           {{ form.notes|add_class:"form-control" }}
         </div>
 
+        <!-- Is Cleared -->
         <div class="form-check mb-3">
-          {{ form.is_cleared|add_class:"form-check-input" }}
-          <label for="id_is_cleared" class="form-check-label">Is cleared</label>
+          {{ form.is_cleared }}
+          <label for="{{ form.is_cleared.id_for_label }}" class="form-check-label">Is cleared</label>
         </div>
 
-        <div class="mb-3">
-          <label for="id_tags_input" class="form-label">Tags</label>
-          <input
-            type="text"
-            name="tags_input"
-            id="id_tags_input"
-            value="{{ form.initial.tags_input|default:'' }}"
-            class="form-control"
-            autocomplete="off"
-            placeholder="e.g. groceries, recurring, travel"
-          >
-        </div>
-
+        <!-- Submit -->
         <div class="d-flex justify-content-between">
           <a href="{% url 'transaction_list' %}" class="btn btn-outline-secondary">← Back</a>
           <button type="submit" class="btn btn-primary">
@@ -97,8 +106,8 @@
   </div>
 </div>
 
-<!-- Tom Select + Script -->
+<!-- JS -->
+<script src="{% static 'js/transaction_form.js' %}"></script>
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-<script src="{% static 'js/transaction_form.js' %}"></script>
 {% endblock %}

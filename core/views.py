@@ -1,3 +1,4 @@
+
 """
 Views for the *ourfinancetracker* core app.
 
@@ -41,7 +42,7 @@ from .forms import (
     CustomUserCreationForm,
     TransactionForm,
 )
-from .models import Account, AccountBalance, Category, Transaction
+from .models import Account, AccountBalance, Category, Transaction, Tag
 
 
 from django.views.decorators.csrf import csrf_exempt
@@ -53,6 +54,8 @@ from .models import DatePeriod
 ################################################################################
 #                               Menu config API                                #
 ################################################################################
+
+print("✅ O ficheiro views.py foi carregado")
 
 @login_required
 def menu_config(request):
@@ -111,8 +114,14 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     template_name = "core/transaction_form.html"
     success_url = reverse_lazy("transaction_list")
     def form_valid(self, form):
-        self.object = form.save()  # chama o save() do form que já trata tudo
+        print("🧪 Form class usada:", type(form))
+        print("📦 Módulo do form:", form.__module__)
+        self.object = form.save()
         return redirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        print("🚫 Form inválido:", form.errors)
+        return super().form_invalid(form)
 
 
 
@@ -565,3 +574,9 @@ def category_autocomplete(request):
     user = request.user
     results = Category.objects.filter(user=user, name__icontains=q).order_by("name")
     return JsonResponse([{"name": c.name} for c in results], safe=False)
+
+@login_required
+def tag_autocomplete(request):
+    q = request.GET.get("q", "")
+    results = Tag.objects.filter(name__icontains=q).order_by("name")
+    return JsonResponse([{"name": t.name} for t in results], safe=False)

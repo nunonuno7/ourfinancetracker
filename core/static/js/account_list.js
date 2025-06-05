@@ -1,9 +1,12 @@
 document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll("form.delete-form").forEach(form => {
-    form.addEventListener("submit", function (e) {
-      const name = form.dataset.name || "this account";
-      if (!confirm(`⚠ Confirm delete ${name}?`)) {
-        e.preventDefault();
+  const deleteForms = document.querySelectorAll(".delete-form");
+
+  deleteForms.forEach(form => {
+    form.addEventListener("submit", function (event) {
+      const itemName = form.dataset.name || "this transaction";
+      const confirmed = confirm(`Are you sure you want to delete ${itemName}?`);
+      if (!confirmed) {
+        event.preventDefault();
       }
     });
   });

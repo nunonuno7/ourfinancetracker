@@ -47,22 +47,14 @@ class UserAwareMixin:
 
 
 
-from datetime import date as dt_date, datetime
-from decimal import Decimal
-from typing import Any
-
-from django import forms
-from django.core.exceptions import ValidationError
-
-from .models import Transaction, Category, Account, DatePeriod, Tag
-from .mixins import UserAwareMixin
-
-
 class TransactionForm(UserAwareMixin, forms.ModelForm):
     category = forms.CharField(
         label="Category",
         required=False,
-        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"})
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "off"
+        }),
     )
 
     tags_input = forms.CharField(
@@ -72,9 +64,10 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
             "class": "form-control",
             "placeholder": "e.g. groceries, food, weekend",
             "autocomplete": "off"
-        })
+        }),
     )
 
+    period = forms.CharField(widget=forms.HiddenInput())
     class Meta:
         model = Transaction
         fields = [
@@ -89,22 +82,23 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
         widgets = {
             "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "period": forms.Select(attrs={"class": "form-control"}),
+            "period": forms.HiddenInput(),
             "type": forms.Select(attrs={"class": "form-control"}),
             "account": forms.Select(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    def __init__(self, *args: Any, user: Any = None, **kwargs: Any) -> None:
+
+    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
         self.user = user
 
         # Filtros por utilizador
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
-        self.fields["period"].queryset = DatePeriod.objects.order_by("-year", "-month")
+        self.fields["period"].required = False
+        self.fields["period"].queryset = DatePeriod.objects.none()
 
-        # Defaults em nova instância
         if not self.instance.pk:
             today = dt_date.today()
             self.initial.setdefault("date", today)
@@ -124,7 +118,7 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
 
-        # Processar categoria (texto livre)
+        # Processar categoria
         category_name = cleaned.get("category")
         if category_name:
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
@@ -132,37 +126,48 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
 
-        # Garantir que period é válido
+        # Processar o período (converter string em DatePeriod)
         period_str = self.data.get("period")
-        if not cleaned.get("period") and period_str:
+        if period_str:
             try:
                 dt = datetime.strptime(period_str, "%Y-%m")
                 period, _ = DatePeriod.objects.get_or_create(
                     year=dt.year,
                     month=dt.month,
-                    defaults={"label": dt.strftime("%B %Y")}
+                    defaults={"label": dt.strftime("%B %Y")},
                 )
-                cleaned["period"] = period
+                cleaned["period"] = period  # 👈 importante: substitui a string por um objeto
             except ValueError:
                 raise ValidationError("Invalid period format (expected YYYY-MM).")
 
         return cleaned
 
+
+
+
+
     def save(self, commit: bool = True) -> Transaction:
-        instance: Transaction = super().save(commit=False)
+        print("💾 TransactionForm.save() called")
+        instance = super().save(commit=False)
+
         instance.user = self.user
         instance.category = self.cleaned_data.get("category", instance.category)
 
         if commit:
+            print("🔐 A gravar no DB...")
             instance.save()
+            print("✅ Gravado:", instance)
 
-        # Processar tags
-        tags_raw = self.cleaned_data.get("tags_input", "")
-        tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
-        tag_objs = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
-        instance.tags.set(tag_objs)
+        try:
+            tags_raw = self.cleaned_data.get("tags_input", "")
+            tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
+            tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
+            instance.tags.set(tags)
+        except Exception as e:
+            print("⚠️ Erro ao atribuir tags:", e)
 
         return instance
+
 
 
 
@@ -179,24 +184,25 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
 
     def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
-        self.instance.user = self.user
+        if self.instance:
+            self.instance.user = self.user
 
     def clean_name(self) -> str:
         name = self.cleaned_data.get("name", "").strip()
+
         if (
             self.user
-            and Category.objects.filter(
-                user=self.user,
-                name__iexact=name,
-            )
-            .exclude(pk=self.instance.pk)
-            .exists()
+            and Category.objects
+                .filter(user=self.user, name__iexact=name)
+                .exclude(pk=self.instance.pk)
+                .exists()
         ):
             raise ValidationError("A category with this name already exists.")
+
         return name
 
     def save(self, commit: bool = True) -> Category:
-        instance: Category = super().save(commit=False)
+        instance = super().save(commit=False)
         instance.user = self.user
         if commit:
             instance.save()
