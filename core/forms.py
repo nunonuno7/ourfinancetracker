@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any
-
+from .models import DatePeriod
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
@@ -71,23 +71,16 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
 
 
 class CategoryForm(UserAwareMixin, forms.ModelForm):
-    parent = forms.ModelChoiceField(
-        queryset=Category.objects.none(),
-        required=False,
-        label="Parent category",
-        widget=forms.Select(attrs={"class": "form-control"}),
-    )
-
     class Meta:
         model = Category
-        fields = ("name", "parent")
-        widgets = {"name": forms.TextInput(attrs={"class": "form-control"})}
+        fields = ("name",)
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control"})
+        }
 
     def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
         self.instance.user = self.user
-        qs = Category.objects.filter(user=self.user).order_by("parent__name", "name") if self.user else Category.objects.none()
-        self.fields["parent"].queryset = qs
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
@@ -96,12 +89,11 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
             and Category.objects.filter(
                 user=self.user,
                 name__iexact=cleaned.get("name"),
-                parent=cleaned.get("parent"),
             )
             .exclude(pk=self.instance.pk)
             .exists()
         ):
-            raise ValidationError("A category with the same name already exists at this level.")
+            raise ValidationError("A category with this name already exists.")
         return cleaned
 
     def save(self, commit: bool = True) -> Category:
@@ -233,7 +225,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
 
     def clean_name(self) -> str:
         return self.cleaned_data["name"].strip()
-    
+
     def find_duplicate(self) -> Account | None:
         """Returns an existing account with the same name (case-insensitive), if any."""
         name = self.cleaned_data.get("name", "").strip()
@@ -242,19 +234,12 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
             name__iexact=name
         ).exclude(pk=self.instance.pk).first()
 
-
-
-
-
     def save(self, commit: bool = True) -> Account:
-        from .models import AccountBalance
-
         new_name = self.cleaned_data["name"].strip()
         self.cleaned_data["name"] = new_name
         self.instance.name = new_name
         self.instance.user = self.user
 
-        # Procurar conta com o mesmo nome (ignorando maiúsculas)
         existing_qs = Account.objects.filter(
             user=self.user,
             name__iexact=new_name
@@ -263,29 +248,25 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         if existing_qs.exists():
             existing = existing_qs.first()
 
-            # ⚠️ Impedir fusão com conta 'Cash'
             if existing.name.strip().lower() == "cash":
                 raise ValidationError("Não é permitido fundir com a conta 'Cash'.")
 
-            # ⚠️ Incompatível se tiver moeda ou tipo diferente
             if (
                 existing.currency_id != self.cleaned_data["currency"].id or
                 existing.account_type_id != self.cleaned_data["account_type"].id
             ):
                 raise ValidationError("Já existe uma conta com esse nome, mas com tipo ou moeda diferente. Não é possível fundir.")
 
-            # ⚠️ Verificar se o utilizador confirmou
             confirm_merge = self.data.get("confirm_merge", "").lower() == "true"
             if not confirm_merge:
                 self.add_error(None, "Já existe uma conta com esse nome. Queres fundir os saldos?")
-                return self.instance  # Não salvar ainda
+                return self.instance  # ⚠️ Voltar para form_invalid sem crash
 
-            # ✅ Fundir saldos: combinar valores por (ano, mês)
+            # Fundir saldos
             for balance in AccountBalance.objects.filter(account=self.instance):
                 existing_balance = AccountBalance.objects.filter(
                     account=existing,
-                    year=balance.year,
-                    month=balance.month
+                    period=balance.period
                 ).first()
 
                 if existing_balance:
@@ -296,13 +277,11 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
                     balance.account = existing
                     balance.save()
 
-            # Se estiver a editar uma conta existente, apagar após a fusão
             if self.instance.pk:
                 self.instance.delete()
 
             return existing
 
-        # ✅ Sem conflito — guardar normalmente
         if commit:
             self.instance.save()
         return self.instance

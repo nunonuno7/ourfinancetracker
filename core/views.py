@@ -49,7 +49,7 @@ from django.http import JsonResponse
 import json
 from .models import Account
 from django.contrib.auth.decorators import login_required
-
+from .models import DatePeriod
 ################################################################################
 #                               Menu config API                                #
 ################################################################################
@@ -205,18 +205,14 @@ class AccountCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     success_url = reverse_lazy("account_list")
 
     def form_valid(self, form):
+        # Verificar se existe conta com o mesmo nome
         existing = form.find_duplicate()
 
         if existing:
-            new_account = form.save(commit=False)
-            new_account.user = self.request.user
-            new_account.save()
-
-            return redirect(
-                "account_merge",
-                source_pk=new_account.pk,
-                target_pk=existing.pk
-            )
+            # Se a fusão ainda não foi confirmada, apenas mostrar erro no formulário
+            if not self.request.POST.get("confirm_merge", "").lower() == "true":
+                form.add_error(None, "Já existe uma conta com esse nome. Queres fundir os saldos?")
+                return self.form_invalid(form)
 
         try:
             self.object = form.save()
@@ -225,7 +221,6 @@ class AccountCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
             return self.form_invalid(form)
 
         return super().form_valid(form)
-
 
 
 class AccountUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
@@ -301,7 +296,7 @@ class AccountMergeView(OwnerQuerysetMixin, View):
         # Reconciliar saldos duplicados
         for bal in AccountBalance.objects.filter(account=source):
             existing = AccountBalance.objects.filter(
-                account=target, year=bal.year, month=bal.month
+                account=target, period=bal.period
             ).first()
 
             if existing:
@@ -338,10 +333,15 @@ def account_balance_view(request):
     if request.method == "GET":
         list(get_messages(request))
 
+    period, _ = DatePeriod.objects.get_or_create(
+        year=year,
+        month=month,
+        defaults={"label": date(year, month, 1).strftime("%B %Y")},
+    )
+
     qs_base = AccountBalance.objects.filter(
         account__user=request.user,
-        year=year,
-        month=month
+        period=period
     ).select_related("account", "account__account_type", "account__currency")
 
     if request.method == "POST":
@@ -355,8 +355,13 @@ def account_balance_view(request):
                     continue
 
                 inst = form.save(commit=False)
-                inst.year = year
-                inst.month = month
+
+                period, _ = DatePeriod.objects.get_or_create(
+                    year=year,
+                    month=month,
+                    defaults={"label": date(year, month, 1).strftime("%B %Y")},
+                )
+                inst.period = period
 
                 if inst.account.user_id is None:
                     inst.account.user = request.user
@@ -364,8 +369,7 @@ def account_balance_view(request):
 
                 existing = AccountBalance.objects.filter(
                     account=inst.account,
-                    year=inst.year,
-                    month=inst.month
+                    period=period,
                 ).first()
 
                 if existing:
@@ -374,6 +378,7 @@ def account_balance_view(request):
                 else:
                     inst.save()
 
+     
             _merge_duplicate_accounts(request.user)
 
             messages.success(request, "Balances saved!")
@@ -462,6 +467,7 @@ def delete_account_balance(request, pk):
         return JsonResponse({"success": False, "error": "Not found"}, status=404)
 
 
+
 @require_GET
 @login_required
 def copy_previous_balances_view(request):
@@ -477,32 +483,41 @@ def copy_previous_balances_view(request):
         prev_month = month - 1
         prev_year = year
 
-    created_count = 0
     user = request.user
+    created_count = 0
+
+    previous_period = DatePeriod.objects.filter(year=prev_year, month=prev_month).first()
+    if not previous_period:
+        return JsonResponse({"success": False, "error": "Previous period not found"}, status=404)
+
+    target_period, _ = DatePeriod.objects.get_or_create(
+        year=year,
+        month=month,
+        defaults={"label": date(year, month, 1).strftime("%B %Y")},
+    )
 
     previous_balances = AccountBalance.objects.filter(
         account__user=user,
-        year=prev_year,
-        month=prev_month
+        period=previous_period
     ).select_related("account")
 
     for bal in previous_balances:
         exists = AccountBalance.objects.filter(
             account=bal.account,
-            year=year,
-            month=month
+            period=target_period
         ).exists()
 
         if not exists:
             AccountBalance.objects.create(
                 account=bal.account,
-                year=year,
-                month=month,
+                period=target_period,
                 reported_balance=bal.reported_balance
             )
             created_count += 1
 
     return JsonResponse({"success": True, "created": created_count})
+
+
 
 @login_required
 def move_account_up(request, pk):

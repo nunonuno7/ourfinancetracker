@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 """
@@ -28,6 +29,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 User = get_user_model()
+from datetime import date
 
 __all__ = [
     "Currency",
@@ -158,20 +160,17 @@ class AccountBalance(models.Model):
     """Snapshot of an account's balance for a given month."""
 
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="balances")
-    year = models.PositiveIntegerField()
-    month = models.PositiveIntegerField()
+    period = models.ForeignKey("DatePeriod", on_delete=models.CASCADE, related_name="account_balances")
     reported_balance = models.DecimalField(max_digits=14, decimal_places=2)
 
     class Meta:
-        unique_together = (("account", "year", "month"),)
-        ordering = ("-year", "-month")
+        unique_together = (("account", "period"),)
+        ordering = ("-period__year", "-period__month")
 
     def __str__(self) -> str:
-        return f"{self.account} @ {self.year}-{self.month:02d}: {self.reported_balance}"
+        return f"{self.account} @ {self.period}: {self.reported_balance}"
     
-
-
-
+    
 class Category(models.Model):
     """User-defined flat category (no hierarchy)."""
 
@@ -500,19 +499,19 @@ class TransactionTag(models.Model):
 
 
 @receiver(post_save, sender=Account)
-def _create_initial_balance_on_account_creation(sender, instance: Account, created: bool, **kwargs):
+def _create_initial_balance_on_account_creation(sender, instance, created, **kwargs):
     if created:
-        today = timezone.now().date()
-        AccountBalance.objects.create(
-            account=instance,
+        today = date.today()
+        period, _ = DatePeriod.objects.get_or_create(
             year=today.year,
             month=today.month,
-            reported_balance=Decimal("0.00"),
+            defaults={"label": today.strftime("%B %Y")}
         )
-
-
-
-
+        AccountBalance.objects.create(
+            account=instance,
+            period=period,
+            reported_balance=0
+        )
 
 
 
