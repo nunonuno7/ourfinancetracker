@@ -53,6 +53,10 @@ from django.contrib.auth.decorators import login_required
 from .models import DatePeriod
 
 
+from django.http import JsonResponse
+from django.core.paginator import Paginator
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
 
 
 ################################################################################
@@ -120,22 +124,98 @@ class TransactionListView(LoginRequiredMixin, ListView):
 
 
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
+    """
+    View para criar uma nova transação.
+
+    Compatível tanto com o formulário padrão (transaction_form.html),
+    como com o formulário inline na listagem (transaction_list.html).
+    """
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
     success_url = reverse_lazy("transaction_list")
+
     def form_valid(self, form):
-        print("🧪 Form class usada:", type(form))
-        print("📦 Módulo do form:", form.__module__)
         self.object = form.save()
+        if self.request.headers.get("HX-Request") == "true":
+            # Submissão via HTMX (opcional)
+            return JsonResponse({"success": True})
         return redirect(self.get_success_url())
 
     def form_invalid(self, form):
+        if self.request.headers.get("HX-Request") == "true":
+            return JsonResponse({"success": False, "errors": form.errors}, status=400)
         print("🚫 Form inválido:", form.errors)
         return super().form_invalid(form)
 
+    def get_context_data(self, **kwargs):
+        """
+        Adiciona contas do utilizador ao contexto se necessário
+        (ex: para seleção no formulário ou rendering custom).
+        """
+        context = super().get_context_data(**kwargs)
+        context["accounts"] = Account.objects.filter(user=self.request.user).order_by("name")
+        return context
 
 
+from django.http import JsonResponse
+from django.core.paginator import Paginator
+from django.views.decorators.http import require_GET
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+
+@login_required
+@require_GET
+def transactions_json(request):
+    user = request.user
+
+    # Parâmetros enviados pelo DataTables
+    draw = int(request.GET.get('draw', 1))
+    start = int(request.GET.get('start', 0))
+    length = int(request.GET.get('length', 10))
+    search_value = request.GET.get('search[value]', '').strip()
+
+    # Query base (filtrar só do utilizador logado)
+    qs = Transaction.objects.filter(user=user)
+
+    # Filtro de pesquisa simples (exemplo na categoria)
+    if search_value:
+        qs = qs.filter(
+            Q(category__name__icontains=search_value) |
+            Q(account__name__icontains=search_value) |
+            Q(tags__name__icontains=search_value)
+        ).distinct()
+
+    records_total = qs.count()
+
+    # Ordenação (simples - exemplo pela data desc)
+    qs = qs.order_by('-date')
+
+    # Paginação
+    qs_page = qs[start:start+length]
+
+    # Preparar dados para JSON
+    data = []
+    for tx in qs_page:
+        data.append({
+            "id": tx.pk,
+            "period": f"{tx.period.year}-{tx.period.month:02d}" if tx.period else "",
+            "date": tx.date.strftime("%Y-%m-%d") if tx.date else "",
+            "type": tx.get_type_display() if hasattr(tx, 'get_type_display') else str(tx.type),
+            "amount": f"{tx.amount:.2f}" if tx.amount is not None else "",
+            "currency": tx.account.currency.symbol if tx.account and tx.account.currency else "",
+            "category": tx.category.name if tx.category else "–",
+            "tags": list(tx.tags.values_list('name', flat=True)),
+            "account": str(tx.account) if tx.account else "",
+        })
+
+    response = {
+        "draw": draw,
+        "recordsTotal": records_total,
+        "recordsFiltered": records_total,
+        "data": data,
+    }
+    return JsonResponse(response)
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Transaction

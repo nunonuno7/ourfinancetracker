@@ -4,6 +4,9 @@ from django.contrib.auth import views as auth_views
 from django.views.generic import RedirectView
 from django.contrib.auth import logout as auth_logout
 
+from django.urls import path
+from . import views
+
 from .views import (
     HomeView,
     signup,
@@ -94,4 +97,5 @@ urlpatterns = [
 
 
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    path("transactions/json/", views.transactions_json, name="transactions_json"),
 ]

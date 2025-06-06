@@ -1,4 +1,5 @@
-// ✅ JavaScript v5 otimizado - transaction_list_optimized.js
+
+// ✅ JavaScript v5 - transaction_list.js
 
 document.addEventListener("DOMContentLoaded", () => {
   // Confirmação antes de apagar
@@ -11,15 +12,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Inicializar DataTable otimizado
   const table = document.getElementById("transaction-table");
   if (table && typeof $ !== "undefined" && $.fn.dataTable) {
-    $(table).DataTable({
-      pageLength: 10,
-      order: [[1, 'desc']],
-      deferRender: true,
-      retrieve: true
-    });
+    $(table).DataTable({ pageLength: 25, order: [[1, 'desc']] });
   }
 
   const toggle = document.getElementById("toggle-edit-mode");
@@ -67,7 +62,24 @@ document.addEventListener("DOMContentLoaded", () => {
     clone.querySelector("input[name='date']").value = `${yyyy}-${mm}-${dd}`;
     syncPeriodFields(clone);
 
-    // Não inicializar Tom Select aqui para evitar lentidão!
+    new TomSelect(clone.querySelector("input[name='category']"), {
+      create: true, maxItems: 1, valueField: "name", labelField: "name", searchField: "name",
+      load: (query, callback) => {
+        if (!query.length) return callback();
+        fetch(`/categories/autocomplete/?q=${encodeURIComponent(query)}`)
+          .then(res => res.json()).then(callback).catch(() => callback());
+      }
+    });
+
+    new TomSelect(clone.querySelector("input[name='tags_input']"), {
+      plugins: ["remove_button"], delimiter: ",", persist: false, create: true,
+      placeholder: "Add tags...", valueField: "name", labelField: "name", searchField: "name",
+      load: (query, callback) => {
+        if (!query.length) return callback();
+        fetch(`/tags/autocomplete/?q=${encodeURIComponent(query)}`)
+          .then(res => res.json()).then(callback).catch(() => callback());
+      }
+    });
 
     clone.querySelector("input[name='date']")?.addEventListener("change", () => syncPeriodFields(clone));
     clone.querySelector("input[name='period_display']")?.addEventListener("change", () => syncDateFromPeriod(clone));
@@ -119,43 +131,6 @@ document.addEventListener("DOMContentLoaded", () => {
             input.dataset.field = field;
             cell.innerHTML = "";
             cell.appendChild(input);
-
-            // Inicializar Tom Select APENAS aqui para linhas existentes
-            if (field === "category") {
-              new TomSelect(input, {
-                create: true,
-                maxItems: 1,
-                valueField: "name",
-                labelField: "name",
-                searchField: "name",
-                load: (query, callback) => {
-                  if (!query.length) return callback();
-                  fetch(`/categories/autocomplete/?q=${encodeURIComponent(query)}`)
-                    .then(res => res.json())
-                    .then(data => callback(data))
-                    .catch(() => callback());
-                }
-              });
-            }
-            if (field === "tags_input") {
-              new TomSelect(input, {
-                plugins: ["remove_button"],
-                delimiter: ",",
-                persist: false,
-                create: true,
-                placeholder: "Add tags...",
-                valueField: "name",
-                labelField: "name",
-                searchField: "name",
-                load: (query, callback) => {
-                  if (!query.length) return callback();
-                  fetch(`/tags/autocomplete/?q=${encodeURIComponent(query)}`)
-                    .then(res => res.json())
-                    .then(data => callback(data))
-                    .catch(() => callback());
-                }
-              });
-            }
           });
         });
       } else {
