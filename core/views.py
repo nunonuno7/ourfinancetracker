@@ -51,6 +51,10 @@ import json
 from .models import Account
 from django.contrib.auth.decorators import login_required
 from .models import DatePeriod
+
+
+
+
 ################################################################################
 #                               Menu config API                                #
 ################################################################################
@@ -90,6 +94,13 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
     def get_queryset(self) -> QuerySet:  # type: ignore[override]
         qs: QuerySet = super().get_queryset()  # type: ignore[misc]
         return qs.filter(user=self.request.user)
+
+
+
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    template_name = "core/dashboard.html"
+
 
 ################################################################################
 #                             Transaction views                                #

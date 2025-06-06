@@ -40,6 +40,7 @@ from .views import (
     #other
     category_autocomplete,
     tag_autocomplete,
+    DashboardView,
 )
 
 # 👇 Logout via GET (evita erro 405 nos testes e links)
@@ -90,4 +91,7 @@ urlpatterns = [
     path("account-balance/", account_balance_view, name="account_balance"),
     path("account-balance/delete/<int:pk>/", delete_account_balance, name="account_balance_delete"),
     path("account-balance/copy/", copy_previous_balances_view, name="account_balance_copy"),
+
+
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
 ]

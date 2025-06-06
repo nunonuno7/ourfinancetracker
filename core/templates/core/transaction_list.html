@@ -11,7 +11,7 @@
 
   {% if transactions %}
   <div class="table-responsive">
-    <table class="table table-bordered table-hover align-middle">
+    <table id="transaction-table" class="table table-bordered table-hover align-middle">
       <thead class="table-light">
         <tr>
           <th>Date</th>
@@ -20,7 +20,7 @@
           <th>Category</th>
           <th>Tags</th>
           <th>Account</th>
-          <th style="width: 140px;">Actions</th>
+          <th style="width: 140px;" class="text-center">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -35,7 +35,6 @@
             {% endif %}
           </td>
           <td>{{ transaction.category.name|default:"–" }}</td>
-
           <td>
             {% for tag in transaction.tags.all %}
               <span class="badge bg-secondary">{{ tag.name }}</span>
@@ -44,12 +43,19 @@
             {% endfor %}
           </td>
           <td>{{ transaction.account }}</td>
-          <td>
-            <div class="d-flex gap-2">
-              <a href="{% url 'transaction_update' transaction.pk %}" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
-              <form method="post" action="{% url 'transaction_delete' transaction.pk %}" class="delete-form" data-name="transaction on {{ transaction.date }}">
+          <td class="text-center">
+            <div class="d-flex flex-wrap gap-2 justify-content-center">
+              <a href="{% url 'transaction_update' transaction.pk %}"
+                 class="btn btn-sm btn-outline-primary"
+                 title="Edit">✏️</a>
+              <form method="post"
+                    action="{% url 'transaction_delete' transaction.pk %}"
+                    class="delete-form d-inline"
+                    data-name="transaction on {{ transaction.date }}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">🗑</button>
+                <button type="submit"
+                        class="btn btn-sm btn-outline-danger"
+                        title="Delete">🗑</button>
               </form>
             </div>
           </td>
@@ -63,5 +69,6 @@
   {% endif %}
 </div>
 
+<!-- JS específico para esta página -->
 <script src="{% static 'js/transaction_list.js' %}"></script>
 {% endblock %}

@@ -68,6 +68,7 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
     )
 
     period = forms.CharField(widget=forms.HiddenInput())
+
     class Meta:
         model = Transaction
         fields = [
@@ -89,15 +90,11 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-
     def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
         self.user = user
 
-        # Filtros por utilizador
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
-        self.fields["period"].required = False
-        self.fields["period"].queryset = DatePeriod.objects.none()
 
         if not self.instance.pk:
             today = dt_date.today()
@@ -108,6 +105,13 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                 defaults={"label": today.strftime("%B %Y")},
             )
             self.initial.setdefault("period", period)
+
+        # Preencher valores iniciais para campos personalizados ao editar
+        if self.instance.pk:
+            if self.instance.category:
+                self.initial.setdefault("category", self.instance.category.name)
+            tags = self.instance.tags.values_list("name", flat=True)
+            self.initial.setdefault("tags_input", ", ".join(tags))
 
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]
@@ -126,7 +130,7 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
 
-        # Processar o período (converter string em DatePeriod)
+        # Processar o período
         period_str = self.data.get("period")
         if period_str:
             try:
@@ -136,39 +140,26 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                     month=dt.month,
                     defaults={"label": dt.strftime("%B %Y")},
                 )
-                cleaned["period"] = period  # 👈 importante: substitui a string por um objeto
+                cleaned["period"] = period
             except ValueError:
                 raise ValidationError("Invalid period format (expected YYYY-MM).")
 
         return cleaned
 
-
-
-
-
     def save(self, commit: bool = True) -> Transaction:
-        print("💾 TransactionForm.save() called")
         instance = super().save(commit=False)
-
         instance.user = self.user
         instance.category = self.cleaned_data.get("category", instance.category)
 
         if commit:
-            print("🔐 A gravar no DB...")
             instance.save()
-            print("✅ Gravado:", instance)
 
-        try:
-            tags_raw = self.cleaned_data.get("tags_input", "")
-            tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
-            tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
-            instance.tags.set(tags)
-        except Exception as e:
-            print("⚠️ Erro ao atribuir tags:", e)
+        tags_raw = self.cleaned_data.get("tags_input", "")
+        tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
+        instance.tags.set(tags)
 
         return instance
-
-
 
 
 
@@ -202,12 +193,27 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         return name
 
     def save(self, commit: bool = True) -> Category:
-        instance = super().save(commit=False)
-        instance.user = self.user
-        if commit:
-            instance.save()
-        return instance
+        new_name = self.cleaned_data["name"].strip()
+        self.cleaned_data["name"] = new_name
+        self.instance.name = new_name
+        self.instance.user = self.user
 
+        # Verificar se existe outra categoria com o mesmo nome
+        existing = Category.objects.filter(
+            user=self.user,
+            name__iexact=new_name
+        ).exclude(pk=self.instance.pk).first()
+
+        if existing:
+            # Fundir: mover transações para a categoria existente
+            Transaction.objects.filter(category=self.instance).update(category=existing)
+            if self.instance.pk:
+                self.instance.delete()
+            return existing
+
+        if commit:
+            self.instance.save()
+        return self.instance
 
 
 
