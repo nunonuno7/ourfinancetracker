@@ -1,33 +1,56 @@
-$(document).ready(function () {
+$(document).ready(function() {
+  // Popular dropdown categoria via AJAX
+  $.ajax({
+    url: '/categories/autocomplete/',
+    success: function(data) {
+      data.forEach(cat => {
+        $('#filter-category').append(new Option(cat.name, cat.id));
+      });
+    }
+  });
+
+  // Popular dropdown períodos via AJAX
+  $.ajax({
+    url: '/periods/autocomplete/',
+    success: function(data) {
+      data.forEach(p => {
+        $('#filter-period').append(new Option(p.display_name, p.value));
+      });
+    }
+  });
+
+  // Inicializar DataTable
   const table = $('#transaction-table').DataTable({
     serverSide: true,
-    ajax: '/transactions/json/', // URL da tua view que retorna JSON
+    ajax: {
+      url: '/transactions/json/',
+      data: function(d) {
+        d.type = $('#filter-type').val();
+        d.account = $('#filter-account').val();
+        d.category = $('#filter-category').val();
+        d.period = $('#filter-period').val();
+      }
+    },
     pageLength: 10,
     order: [[1, 'desc']],
     columns: [
       { data: 'period' },
       { data: 'date' },
       { data: 'type' },
-      {
-        data: 'amount',
-        render: function (data, type, row) {
-          return data + (row.currency ? ' ' + row.currency : '');
-        }
-      },
+      { data: 'amount', render: (data, type, row) => data + (row.currency ? ' ' + row.currency : '') },
       { data: 'category' },
-      {
+      { 
         data: 'tags',
-        render: function (data) {
+        render: function(data) {
           if (!data || data.length === 0) return '–';
-          return data.map(tag => `<span class="badge bg-secondary">${tag}</span>`).join(' ');
+          return data.map(t => `<span class="badge bg-secondary">${t}</span>`).join(' ');
         }
       },
       { data: 'account' },
-      {
+      { 
         data: 'id',
         orderable: false,
-        searchable: false,
-        render: function (data, type, row) {
+        render: function(data, type, row) {
           return `
             <div class="d-flex gap-2 justify-content-center">
               <a href="/transactions/${data}/edit/" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
@@ -38,22 +61,16 @@ $(document).ready(function () {
             </div>`;
         }
       }
-    ],
-    // Opcional: traduzir ou customizar labels
-    language: {
-      search: "Search:",
-      lengthMenu: "Show _MENU_ entries",
-      info: "Showing _START_ to _END_ of _TOTAL_ transactions",
-      paginate: {
-        next: "Next",
-        previous: "Previous"
-      },
-      zeroRecords: "No matching transactions found",
-    }
+    ]
   });
 
-  // Confirmação antes de apagar (delegada para elementos dinâmicos)
-  $(document).on('submit', 'form.delete-form', function (e) {
+  // Atualizar tabela quando filtros mudam
+  $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function() {
+    table.ajax.reload();
+  });
+
+  // Confirmação antes de apagar
+  $(document).on('submit', 'form.delete-form', function(e) {
     const name = $(this).data('name') || 'this transaction';
     if (!confirm(`⚠ Confirm delete ${name}?`)) {
       e.preventDefault();

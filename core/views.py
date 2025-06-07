@@ -164,59 +164,104 @@ from django.views.decorators.http import require_GET
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 
+from django.db.models import Q
+from django.http import JsonResponse
+
 @login_required
 @require_GET
-def transactions_json(request):
-    user = request.user
 
-    # Parâmetros enviados pelo DataTables
-    draw = int(request.GET.get('draw', 1))
-    start = int(request.GET.get('start', 0))
-    length = int(request.GET.get('length', 10))
+def transactions_json(request):
+    columns = [
+        'period',
+        'date',
+        'type',
+        'amount',
+        'category__name',
+        'tags__name',
+        'account__name',
+        'id'
+    ]
+
+    draw = int(request.GET.get('draw', '1'))
+    start = int(request.GET.get('start', '0'))
+    length = int(request.GET.get('length', '10'))
     search_value = request.GET.get('search[value]', '').strip()
 
-    # Query base (filtrar só do utilizador logado)
-    qs = Transaction.objects.filter(user=user)
+    # Filtros customizados
+    filter_type = request.GET.get('type', '').strip()
+    filter_account = request.GET.get('account', '').strip()
+    filter_category = request.GET.get('category', '').strip()
+    filter_period = request.GET.get('period', '').strip()  # formato esperado "YYYY-MM"
 
-    # Filtro de pesquisa simples (exemplo na categoria)
+    order_col_index = int(request.GET.get('order[0][column]', 1))
+    order_dir = request.GET.get('order[0][dir]', 'desc')
+
+    order_field = columns[order_col_index] if order_col_index < len(columns) else 'date'
+    if order_dir == 'desc':
+        order_field = '-' + order_field
+
+    qs = Transaction.objects.all()
+
+    # Aplicar filtros avançados
+    if filter_type:
+        qs = qs.filter(type=filter_type)
+
+    if filter_account:
+        qs = qs.filter(account__name__icontains=filter_account)
+
+    if filter_category:
+        qs = qs.filter(category__name__icontains=filter_category)
+
+    if filter_period:
+        # Filtrar por ano e mês (espera-se formato "YYYY-MM")
+        try:
+            year, month = map(int, filter_period.split('-'))
+            qs = qs.filter(period__year=year, period__month=month)
+        except ValueError:
+            pass  # filtro inválido ignorado
+
+    # Pesquisa textual geral
     if search_value:
         qs = qs.filter(
             Q(category__name__icontains=search_value) |
-            Q(account__name__icontains=search_value) |
-            Q(tags__name__icontains=search_value)
+            Q(type__icontains=search_value) |
+            Q(account__name__icontains=search_value)
         ).distinct()
 
-    records_total = qs.count()
+    total_records = Transaction.objects.count()
+    filtered_records = qs.count()
 
-    # Ordenação (simples - exemplo pela data desc)
-    qs = qs.order_by('-date')
+    # Ordenar
+    if order_field.lstrip('-') == 'period':
+        prefix = '-' if order_field.startswith('-') else ''
+        qs = qs.order_by(f"{prefix}period__year", f"{prefix}period__month")
+    else:
+        qs = qs.order_by(order_field)
 
     # Paginação
-    qs_page = qs[start:start+length]
+    qs = qs[start:start + length]
 
-    # Preparar dados para JSON
     data = []
-    for tx in qs_page:
+    for tx in qs:
+        period_str = f"{tx.period.year}-{tx.period.month:02d}" if tx.period else ""
         data.append({
-            "id": tx.pk,
-            "period": f"{tx.period.year}-{tx.period.month:02d}" if tx.period else "",
+            "period": period_str,
             "date": tx.date.strftime("%Y-%m-%d") if tx.date else "",
-            "type": tx.get_type_display() if hasattr(tx, 'get_type_display') else str(tx.type),
+            "type": tx.get_type_display() if hasattr(tx, 'get_type_display') else tx.type,
             "amount": f"{tx.amount:.2f}" if tx.amount is not None else "",
-            "currency": tx.account.currency.symbol if tx.account and tx.account.currency else "",
             "category": tx.category.name if tx.category else "–",
-            "tags": list(tx.tags.values_list('name', flat=True)),
-            "account": str(tx.account) if tx.account else "",
+            "tags": [tag.name for tag in tx.tags.all()],
+            "account": str(tx.account) if tx.account else "–",
+            "id": tx.pk,
+            "currency": tx.account.currency.symbol if tx.account and tx.account.currency else "",
         })
 
-    response = {
+    return JsonResponse({
         "draw": draw,
-        "recordsTotal": records_total,
-        "recordsFiltered": records_total,
+        "recordsTotal": total_records,
+        "recordsFiltered": filtered_records,
         "data": data,
-    }
-    return JsonResponse(response)
-
+    })
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Transaction
     form_class = TransactionForm
