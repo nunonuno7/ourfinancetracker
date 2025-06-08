@@ -80,9 +80,9 @@ class TransactionForm(forms.ModelForm):
                 "autocomplete": "off"
             }),
             "date": forms.TextInput(attrs={
-        "class": "form-control",
-        "autocomplete": "off"
-    }),
+                "class": "form-control",
+                "autocomplete": "off"
+            }),
             "type": forms.Select(attrs={"class": "form-select"}),
             "account": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
@@ -98,11 +98,12 @@ class TransactionForm(forms.ModelForm):
         self.fields["type"].choices = Transaction.Type.choices
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
 
+        # ⚙️ NOVA transação → definir valores iniciais
         if not self.instance.pk:
             print("➕ Novo formulário")
             today = dt_date.today()
             self.initial.setdefault("date", today)
-            self.initial.setdefault("type", "EX")
+            self.initial.setdefault("type", "EX")  # 💸 Default visual e funcional
 
             period, _ = DatePeriod.objects.get_or_create(
                 year=today.year,
@@ -111,11 +112,16 @@ class TransactionForm(forms.ModelForm):
             )
             self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
             print(f"📅 Data inicial: {today} → Período: {self.initial['period']}")
+
+        # ✏️ EDITAR transação → carregar dados do objeto
         else:
             print(f"✏️ Editar transação #{self.instance.pk}")
             if self.instance.date:
                 self.initial["date"] = self.instance.date
                 print(f"📅 Data carregada: {self.instance.date}")
+            if self.instance.type:
+                self.initial["type"] = self.instance.type
+                print(f"💳 Tipo carregado: {self.instance.type}")
             if self.instance.period:
                 period_str = f"{self.instance.period.year}-{self.instance.period.month:02d}"
                 self.initial["period"] = period_str
@@ -123,10 +129,9 @@ class TransactionForm(forms.ModelForm):
             if self.instance.category:
                 self.initial["category"] = self.instance.category.name
                 print(f"📂 Categoria carregada: {self.instance.category.name}")
-            tags_qs = self.instance.tags.all()
-            tag_names = [t.name for t in tags_qs]
+            tag_names = [t.name for t in self.instance.tags.all()]
             self.initial["tags_input"] = ", ".join(tag_names)
-            print(f"🏷️ Tags carregadas do objeto: {tag_names}")
+            print(f"🏷️ Tags carregadas: {tag_names}")
 
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]
@@ -135,14 +140,21 @@ class TransactionForm(forms.ModelForm):
             raise ValidationError("Amount cannot be zero.")
         return amount
 
-
     def clean(self):
         print("🧽 TransactionForm.clean()")
         cleaned = super().clean()
 
-        # 🧠 Categoria — criar ou alertar
+        tipo = cleaned.get("type")  # EX, IN, IV, TR
+        print(f"🔍 Tipo de transação: {tipo}")
+
+        # 🧠 Categoria
         category_name = cleaned.get("category", "").strip()
-        if category_name:
+
+        if tipo == "TR":
+            print("🔁 Transferência → ignorar categoria e tags")
+            cleaned["category"] = None
+            self.cleaned_data["tags_input"] = ""  # opcionalmente limpar tags
+        elif category_name:
             print(f"📂 Categoria recebida: {category_name}")
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
             if not category:
@@ -150,11 +162,11 @@ class TransactionForm(forms.ModelForm):
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
         else:
-            print("⚠️ Categoria em branco → erro no campo")
+            print("⚠️ Categoria em branco → erro")
             self.add_error("category", "You must provide a category.")
-            cleaned["category"] = None  # Para não crashar o .save()
+            cleaned["category"] = None
 
-        # 🕓 Período
+        # 🗓️ Período
         period_str = self.data.get("period", "").strip()
         if period_str:
             try:
@@ -171,9 +183,6 @@ class TransactionForm(forms.ModelForm):
 
         return cleaned
 
-
-
-    
     def save(self, commit=True) -> Transaction:
         print("💾 TransactionForm.save()")
         instance = super().save(commit=False)
@@ -184,10 +193,9 @@ class TransactionForm(forms.ModelForm):
             instance.save()
             print(f"✅ Transação guardada: #{instance.pk}")
 
-        tags_raw = self.cleaned_data.get("tags_input", "")
-        tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        # 🏷️ Tags: associar ao utilizador
+        tag_names = [t.strip() for t in self.cleaned_data.get("tags_input", "").split(",") if t.strip()]
         print(f"🏷️ Tags recebidas: {tag_names}")
-
         tags = [
             Tag.objects.filter(user=self.user, name=name).first() or
             Tag.objects.create(user=self.user, name=name)
@@ -197,7 +205,6 @@ class TransactionForm(forms.ModelForm):
         print(f"🔗 Tags associadas: {[t.name for t in tags]}")
 
         return instance
-
 
 
 
