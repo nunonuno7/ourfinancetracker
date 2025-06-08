@@ -5,68 +5,63 @@ document.addEventListener("DOMContentLoaded", () => {
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
 
-  if (dateInput && monthSelector && periodInput) {
-    const initialDate = new Date(dateInput.value || new Date());
-    const initYear = initialDate.getFullYear();
-    const initMonth = String(initialDate.getMonth() + 1).padStart(2, "0");
-    monthSelector.value = `${initYear}-${initMonth}`;
-    periodInput.value = `${initYear}-${initMonth}`;
+  let fp; // flatpickr instance
 
-    function updatePeriodField() {
-      const [year, month] = monthSelector.value.split("-");
-      periodInput.value = `${year}-${month}`;
-    }
+  // ─── Inicializa o flatpickr ───
+  if (dateInput) {
+    const defaultDate = dateInput.value || new Date().toISOString().split("T")[0];
 
-    dateInput.addEventListener("change", () => {
-      const d = new Date(dateInput.value);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      monthSelector.value = `${y}-${m}`;
-      updatePeriodField();
-    });
-
-    monthSelector.addEventListener("change", () => {
-      const [year, month] = monthSelector.value.split("-");
-      updatePeriodField();
-
-      const selectedMonth = parseInt(month);
-      const selectedYear = parseInt(year);
-
-      const currentDate = new Date(dateInput.value);
-      if (
-        currentDate.getFullYear() !== selectedYear ||
-        currentDate.getMonth() + 1 !== selectedMonth
-      ) {
-        dateInput.value = `${year}-${month}-01`;
+    fp = flatpickr(dateInput, {
+      altInput: true,
+      altFormat: "d/m/Y",
+      dateFormat: "Y-m-d",
+      defaultDate,
+      locale: "en",
+      allowInput: true,
+      onChange: ([selected]) => {
+        if (selected) {
+          const y = selected.getFullYear();
+          const m = String(selected.getMonth() + 1).padStart(2, "0");
+          const period = `${y}-${m}`;
+          if (monthSelector) monthSelector.value = period;
+          if (periodInput) periodInput.value = period;
+        }
       }
     });
-
-    function shiftMonth(delta) {
-      let [year, month] = monthSelector.value.split("-").map(Number);
-      month += delta;
-
-      if (month > 12) {
-        month = 1;
-        year += 1;
-      } else if (month < 1) {
-        month = 12;
-        year -= 1;
-      }
-
-      const newVal = `${year}-${String(month).padStart(2, "0")}`;
-      monthSelector.value = newVal;
-      monthSelector.dispatchEvent(new Event("change"));
-    }
-
-    prevBtn?.addEventListener("click", () => shiftMonth(-1));
-    nextBtn?.addEventListener("click", () => shiftMonth(1));
   }
 
-  // ───── Tom Select para categoria (uma) ─────
+  // ─── Quando muda o período, atualizar a data para dia 1 ───
+  if (monthSelector && periodInput && fp) {
+    monthSelector.addEventListener("change", () => {
+      const [year, month] = monthSelector.value.split("-");
+      const dateStr = `${year}-${month}-01`;
+      fp.setDate(dateStr, true); // atualiza a data e o campo hidden
+      periodInput.value = `${year}-${month}`;
+    });
+  }
+
+  // ─── Botões ‹ e › para navegar mês ───
+  function shiftMonth(delta) {
+    if (!monthSelector || !fp) return;
+    let [year, month] = monthSelector.value.split("-").map(Number);
+    month += delta;
+    if (month > 12) { month = 1; year++; }
+    if (month < 1) { month = 12; year--; }
+    const newMonth = String(month).padStart(2, "0");
+    const newPeriod = `${year}-${newMonth}`;
+    monthSelector.value = newPeriod;
+    const newDate = `${year}-${newMonth}-01`;
+    fp.setDate(newDate, true);
+    periodInput.value = newPeriod;
+  }
+
+  prevBtn?.addEventListener("click", () => shiftMonth(-1));
+  nextBtn?.addEventListener("click", () => shiftMonth(1));
+
+  // ─── Tom Select para categoria ───
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
     const currentValue = categoryInput.value.trim();
-
     const select = new TomSelect(categoryInput, {
       create: true,
       maxItems: 1,
@@ -74,11 +69,11 @@ document.addEventListener("DOMContentLoaded", () => {
       labelField: "name",
       searchField: "name",
       preload: true,
-      load: function (query, callback) {
+      load: (query, callback) => {
         if (!query.length) return callback();
         fetch(`/categories/autocomplete/?q=${encodeURIComponent(query)}`)
-          .then((res) => res.json())
-          .then((data) => callback(data))
+          .then(res => res.json())
+          .then(data => callback(data))
           .catch(() => callback());
       },
     });
@@ -89,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ───── Tom Select para tags (múltiplas) ─────
+  // ─── Tom Select para tags ───
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
     new TomSelect(tagsInput, {
@@ -101,24 +96,24 @@ document.addEventListener("DOMContentLoaded", () => {
       valueField: "name",
       labelField: "name",
       searchField: "name",
-      load: function (query, callback) {
+      load: (query, callback) => {
         if (!query.length) return callback();
         fetch(`/tags/autocomplete/?q=${encodeURIComponent(query)}`)
-          .then((res) => res.json())
-          .then((data) => callback(data))
+          .then(res => res.json())
+          .then(data => callback(data))
           .catch(() => callback());
       },
     });
   }
 
-  // ───── Formatação dinâmica do campo "amount" ─────
+  // ─── Formatador para o campo "amount" ───
   const amountInput = document.getElementById("id_amount");
-
   if (amountInput) {
     const formatNumber = (value) => {
+      if (value.endsWith(",") || value.endsWith(".")) return value;
       const clean = value.replace(/[^\d,.-]/g, "").replace(",", ".");
       const num = parseFloat(clean);
-      if (isNaN(num)) return value;  // ⚠️ Mantém o valor original se for inválido
+      if (isNaN(num)) return value;
       return num.toLocaleString("pt-PT", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,

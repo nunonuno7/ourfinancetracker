@@ -102,35 +102,6 @@ from psycopg2.extras import execute_values
 
 from django.utils.timezone import now
 
-from django.http import JsonResponse
-from django.core.paginator import Paginator
-from django.views.decorators.http import require_GET
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-
-from django.db.models import Q
-from django.http import JsonResponse
-import hashlib
-
-from django.views.decorators.cache import cache_page
-from django.utils.cache import patch_vary_headers
-from django.core.cache import cache
-from django.db.models import Q
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_GET
-from .models import Transaction
-
-from urllib.parse import urlencode
-
-from django.views.generic import CreateView
-from django.urls import reverse_lazy
-from django.shortcuts import redirect
-from django.http import JsonResponse
-from django.contrib.auth.mixins import LoginRequiredMixin
-from .forms import TransactionForm
-from .models import Transaction, Account
-
 ################################################################################
 #                               Menu config API                                #
 ################################################################################
@@ -195,19 +166,12 @@ class TransactionListView(LoginRequiredMixin, ListView):
         )
 
 
-class UserInFormKwargsMixin:
-    """Injects current user into form via kwargs."""
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
-
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     """
     View para criar uma nova transação.
 
-    Usa o TransactionForm e envia o user via kwargs.
-    Compatível com HTMX ou submissão normal.
+    Compatível tanto com o formulário padrão (transaction_form.html),
+    como com o formulário inline na listagem (transaction_list.html).
     """
     model = Transaction
     form_class = TransactionForm
@@ -216,27 +180,47 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 
     def form_valid(self, form):
         self.object = form.save()
-        # 🧪 Suporte opcional a HTMX
         if self.request.headers.get("HX-Request") == "true":
+            # Submissão via HTMX (opcional)
             return JsonResponse({"success": True})
         return redirect(self.get_success_url())
 
     def form_invalid(self, form):
         if self.request.headers.get("HX-Request") == "true":
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
-        print("🚫 Formulário inválido:", form.errors)
+        print("🚫 Form inválido:", form.errors)
         return super().form_invalid(form)
 
     def get_context_data(self, **kwargs):
         """
-        Adiciona as contas do utilizador ao contexto.
-        Útil se quiseres usar no template.
+        Adiciona contas do utilizador ao contexto se necessário
+        (ex: para seleção no formulário ou rendering custom).
         """
         context = super().get_context_data(**kwargs)
         context["accounts"] = Account.objects.filter(user=self.request.user).order_by("name")
         return context
 
 
+from django.http import JsonResponse
+from django.core.paginator import Paginator
+from django.views.decorators.http import require_GET
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+
+from django.db.models import Q
+from django.http import JsonResponse
+import hashlib
+
+from django.views.decorators.cache import cache_page
+from django.utils.cache import patch_vary_headers
+from django.core.cache import cache
+from django.db.models import Q
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+from .models import Transaction
+
+from urllib.parse import urlencode
 
 @require_GET
 @login_required
@@ -262,77 +246,95 @@ def period_autocomplete(request):
 
 
  
-
-def parse_safe_date(value, fallback):
-    """Tenta converter uma string para date com múltiplos formatos."""
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(value, fmt).date()
-        except (ValueError, TypeError):
-            continue
-    return fallback
-
-TX_LAST = {}  # user_id: {"start": ..., "end": ..., "df": DataFrame}
-
-@login_required
 @require_GET
+@login_required
 def transactions_json(request):
-    # ⛔ Silencia logs gigantes
     logging.getLogger("django.server").setLevel(logging.WARNING)
+    print("\n🚨 ENTROU na transactions_json (debug mode)")
+
     user_id = request.user.id
 
-    # 🗓️ Datas iniciais
-    raw_start = request.GET.get("date_start")
-    raw_end = request.GET.get("date_end")
-    start_date = parse_safe_date(raw_start, date(2023, 1, 1))
-    end_date = parse_safe_date(raw_end, date.today())
+    # ⚠️ Corrigir nomes dos parâmetros de data
+    raw_start = request.GET.get("date_start") or "2023-01-01"
+    raw_end = request.GET.get("date_end") or date.today().isoformat()
+    start_date = parse_date(raw_start)
+    end_date = parse_date(raw_end)
 
     if not start_date or not end_date:
+        print(f"❌ Datas inválidas recebidas: date_start='{raw_start}', date_end='{raw_end}'")
         return JsonResponse({"error": "Invalid date format"}, status=400)
 
-    print(f"📅 Intervalo: {start_date} → {end_date}")
+    print(f"📅 Intervalo recebido: {start_date} → {end_date}")
 
-    # 📥 Apenas faz a query SQL se o intervalo mudou
-    cache = TX_LAST.get(user_id)
-    if not cache or cache["start"] != start_date or cache["end"] != end_date:
-        print("📥 SQL QUERY nova")
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                       COALESCE(cat.name, '') AS category,
-                       COALESCE(acc.name, '') AS account,
-                       COALESCE(curr.symbol, '') AS currency,
-                       STRING_AGG(tag.name, ', ') AS tags
-                FROM core_transaction tx
-                LEFT JOIN core_category cat ON tx.category_id = cat.id
-                LEFT JOIN core_account acc ON tx.account_id = acc.id
-                LEFT JOIN core_currency curr ON acc.currency_id = curr.id
-                LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
-                LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
-                LEFT JOIN core_tag tag ON tt.tag_id = tag.id
-                WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
-                GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                         cat.name, acc.name, curr.symbol
-            """, [user_id, start_date, end_date])
-            rows = cursor.fetchall()
-
-        df = pd.DataFrame(rows, columns=[
-            "id", "date", "year", "month", "type", "amount",
-            "category", "account", "currency", "tags"
-        ])
-        TX_LAST[user_id] = {"df": df, "start": start_date, "end": end_date}
-    else:
-        print("✅ A usar o DataFrame anterior em memória")
-        df = TX_LAST[user_id]["df"]
-
-    # 🔍 Filtros adicionais
-    df = df.copy()
+    # Outros filtros
     type_ = request.GET.get("type", "").strip()
     category = request.GET.get("category", "").strip()
     account = request.GET.get("account", "").strip()
     period = request.GET.get("period", "").strip()
     search = request.GET.get("search[value]", "").strip()
+    draw = int(request.GET.get("draw", "1"))
+    offset = int(request.GET.get("start", "0"))
+    length = int(request.GET.get("length", "10"))
 
+    print(f"🔍 Filtros: type={type_}, category={category}, account={account}, period={period}, search='{search}'")
+
+    # Query SQL com JOINs
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                tx.id,
+                tx.date,
+                dp.year,
+                dp.month,
+                tx.type,
+                tx.amount,
+                COALESCE(cat.name, '') AS category,
+                COALESCE(acc.name, '') AS account,
+                COALESCE(curr.symbol, '') AS currency,
+                STRING_AGG(tag.name, ', ') AS tags
+            FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_currency curr ON acc.currency_id = curr.id
+            LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
+            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
+            WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
+            GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount, cat.name, acc.name, curr.symbol
+        """, [user_id, start_date, end_date])
+        rows = cursor.fetchall()
+
+    print(f"📦 SQL → {len(rows)} linhas retornadas")
+
+    if not rows:
+        return JsonResponse({"draw": draw, "recordsTotal": 0, "recordsFiltered": 0, "data": []})
+
+    columns_raw = ["id", "date", "year", "month", "type", "amount", "category", "account", "currency", "tags"]
+    df = pd.DataFrame(rows, columns=columns_raw)
+    # 🧩 Mapear as colunas esperadas pela DataTable
+    columns = ["period", "date", "type", "amount", "category", "tags", "account", "actions"]
+
+    # 🔽 Ordenação enviada pelo DataTables
+    order_col_index = int(request.GET.get("order[0][column]", 1))
+    order_dir = request.GET.get("order[0][dir]", "desc")
+
+    if 0 <= order_col_index < len(columns):
+        order_field = columns[order_col_index]
+        ascending = (order_dir == "asc")
+
+        if order_field in df.columns:
+            df = df.sort_values(by=order_field, ascending=ascending)
+            print(f"🔃 Ordenado por: {order_field} ({'ASC' if ascending else 'DESC'})")
+        else:
+            print(f"⚠️ Campo '{order_field}' não está no DataFrame: {df.columns.tolist()}")
+    else:
+        print(f"⚠️ Índice inválido de ordenação: {order_col_index}")
+
+
+    print(f"🧪 DataFrame inicial: {df.shape[0]} linhas")
+    
+
+    # Filtros adicionais
     if type_:
         df = df[df["type"] == type_]
     if category:
@@ -344,7 +346,7 @@ def transactions_json(request):
             y, m = map(int, period.split("-"))
             df = df[(df["year"] == y) & (df["month"] == m)]
         except:
-            pass
+            print("⚠️ Período inválido ignorado")
     if search:
         df = df[
             df["category"].str.contains(search, case=False, na=False) |
@@ -353,39 +355,43 @@ def transactions_json(request):
             df["tags"].str.contains(search, case=False, na=False)
         ]
 
-    # 🧾 Formatação
+    print(f"✅ Após filtros: {df.shape[0]} linhas restantes")
+
+    if df.empty:
+        return JsonResponse({"draw": draw, "recordsTotal": 0, "recordsFiltered": 0, "data": []})
+
+    # Formatadores para DataTables
     df["date"] = df["date"].astype(str)
-    df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
+    df["period"] = df.apply(lambda r: f"{r['year']}-{int(r['month']):02}" if pd.notnull(r['year']) else "", axis=1)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
     df["amount"] = df.apply(lambda r: f"{r['amount']:.2f} {r['currency']}".strip(), axis=1)
-
     def format_tags(raw):
         if not raw:
             return "–"
-        tags = [t.strip() for t in raw.split(",") if t.strip()]
-        return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags)
+        tags = [tag.strip() for tag in raw.split(',') if tag.strip()]
+        return " ".join([f"<span class='badge bg-secondary'>{t}</span>" for t in tags]) if tags else "–"
 
     df["tags"] = df["tags"].apply(format_tags)
-
+    
+    
+    # Ações (botões)
     csrf = request.COOKIES.get("csrftoken", "")
     df["actions"] = df.apply(lambda r: f"""
         <div class='d-flex gap-2 justify-content-center'>
-          <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary'>✏️</a>
-          <form method='post' action='/transactions/{r["id"]}/delete/' class='delete-form d-inline' data-name='transaction on {r["date"]}'>
+          <a href='/transactions/{r['id']}/edit/' class='btn btn-sm btn-outline-primary'>✏️</a>
+          <form method='post' action='/transactions/{r['id']}/delete/' class='delete-form d-inline' data-name='transaction on {r['date']}'>
             <input type='hidden' name='csrfmiddlewaretoken' value='{csrf}'>
             <button type='submit' class='btn btn-sm btn-outline-danger'>🗑</button>
           </form>
         </div>
     """, axis=1)
 
-    # 📄 Paginação
-    draw = int(request.GET.get("draw", "1"))
-    start = int(request.GET.get("start", "0"))
-    length = int(request.GET.get("length", "10"))
+    # Paginação final
     total = len(df)
-
-    df_page = df.iloc[start:start + length]
+    df_page = df.iloc[offset:offset + length]
     data = df_page[["period", "date", "type", "amount", "category", "tags", "account", "actions"]].to_dict(orient="records")
+
+    print(f"📤 Enviando {len(data)} linhas para o DataTables\n")
 
     return JsonResponse({
         "draw": draw,
@@ -393,6 +399,9 @@ def transactions_json(request):
         "recordsFiltered": total,
         "data": data
     })
+
+
+
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Transaction
     form_class = TransactionForm

@@ -52,7 +52,9 @@ class UserAwareMixin:
         self.user: User | None = user
 
 
-class TransactionForm(UserAwareMixin, forms.ModelForm):
+
+
+class TransactionForm(forms.ModelForm):
     category = forms.CharField(
         label="Category",
         required=False,
@@ -86,22 +88,39 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
             "is_cleared",
         ]
         widgets = {
-            "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "type": forms.Select(attrs={"class": "form-control"}),
-            "account": forms.Select(attrs={"class": "form-control"}),
+            "amount": forms.TextInput(attrs={
+                "class": "form-control text-end",
+                "inputmode": "decimal",
+                "autocomplete": "off"
+            }),
+            "date": forms.DateInput(attrs={
+                "class": "form-control",
+                "type": "date",
+                "lang": "en-GB"
+            }),
+            "type": forms.Select(attrs={"class": "form-select"}),
+            "account": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, user=None, **kwargs):
-        super().__init__(*args, user=user, **kwargs)
+        super().__init__(*args, **kwargs)
         self.user = user
 
-        # Limita a dropdown de contas às contas do utilizador
+        # ✅ Força lista de choices e remove opção vazia
+        self.fields["type"].choices = Transaction.Type.choices
+
+        # ✅ Corrige o default vindo do modelo (income → expense)
+        if not self.instance.pk:
+            self.instance.type = "expense"
+            self.initial.setdefault("type", "expense")
+            print("🧪 Forçado default TYPE = 'expense'")
+
+        # Limita contas ao utilizador
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
 
-        # Inicializa campos se for criação
+        # Inicializa valores padrão se for criação
         if not self.instance.pk:
             today = dt_date.today()
             self.initial.setdefault("date", today)
@@ -112,7 +131,7 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
             )
             self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
 
-        # Inicializa campos personalizados se for edição
+        # Preenche campos extra se for edição
         if self.instance.pk:
             if self.instance.category:
                 self.initial.setdefault("category", self.instance.category.name)
@@ -128,7 +147,7 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
 
-        # Processar categoria (criar se necessário)
+        # Processar categoria
         category_name = cleaned.get("category")
         if category_name:
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
@@ -136,7 +155,7 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
 
-        # Processar período escondido vindo do seletor
+        # Processar período (ex: 2025-06)
         period_str = self.data.get("period")
         if period_str:
             try:
@@ -160,15 +179,13 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
         if commit:
             instance.save()
 
-        # Guardar as tags
+        # Processar tags
         tags_raw = self.cleaned_data.get("tags_input", "")
         tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
         tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
         instance.tags.set(tags)
 
         return instance
-
-
 
 class CategoryForm(UserAwareMixin, forms.ModelForm):
     class Meta:

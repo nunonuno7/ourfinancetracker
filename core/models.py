@@ -208,8 +208,8 @@ class Transaction(models.Model):
     """Money movement. Expenses can be estimated if not recorded."""
 
     class Type(models.TextChoices):
-        INCOME = "IN", "Income"
         EXPENSE = "EX", "Expense"
+        INCOME = "IN", "Income"
         INVESTMENT = "IV", "Investment"
 
     user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")  # type: ignore[valid-type]

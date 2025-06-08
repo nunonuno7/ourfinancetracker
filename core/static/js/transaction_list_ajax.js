@@ -1,5 +1,27 @@
 $(document).ready(function () {
-  // 1. Popular dropdown categoria via AJAX
+  // 🛠️ 0. Preencher "end-date" com hoje se estiver vazio
+  const endInput = document.getElementById("end-date");
+  if (endInput && !endInput.value) {
+    const today = new Date().toISOString().split("T")[0];
+    endInput.value = today;
+  }
+
+  // 🗓️ 1. Inicializar flatpickr com formato DD/MM/YYYY e calendário em inglês
+  flatpickr("#start-date", {
+    altInput: true,         // mostra data formatada
+    altFormat: "d/m/Y",     // o que o utilizador vê
+    dateFormat: "Y-m-d",    // o que é enviado para o backend
+    locale: "default"       // usa idioma do navegador (inglês se estiver en)
+  });
+
+  flatpickr("#end-date", {
+    altInput: true,
+    altFormat: "d/m/Y",
+    dateFormat: "Y-m-d",
+    locale: "default"
+  });
+
+  // 🔄 2. Popular dropdown de categorias via AJAX
   $.ajax({
     url: '/categories/autocomplete/',
     success: function (data) {
@@ -9,7 +31,7 @@ $(document).ready(function () {
     }
   });
 
-  // 2. Popular dropdown períodos via AJAX
+  // 🔄 3. Popular dropdown de períodos via AJAX
   $.ajax({
     url: '/periods/autocomplete/',
     success: function (data) {
@@ -19,7 +41,7 @@ $(document).ready(function () {
     }
   });
 
-  // 3. Inicializar DataTable com filtros enviados ao backend
+  // 📊 4. Inicializar DataTable com AJAX + filtros
   const table = $('#transaction-table').DataTable({
     serverSide: true,
     processing: true,
@@ -45,7 +67,7 @@ $(document).ready(function () {
       { data: 'category', defaultContent: '–' },
       {
         data: 'tags',
-        render: function (data, type, row) {
+        render: function (data) {
           return typeof data === 'string' ? data : '–';
         }
       },
@@ -54,12 +76,12 @@ $(document).ready(function () {
     ]
   });
 
-  // 4. Recarregar tabela quando filtros mudam
+  // 🔁 5. Recarregar tabela quando filtros mudam
   $('#filter-type, #filter-account, #filter-category, #filter-period, #start-date, #end-date').on('change', function () {
     table.ajax.reload();
   });
 
-  // 5. Substituir submit por fetch com confirmação e recarregamento automático
+  // 🗑️ 6. Confirmação ao apagar transação
   $(document).on('submit', 'form.delete-form', function (e) {
     e.preventDefault();
     const form = this;
@@ -76,7 +98,7 @@ $(document).ready(function () {
     })
     .then(response => {
       if (response.ok) {
-        table.ajax.reload(null, false);
+        table.ajax.reload(null, false);  // 🔄 mantém página atual
       } else {
         alert('❌ Erro ao eliminar.');
       }
