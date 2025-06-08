@@ -77,7 +77,7 @@ $(document).ready(function () {
   });
 
   // 🔁 5. Recarregar tabela quando filtros mudam
-  $('#filter-type, #filter-account, #filter-category, #filter-period, #start-date, #end-date').on('change', function () {
+  $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
     table.ajax.reload();
   });
 
@@ -104,5 +104,17 @@ $(document).ready(function () {
       }
     })
     .catch(() => alert('❌ Erro ao contactar o servidor.'));
+  });
+
+  // Função para limpar os filtros
+  $('#clear-filters').on('click', function() {
+    // Limpar todos os filtros, exceto os de data (start-date e end-date)
+    $('#filter-type').val('');
+    $('#filter-account').val('');
+    $('#filter-category').val('');
+    $('#filter-period').val('');
+
+    // Atualizar a tabela após limpar os filtros
+    table.ajax.reload();
   });
 });

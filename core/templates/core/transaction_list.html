@@ -19,11 +19,11 @@
   <div class="row g-3 mb-3">
     <div class="col-md-3">
       <label for="start-date" class="form-label">Start Date</label>
-      <input type="text" id="start-date" class="form-control" value="2025-01-01">
+      <input type="text" id="start-date" name="start-date" class="form-control" value="2025-01-01">
     </div>
     <div class="col-md-3">
       <label for="end-date" class="form-label">End Date</label>
-      <input type="text" id="end-date" class="form-control" value="{{ today }}">
+      <input type="text" id="end-date" name="end-date" class="form-control" value="{{ today }}">
     </div>
   </div>
 
@@ -31,17 +31,18 @@
   <div class="row g-3 mb-3">
     <div class="col-md-3">
       <label for="filter-type" class="form-label">Type</label>
-      <select id="filter-type" class="form-select">
+      <select id="filter-type" name="filter-type" class="form-select">
         <option value="">All Types</option>
-        <option value="IN">Income</option>
         <option value="EX">Expense</option>
+        <option value="IN">Income</option>
         <option value="IV">Investment</option>
+        <option value="TR">Transfer</option>
       </select>
     </div>
 
     <div class="col-md-3">
       <label for="filter-account" class="form-label">Account</label>
-      <select id="filter-account" class="form-select">
+      <select id="filter-account" name="filter-account" class="form-select">
         <option value="">All Accounts</option>
         {% for acc in request.user.accounts.all %}
           <option value="{{ acc.name }}">{{ acc.name }}</option>
@@ -51,17 +52,24 @@
 
     <div class="col-md-3">
       <label for="filter-category" class="form-label">Category</label>
-      <select id="filter-category" class="form-select">
+      <select id="filter-category" name="filter-category" class="form-select">
         <option value="">All Categories</option>
       </select>
     </div>
 
     <div class="col-md-3">
       <label for="filter-period" class="form-label">Period</label>
-      <select id="filter-period" class="form-select">
+      <select id="filter-period" name="filter-period" class="form-select">
         <option value="">All Periods</option>
       </select>
     </div>
+  </div>
+
+  <!-- Botão de limpar filtros -->
+  <div class="d-flex align-items-center mb-3">
+    <button id="clear-filters" class="btn btn-outline-danger">
+      <i class="fas fa-times-circle"></i> Clear Filters
+    </button>
   </div>
 
   <!-- Tabela -->
@@ -97,14 +105,17 @@
 
 <!-- DataTables -->
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
-<!-- Flatpickr (sem locale extra para usar inglês por defeito) -->
+<!-- Flatpickr -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <!-- Scripts do projeto -->
 <script src="{% static 'js/transaction_list_ajax.js' %}"></script>
 <script src="{% static 'js/main.js' %}"></script>
+
 {% endblock %}
