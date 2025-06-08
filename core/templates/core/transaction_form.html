@@ -30,8 +30,8 @@
         <!-- DATE (usando flatpickr) -->
         <div class="mb-3">
           <label for="id_date" class="form-label">Date</label>
-          <input type="text" name="date" id="id_date" class="form-control"
-                 value="{{ form.initial.date|default:'' }}">
+<input type="text" name="date" id="id_date" class="form-control"
+       value="{{ form.initial.date|date:'Y-m-d' }}">
         </div>
 
         <!-- PERIOD -->

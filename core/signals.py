@@ -8,6 +8,7 @@ from django.db.models.signals import post_save, post_delete
 from .models import Transaction, Account, AccountType, Currency, UserSettings
 
 from .models import Transaction, Account, AccountType, Currency
+from core.cache import TX_LAST
 
 User = get_user_model()
 
@@ -43,15 +44,8 @@ def create_default_account(sender, instance, created, **kwargs):
 # ───────────── Transações: Limpeza do cache JSON ─────────────
 @receiver([post_save, post_delete], sender=Transaction)
 def clear_transaction_cache(sender, instance, **kwargs):
+    """Limpa o cache de transações do utilizador quando são alteradas."""
     user_id = instance.user_id
-    key_list_name = f"transactions_json_keys_user_{user_id}"
-
-    # 🔎 Obtém a lista de chaves de cache associadas ao utilizador
-    keys = cache.get(key_list_name, [])
-
-    for key in keys:
-        cache.delete(key)
-        print(f"🧹 Cache limpa: {key}")
-
-    # 🧼 Limpa também o registo da lista de chaves
-    cache.delete(key_list_name)
+    if user_id in TX_LAST:
+        print(f"🧹 Cache limpa para user_id={user_id}")
+        del TX_LAST[user_id]

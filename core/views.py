@@ -130,6 +130,7 @@ from django.http import JsonResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from .forms import TransactionForm
 from .models import Transaction, Account
+from core.cache import TX_LAST
 
 ################################################################################
 #                               Menu config API                                #
@@ -272,7 +273,7 @@ def parse_safe_date(value, fallback):
             continue
     return fallback
 
-TX_LAST = {}  # user_id: {"start": ..., "end": ..., "df": DataFrame}
+#TX_LAST = {}  # user_id: {"start": ..., "end": ..., "df": DataFrame}
 
 @login_required
 @require_GET
@@ -284,7 +285,7 @@ def transactions_json(request):
     # 🗓️ Datas iniciais
     raw_start = request.GET.get("date_start")
     raw_end = request.GET.get("date_end")
-    start_date = parse_safe_date(raw_start, date(2023, 1, 1))
+    start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
     end_date = parse_safe_date(raw_end, date.today())
 
     if not start_date or not end_date:
