@@ -15,7 +15,10 @@
         {% endif %}
       </h2>
 
-      <form method="post" id="transaction-form" novalidate>
+      <form method="post" id="transaction-form" novalidate
+            hx-post="{% url 'transaction_create' %}"
+            hx-target="#transaction-form"
+            hx-swap="outerHTML">
         {% csrf_token %}
         {% if form.non_field_errors %}
           <div class="alert alert-danger">{{ form.non_field_errors }}</div>
@@ -25,6 +28,7 @@
         <div class="mb-3">
           {{ form.amount.label_tag }}
           {{ form.amount|add_class:"form-control text-end" }}
+          {% if form.amount.errors %}<div class="text-danger small">{{ form.amount.errors.0 }}</div>{% endif %}
         </div>
 
         <!-- DATE -->
@@ -45,7 +49,7 @@
           {{ form.period }}
         </div>
 
-        <!-- TYPE - Corrigido: Bootstrap gere .active sozinho -->
+        <!-- TYPE -->
         <div class="mb-3">
           <label class="form-label">Transaction Type</label>
           <div class="row row-cols-2 row-cols-md-4 g-1">
@@ -53,11 +57,7 @@
               <div class="col">
                 <input type="radio" class="btn-check" name="{{ form.type.name }}" id="type-{{ value }}"
                        value="{{ value }}"
-                       {% if form.type.value == value %}
-                         checked
-                       {% elif not form.type.value and value == 'EX' %}
-                         checked
-                       {% endif %}>
+                       {% if form.type.value == value %}checked{% elif not form.type.value and value == 'EX' %}checked{% endif %}>
                 <label class="btn btn-sm w-100 py-1 text-center border rounded-2
                               btn-outline-{% if value == 'EX' %}danger{% elif value == 'IN' %}success{% elif value == 'IV' %}warning{% elif value == 'TR' %}secondary{% else %}dark{% endif %}"
                        for="type-{{ value }}"
@@ -74,10 +74,17 @@
           </div>
         </div>
 
-        <!-- CATEGORY -->
+        <!-- CATEGORY (com suporte a TomSelect e autocompletar local) -->
         <div class="mb-3" id="category-field">
           {{ form.category.label_tag }}
-          {{ form.category|add_class:"form-control" }}
+          <input
+            type="text"
+            name="{{ form.category.name }}"
+            id="{{ form.category.id_for_label }}"
+            value="{{ form.category.value|default_if_none:'' }}"
+            class="form-control"
+            data-category-list="{{ category_list|join:', '|escape }}">
+          {% if form.category.errors %}<div class="text-danger small">{{ form.category.errors.0 }}</div>{% endif %}
         </div>
 
         <!-- TAGS -->
@@ -90,6 +97,7 @@
         <div class="mb-3">
           {{ form.account.label_tag }}
           {{ form.account|add_class:"form-select" }}
+          {% if form.account.errors %}<div class="text-danger small">{{ form.account.errors.0 }}</div>{% endif %}
         </div>
 
         <!-- NOTES -->

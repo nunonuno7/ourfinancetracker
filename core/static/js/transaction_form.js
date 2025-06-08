@@ -1,9 +1,14 @@
-document.addEventListener("DOMContentLoaded", () => {
+function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
   const periodInput = document.getElementById("id_period");
   const monthSelector = document.getElementById("period-selector");
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
+
+  // Destrói instância flatpickr anterior (se existir)
+  if (dateInput && dateInput._flatpickr) {
+    dateInput._flatpickr.destroy();
+  }
 
   let fp;
 
@@ -29,12 +34,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (monthSelector && periodInput && fp) {
-    monthSelector.addEventListener("change", () => {
-      const [year, month] = monthSelector.value.split("-");
+    // Remove handlers antigos substituindo elementos
+    monthSelector.replaceWith(monthSelector.cloneNode(true));
+    const newMonthSelector = document.getElementById("period-selector");
+    newMonthSelector.addEventListener("change", () => {
+      const [year, month] = newMonthSelector.value.split("-");
       const dateStr = `${year}-${month}-01`;
       fp.setDate(dateStr, true);
       periodInput.value = `${year}-${month}`;
     });
+
+    prevBtn?.replaceWith(prevBtn.cloneNode(true));
+    document.getElementById("prev-month").addEventListener("click", () => shiftMonth(-1));
+
+    nextBtn?.replaceWith(nextBtn.cloneNode(true));
+    document.getElementById("next-month").addEventListener("click", () => shiftMonth(1));
   }
 
   function shiftMonth(delta) {
@@ -51,37 +65,39 @@ document.addEventListener("DOMContentLoaded", () => {
     periodInput.value = newPeriod;
   }
 
-  prevBtn?.addEventListener("click", () => shiftMonth(-1));
-  nextBtn?.addEventListener("click", () => shiftMonth(1));
-
+  // Tom Select categoria
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
-    const currentValue = categoryInput.value.trim();
-    const select = new TomSelect(categoryInput, {
-      create: true,
-      maxItems: 1,
-      valueField: "name",
-      labelField: "name",
-      searchField: "name",
-      preload: true,
-      load: (query, callback) => {
-        if (!query.length) return callback();
-        fetch(`/categories/autocomplete/?q=${encodeURIComponent(query)}`)
-          .then(res => res.json())
-          .then(data => callback(data))
-          .catch(() => callback());
-      },
-    });
-
-    if (currentValue && !select.options[currentValue]) {
-      select.addOption({ name: currentValue });
-      select.setValue(currentValue);
+    if (categoryInput.tomselect) {
+      categoryInput.tomselect.destroy();
     }
+    const rawList = categoryInput.dataset.categoryList || "";
+    const options = rawList
+      .split(",")
+      .map(name => name.trim())
+      .filter(name => name.length > 0)
+      .map(name => ({ value: name, text: name }));
+
+    new TomSelect(categoryInput, {
+      create: true,
+      persist: false,
+      maxItems: 1,
+      options,
+      items: categoryInput.value ? [categoryInput.value] : [],
+      sortField: { field: "text", direction: "asc" },
+    });
   }
 
+  // Tom Select tags
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
-    const initialTags = tagsInput.value.split(",").map(t => t.trim()).filter(t => t.length > 0);
+    if (tagsInput.tomselect) {
+      tagsInput.tomselect.destroy();
+    }
+    const initialTags = tagsInput.value
+      .split(",")
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
 
     new TomSelect(tagsInput, {
       plugins: ["remove_button"],
@@ -105,6 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Formata o campo amount
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {
@@ -130,5 +147,15 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\./g, "")
         .replace(",", ".");
     });
+  }
+}
+
+// Inicializa na primeira carga da página
+document.addEventListener("DOMContentLoaded", initTransactionForm);
+
+// Inicializa após cada swap do HTMX no formulário
+document.body.addEventListener("htmx:afterSwap", (event) => {
+  if (event.detail.target.id === "transaction-form") {
+    initTransactionForm();
   }
 });

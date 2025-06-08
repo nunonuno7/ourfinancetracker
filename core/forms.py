@@ -95,10 +95,15 @@ class TransactionForm(forms.ModelForm):
         self.user = user
         print(f"🔐 User: {self.user}")
 
+        # ⚙️ Preenche choices e querysets
         self.fields["type"].choices = Transaction.Type.choices
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
 
-        # ⚙️ NOVA transação → definir valores iniciais
+        # 🧠 Sugestões de categorias existentes (para o Tom Select via data attribute)
+        categories = Category.objects.filter(user=self.user).order_by("name").values_list("name", flat=True)
+        self.fields["category"].widget.attrs["data-category-list"] = ",".join(categories)
+
+        # ⚙️ NOVA transação → valores iniciais
         if not self.instance.pk:
             print("➕ Novo formulário")
             today = dt_date.today()
@@ -132,6 +137,9 @@ class TransactionForm(forms.ModelForm):
             tag_names = [t.name for t in self.instance.tags.all()]
             self.initial["tags_input"] = ", ".join(tag_names)
             print(f"🏷️ Tags carregadas: {tag_names}")
+
+
+
 
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]

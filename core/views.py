@@ -53,6 +53,7 @@ from django.core.paginator import Paginator
 from django.core.cache import cache
 from django.db import connection, transaction as db_transaction
 from django.db.models import Q, QuerySet, Sum, F
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 # Django views
 from django.views.generic import (
@@ -72,7 +73,7 @@ from .forms import (
 from core.mixins import UserInFormKwargsMixin
 
 from core.cache import TX_LAST
-
+from django.views.generic import UpdateView
 
 
 
@@ -134,14 +135,7 @@ class TransactionListView(LoginRequiredMixin, ListView):
         )
 
 
-
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
-    """
-    View para criar uma nova transação.
-
-    Usa o TransactionForm e envia o user via kwargs.
-    Compatível com HTMX ou submissão normal.
-    """
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
@@ -149,24 +143,27 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 
     def form_valid(self, form):
         self.object = form.save()
-        # 🧪 Suporte opcional a HTMX
         if self.request.headers.get("HX-Request") == "true":
+            # Responde com JSON simples para sucesso
             return JsonResponse({"success": True})
         return redirect(self.get_success_url())
 
     def form_invalid(self, form):
         if self.request.headers.get("HX-Request") == "true":
+            # Retorna erros JSON para o frontend processar e mostrar
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
-        print("🚫 Formulário inválido:", form.errors)
+        print("\U0001f6d8 Formulário inválido:", form.errors)
         return super().form_invalid(form)
 
     def get_context_data(self, **kwargs):
-        """
-        Adiciona as contas do utilizador ao contexto.
-        Útil se quiseres usar no template.
-        """
         context = super().get_context_data(**kwargs)
         context["accounts"] = Account.objects.filter(user=self.request.user).order_by("name")
+
+        # Garante que a lista de categorias está disponível apenas para GET
+        if self.request.method == "GET":
+            context["category_list"] = list(
+                Category.objects.filter(user=self.request.user).values_list("name", flat=True)
+            )
         return context
 
 
@@ -343,12 +340,30 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
     success_url = reverse_lazy("transaction_list")
 
     def get_queryset(self):
-        # 🔁 Garante que as tags são carregadas com a transação (ManyToMany)
+        # Garante prefetch das tags para performance
         return super().get_queryset().prefetch_related("tags")
 
     def form_valid(self, form):
         messages.success(self.request, "Transação atualizada com sucesso!")
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        if self.request.headers.get("HX-Request") == "true":
+            # Renderiza o formulário atualizado (com mensagens)
+            context = self.get_context_data(form=form)
+            return self.render_to_response(context)
+        return response
+
+    def form_invalid(self, form):
+        if self.request.headers.get("HX-Request") == "true":
+            context = self.get_context_data(form=form)
+            return self.render_to_response(context)
+        return super().form_invalid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["category_list"] = list(
+            Category.objects.filter(user=self.request.user).values_list("name", flat=True)
+        )
+        return context
 
 
 class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
@@ -415,14 +430,14 @@ class AccountListView(LoginRequiredMixin, ListView):
         )
 # views.py
     def get_context_data(self, **kwargs):
+        """
+        Adiciona as contas do utilizador e categorias ao contexto.
+        """
         context = super().get_context_data(**kwargs)
-        user = self.request.user
+        context["accounts"] = Account.objects.filter(user=self.request.user).order_by("name")
+        Category.objects.filter(user=self.request.user).order_by("name").values_list("name", flat=True)
 
-        # Protege o acesso à relação OneToOne
-        default_currency = getattr(user, "settings", None)
-        context["default_currency"] = getattr(default_currency, "default_currency", "€")
 
-        # (Resto da lógica permanece igual)
         return context
 
 
