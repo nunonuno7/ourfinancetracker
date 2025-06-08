@@ -6,6 +6,8 @@ class UserAwareMixin:
         super().__init__(*args, **kwargs)
         self.user = user
 
+
+
 class UserInFormKwargsMixin:
     """Injects the current *request.user* into ModelForm kwargs."""
 

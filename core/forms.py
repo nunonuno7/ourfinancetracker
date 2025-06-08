@@ -79,11 +79,10 @@ class TransactionForm(forms.ModelForm):
                 "inputmode": "decimal",
                 "autocomplete": "off"
             }),
-            "date": forms.DateInput(attrs={
-                "class": "form-control",
-                "type": "date",
-                "lang": "en-GB"
-            }),
+            "date": forms.TextInput(attrs={
+        "class": "form-control",
+        "autocomplete": "off"
+    }),
             "type": forms.Select(attrs={"class": "form-select"}),
             "account": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
@@ -103,7 +102,7 @@ class TransactionForm(forms.ModelForm):
             print("➕ Novo formulário")
             today = dt_date.today()
             self.initial.setdefault("date", today)
-            self.initial.setdefault("type", "expense")
+            self.initial.setdefault("type", "EX")
 
             period, _ = DatePeriod.objects.get_or_create(
                 year=today.year,
@@ -136,11 +135,13 @@ class TransactionForm(forms.ModelForm):
             raise ValidationError("Amount cannot be zero.")
         return amount
 
+
     def clean(self):
         print("🧽 TransactionForm.clean()")
         cleaned = super().clean()
 
-        category_name = cleaned.get("category")
+        # 🧠 Categoria — criar ou alertar
+        category_name = cleaned.get("category", "").strip()
         if category_name:
             print(f"📂 Categoria recebida: {category_name}")
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
@@ -148,9 +149,13 @@ class TransactionForm(forms.ModelForm):
                 print(f"🆕 Criar nova categoria: {category_name}")
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
+        else:
+            print("⚠️ Categoria em branco → erro no campo")
+            self.add_error("category", "You must provide a category.")
+            cleaned["category"] = None  # Para não crashar o .save()
 
-        period_str = self.data.get("period")
-        print(f"🕓 Período recebido: {period_str}")
+        # 🕓 Período
+        period_str = self.data.get("period", "").strip()
         if period_str:
             try:
                 dt = datetime.strptime(period_str, "%Y-%m")
@@ -162,11 +167,13 @@ class TransactionForm(forms.ModelForm):
                 cleaned["period"] = period
                 print(f"📦 Período processado: {period}")
             except ValueError:
-                print("❌ Erro de formato de período")
                 raise ValidationError("Invalid period format (expected YYYY-MM).")
 
         return cleaned
 
+
+
+    
     def save(self, commit=True) -> Transaction:
         print("💾 TransactionForm.save()")
         instance = super().save(commit=False)

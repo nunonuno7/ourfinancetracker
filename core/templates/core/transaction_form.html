@@ -45,11 +45,38 @@
           {{ form.period }}
         </div>
 
-        <!-- TYPE -->
-        <div class="mb-3">
-          {{ form.type.label_tag }}
-          {{ form.type|add_class:"form-select" }}
-        </div>
+        <!-- TYPE - Quadrados pequenos e Expense por defeito -->
+<!-- TYPE - Quadrados pequenos e Expense por defeito -->
+<div class="mb-3">
+  <label class="form-label">Transaction Type</label>
+  <div class="row row-cols-2 row-cols-md-4 g-1">
+    {% for value, label in form.type.field.choices %}
+      <div class="col">
+        <input type="radio" class="btn-check" name="{{ form.type.name }}" id="type-{{ value }}"
+               value="{{ value }}"
+               {% if form.type.value == value %}
+                 checked
+               {% elif not form.type.value and value == 'EX' %}
+                 checked
+               {% endif %}>
+
+        <label class="btn btn-sm w-100 py-1 text-center border rounded-2
+                      btn-outline-{% if value == 'EX' %}danger{% elif value == 'IN' %}success{% elif value == 'IV' %}warning{% else %}secondary{% endif %}
+                      {% if form.type.value == value %} active{% elif not form.type.value and value == 'EX' %} active{% endif %}"
+               for="type-{{ value }}"
+               data-bs-toggle="tooltip"
+               data-bs-placement="top"
+               title="{% if value == 'EX' %}Gasto (ex: compras, contas, etc.){% elif value == 'IN' %}Receita (salário, prémios, etc.){% elif value == 'IV' %}Investimento (ações, fundos...){% elif value == 'TR' %}Transferência entre contas tuas{% endif %}">
+
+          <div class="fs-6">
+            {% if value == 'EX' %}💸{% elif value == 'IN' %}💰{% elif value == 'IV' %}📈{% elif value == 'TR' %}🔁{% endif %}
+          </div>
+          <div class="small">{{ label }}</div>
+        </label>
+      </div>
+    {% endfor %}
+  </div>
+</div>
 
         <!-- CATEGORY -->
         <div class="mb-3">

@@ -350,6 +350,7 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
         messages.success(self.request, "Transação atualizada com sucesso!")
         return super().form_valid(form)
 
+
 class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
     model = Transaction
     template_name = "core/confirms/transaction_confirm_delete.html"

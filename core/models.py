@@ -211,6 +211,7 @@ class Transaction(models.Model):
         EXPENSE = "EX", "Expense"
         INCOME = "IN", "Income"
         INVESTMENT = "IV", "Investment"
+        TRANSFER = "TR", "Transfer"
 
     user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")  # type: ignore[valid-type]
     date = models.DateField()
