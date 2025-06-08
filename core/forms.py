@@ -1,44 +1,27 @@
 from __future__ import annotations
 
-from datetime import date as dt_date, datetime
+# Built-in
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
-
+from datetime import date as dt_date
+# Django
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from django.forms import BaseModelFormSet, modelformset_factory
 from django.forms.widgets import HiddenInput
-from django.utils.text import slugify
-
-from .mixins import UserAwareMixin
-from .models import (
-    Account,
-    AccountBalance,
-    AccountType,
-    Category,
-    Currency,
-    DatePeriod,
-    Tag,
-    Transaction,
-    User,
-)
-
-from datetime import date as dt_date, datetime
-from decimal import Decimal
-from typing import Any
-
-from django import forms
-from django.core.exceptions import ValidationError
 from django.utils.timezone import now
 
-from .models import Transaction, Account, Category, Tag, DatePeriod, User
-from django.forms import DateInput
-from datetime import date
+# Project
+from .mixins import UserAwareMixin
+from .models import (
+    Account, AccountBalance, AccountType, Category, Currency,
+    DatePeriod, Tag, Transaction
+)
 
 User = get_user_model()
-
 
 class TransactionForm(forms.ModelForm):
     category = forms.CharField(
@@ -156,8 +139,8 @@ class TransactionForm(forms.ModelForm):
         print(f"🔍 Tipo de transação: {tipo}")
 
         # 🧠 Categoria
-        category_name = cleaned.get("category", "").strip()
-
+        category_name = (cleaned.get("category") or "").strip()
+        
         if tipo == "TR":
             print("🔁 Transferência → ignorar categoria e tags")
             cleaned["category"] = None
@@ -238,6 +221,11 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
     def clean_name(self) -> str:
         name = self.cleaned_data.get("name", "").strip()
 
+        # ⚠️ Impedir criação manual da categoria "Other"
+        if name.lower() == "other" and not self.instance.pk:
+            raise ValidationError("The category 'Other' is reserved and cannot be created manually.")
+
+        # Verificar duplicados
         if (
             self.user
             and Category.objects
@@ -255,23 +243,29 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         self.instance.name = new_name
         self.instance.user = self.user
 
-        # Verificar se existe outra categoria com o mesmo nome
+        # 🔁 Verificar se já existe uma categoria com esse nome
         existing = Category.objects.filter(
             user=self.user,
             name__iexact=new_name
         ).exclude(pk=self.instance.pk).first()
 
         if existing:
-            # Fundir: mover transações para a categoria existente
+            # ❌ Proibir fusão com "Other"
+            if existing.name.strip().lower() == "other":
+                raise ValidationError("You cannot merge another category into 'Other'.")
+
+            # 🔁 Fundir: mover transações e apagar categoria atual
             Transaction.objects.filter(category=self.instance).update(category=existing)
             if self.instance.pk:
                 self.instance.delete()
+
+            # ✅ Guardar referência para feedback na view
+            self._merged_category = existing
             return existing
 
         if commit:
             self.instance.save()
         return self.instance
-
 
 
 

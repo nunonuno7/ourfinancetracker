@@ -11,6 +11,9 @@
     <div class="d-flex gap-2">
       <a href="{% url 'transaction_export_xlsx' %}" class="btn btn-outline-primary">⬇ Exportar Excel</a>
       <a href="{% url 'transaction_import_xlsx' %}" class="btn btn-outline-success">⬆ Importar Excel</a>
+      <a href="{% url 'transaction_clear_cache' %}" class="btn btn-outline-secondary" title="Clear cache">
+        <i class="bi bi-arrow-clockwise"></i>
+      </a>
       <a href="{% url 'transaction_create' %}" class="btn btn-success">➕ New Transaction</a>
     </div>
   </div>
@@ -65,8 +68,8 @@
     </div>
   </div>
 
-  <!-- Botão de limpar filtros -->
-  <div class="d-flex align-items-center mb-3">
+  <!-- Botões de ação -->
+  <div class="d-flex align-items-center gap-2 mb-3">
     <button id="clear-filters" class="btn btn-outline-danger">
       <i class="fas fa-times-circle"></i> Clear Filters
     </button>

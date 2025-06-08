@@ -118,7 +118,7 @@ class AccountType(models.Model):
 class Account(models.Model):
     """A bank or investment account owned by the user."""
 
-    user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="accounts")  # type: ignore[valid‑type]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="accounts")  # type: ignore[valid‑type]
     name = models.CharField(max_length=100)
     account_type = models.ForeignKey(
         AccountType,
@@ -186,18 +186,26 @@ class Category(models.Model):
         ordering = ("position", "name")
         verbose_name_plural = "categories"
 
-    # ---------------------- helpers ------------------------
-
-    @classmethod
-    def get_default(cls, user: User) -> "Category":
-        """Return (create if needed) default category: Geral."""
-        return cls.objects.get_or_create(user=user, name="Geral")[0]
-
     def __str__(self) -> str:
         return self.name
 
+    # ---------------------- helpers ------------------------
 
+    @classmethod
+    def get_fallback(cls, user: User) -> "Category":
+        """
+        Garante que existe a categoria 'Other' (em inglês),
+        usada como fallback ao eliminar ou fundir categorias.
+        """
+        return cls.objects.get_or_create(user=user, name="Other")[0]
 
+    @classmethod
+    def get_default(cls, user: User) -> "Category":
+        """
+        🔁 Compatibilidade retroativa com código antigo que usava 'Geral'.
+        Agora redireciona para 'Other'.
+        """
+        return cls.get_fallback(user)
 
 # ---------------------------------------------------------------------------
 # Transactions

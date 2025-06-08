@@ -53,7 +53,7 @@ from django.core.paginator import Paginator
 from django.core.cache import cache
 from django.db import connection, transaction as db_transaction
 from django.db.models import Q, QuerySet, Sum, F
-from django.contrib.auth.mixins import LoginRequiredMixin
+
 
 # Django views
 from django.views.generic import (
@@ -72,10 +72,10 @@ from .forms import (
 
 from core.mixins import UserInFormKwargsMixin
 
+
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
 from core.cache import TX_LAST
-from django.views.generic import UpdateView
-
-
 
 ################################################################################
 #                               Menu config API                                #
@@ -191,6 +191,12 @@ def period_autocomplete(request):
     return JsonResponse(results, safe=False)
 
 
+@login_required
+def clear_transaction_cache(request):
+    if user_id := request.user.id:
+        TX_LAST.pop(user_id, None)
+        messages.success(request, "✅ Cache cleared. Data will be reloaded.")
+    return redirect("transaction_list")
  
 
 def parse_safe_date(value, fallback):
@@ -203,16 +209,19 @@ def parse_safe_date(value, fallback):
     return fallback
 
 
+
 @login_required
 @require_GET
 def transactions_json(request):
-    # ⛔ Silencia logs gigantescos no terminal
     import logging
+    import pandas as pd
+    from core.cache import TX_LAST
+
     logging.getLogger("django.server").setLevel(logging.WARNING)
 
     user_id = request.user.id
 
-    # 🗓️ Intervalo de datas
+    # 🗓️ Datas de início e fim
     raw_start = request.GET.get("date_start")
     raw_end = request.GET.get("date_end")
     start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
@@ -223,10 +232,14 @@ def transactions_json(request):
 
     print(f"📅 Intervalo: {start_date} → {end_date}")
 
-    # 🧠 Verificar cache local (memória)
+    # 🧠 Verifica cache local (sem ordenação)
     cache_data = TX_LAST.get(user_id, {})
-    if cache_data.get("start") != start_date or cache_data.get("end") != end_date:
-        print("📥 SQL QUERY nova")
+    if cache_data.get("start") == start_date and cache_data.get("end") == end_date:
+        print("✅ Cache usada — a aplicar filtros e ordenação em memória")
+        df = cache_data["df"].copy()
+    else:
+        print("📅 Query SQL nova (cache vazia ou expirada)")
+
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
@@ -244,76 +257,94 @@ def transactions_json(request):
                 WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
                 GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
                          cat.name, acc.name, curr.symbol
+                ORDER BY tx.id
             """, [user_id, start_date, end_date])
+
             rows = cursor.fetchall()
 
         df = pd.DataFrame(rows, columns=[
             "id", "date", "year", "month", "type", "amount",
             "category", "account", "currency", "tags"
         ])
-        TX_LAST[user_id] = {"df": df, "start": start_date, "end": end_date}
-    else:
-        print("✅ A usar o DataFrame anterior em memória")
-        df = cache_data.get("df")
+        TX_LAST[user_id] = {"df": df.copy(), "start": start_date, "end": end_date}
 
-    # 🧪 Filtros adicionais via GET
-    df = df.copy()
-    type_ = request.GET.get("type", "").strip()
-    category = request.GET.get("category", "").strip()
-    account = request.GET.get("account", "").strip()
-    period = request.GET.get("period", "").strip()
-    search = request.GET.get("search[value]", "").strip()
-
-    if type_:
-        df = df[df["type"] == type_]
-    if category:
-        df = df[df["category"].str.contains(category, case=False, na=False)]
-    if account:
-        df = df[df["account"].str.contains(account, case=False, na=False)]
-    if period:
+    # 🧪 Filtros adicionais
+    if t := request.GET.get("type", "").strip():
+        df = df[df["type"] == t]
+    if cat := request.GET.get("category", "").strip():
+        df = df[df["category"].str.contains(cat, case=False, na=False)]
+    if acc := request.GET.get("account", "").strip():
+        df = df[df["account"].str.contains(acc, case=False, na=False)]
+    if per := request.GET.get("period", "").strip():
         try:
-            y, m = map(int, period.split("-"))
+            y, m = map(int, per.split("-"))
             df = df[(df["year"] == y) & (df["month"] == m)]
         except Exception as e:
             print(f"❌ Erro no filtro por período: {e}")
-    if search:
+    if s := request.GET.get("search[value]", "").strip():
         df = df[
-            df["category"].str.contains(search, case=False, na=False) |
-            df["account"].str.contains(search, case=False, na=False) |
-            df["type"].str.contains(search, case=False, na=False) |
-            df["tags"].str.contains(search, case=False, na=False)
+            df["category"].str.contains(s, case=False, na=False) |
+            df["account"].str.contains(s, case=False, na=False) |
+            df["type"].str.contains(s, case=False, na=False) |
+            df["tags"].str.contains(s, case=False, na=False)
         ]
 
-    # 🧾 Formatar colunas
+    # 🧠 Criar colunas derivadas antes da ordenação
     df["date"] = df["date"].astype(str)
     df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
-    df["amount"] = df.apply(lambda r: f"{r['amount']:.2f} {r['currency']}".strip(), axis=1)
+    df["amount_float"] = df["amount"].astype(float)
 
-    # 🏷️ Formatar tags como badges HTML
+    # 🔄 Ordenação
+    order_col = request.GET.get("order[0][column]", "1")
+    order_dir = request.GET.get("order[0][dir]", "desc")
+    ascending = order_dir != "desc"
+
+    column_map = {
+        "0": "period",
+        "1": "date",
+        "2": "type",
+        "3": "amount_float",
+        "4": "category",
+        "5": "tags",
+        "6": "account",
+    }
+
+    sort_col = column_map.get(order_col, "date")
+    if sort_col in df.columns:
+        try:
+            df.sort_values(by=sort_col, ascending=ascending, inplace=True)
+        except Exception as e:
+            print(f"⚠️ Erro ao ordenar por {sort_col}: {e}")
+
+    # 📃 Formatar colunas finais
+    df["amount"] = df.apply(lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" {r['currency']}", axis=1)
+
     def format_tags(raw):
-        if not raw or not isinstance(raw, str):
-            return "–"
+        if not raw or not isinstance(raw, str): return "–"
         tags = [t.strip() for t in raw.split(",") if t.strip()]
-        if not tags:
-            return "–"
-        return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags)
+        return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags) if tags else "–"
 
     df["tags"] = df["tags"].astype(str).apply(format_tags)
 
-    # ⚙️ Ações (Editar / Apagar)
+    # 🔗 Ações HTML
     csrf = request.COOKIES.get("csrftoken", "")
+
     df["actions"] = df.apply(lambda r: f"""
-        <div class='d-flex gap-2 justify-content-center'>
-          <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary'>✏️</a>
-          <form method='post' action='/transactions/{r["id"]}/delete/' class='delete-form d-inline' data-name='transaction on {r["date"]}'>
-            <input type='hidden' name='csrfmiddlewaretoken' value='{csrf}'>
-            <button type='submit' class='btn btn-sm btn-outline-danger'>🗑</button>
-          </form>
-        </div>
+    <div class='d-flex gap-2 justify-content-center'>
+        <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary btn-icon-fixed' title='Edit'>
+        <span>✏️</span>
+        </a>
+        <form method='post' action='/transactions/{r["id"]}/delete/' class='delete-form d-inline' data-name='transaction on {r["date"]}'>
+        <input type='hidden' name='csrfmiddlewaretoken' value='{csrf}'>
+        <button type='submit' class='btn btn-sm btn-outline-danger btn-icon-fixed' title='Delete'>
+            <span>🗑</span>
+        </button>
+        </form>
+    </div>
     """, axis=1)
 
-    # 📄 Paginação para DataTables
+    # 📄 Paginação
     draw = int(request.GET.get("draw", "1"))
     start = int(request.GET.get("start", "0"))
     length = int(request.GET.get("length", "10"))
@@ -330,7 +361,6 @@ def transactions_json(request):
         "recordsFiltered": total,
         "data": data
     })
-
 
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
@@ -402,11 +432,48 @@ class CategoryUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     template_name = "core/category_form.html"
     success_url = reverse_lazy("category_list")
 
+    def form_valid(self, form):
+        merged = hasattr(form, "_merged_category")
+        form.save()  # ⚠️ Pode devolver outra instância, mas ignoramos isso
 
+        if merged:
+            messages.success(self.request, "✅ The categories were merged successfully.")
+        else:
+            messages.success(self.request, "✅ Category updated successfully.")
+
+        return redirect(self.get_success_url())
+    
+    
 class CategoryDeleteView(OwnerQuerysetMixin, DeleteView):
     model = Category
-    template_name = "core/confirms/category_confirm_delete.html"
+    template_name = "confirms/category_confirm_delete.html"
     success_url = reverse_lazy("category_list")
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        option = request.POST.get("option")
+
+        if option == "delete_all":
+            # Apaga todas as transações associadas
+            Transaction.objects.filter(category=self.object).delete()
+            self.object.delete()
+            messages.success(request, f"✅ Category and all its transactions were deleted.")
+        elif option == "move_to_other":
+            # Obter ou criar categoria 'Other'
+            fallback = Category.get_fallback(request.user)
+
+            # Fundir se já existir
+            if fallback != self.object:
+                Transaction.objects.filter(category=self.object).update(category=fallback)
+                self.object.delete()
+                messages.success(request, f"🔁 Transactions moved to 'Other'. Category deleted.")
+            else:
+                messages.warning(request, f"⚠️ Cannot delete 'Other' category.")
+        else:
+            messages.error(request, "❌ No valid option selected.")
+
+        return redirect(self.success_url)
+
 
 ################################################################################
 #                               Account views                                  #
@@ -902,10 +969,8 @@ def import_transactions_xlsx(request):
                 raise Exception("Tipo de conta 'Savings' não existe.")
             default_account_type_id = row[0]
 
-            # Preparar dados
             for idx, row in df.iterrows():
                 print(f"🔎 Linha {idx + 1}")
-
                 date_val = parse_date(str(row["Date"]))
                 if not date_val:
                     print(f"⚠️ Linha {idx + 1} ignorada: data inválida")
@@ -925,7 +990,6 @@ def import_transactions_xlsx(request):
                         cursor.execute("SELECT id FROM core_dateperiod WHERE year = %s AND month = %s", key_period)
                         row_period = cursor.fetchone()
                     periods_cache[key_period] = row_period[0]
-                    print(f"⏳ Novo período cache: {periods_cache[key_period]}")
 
                 period_id = periods_cache[key_period]
 
@@ -943,7 +1007,6 @@ def import_transactions_xlsx(request):
                         cursor.execute("SELECT id FROM core_category WHERE user_id = %s AND name = %s", [user_id, cat_name])
                         row_cat = cursor.fetchone()
                     category_cache[cat_name] = row_cat[0]
-                    print(f"📂 Nova categoria cache: {cat_name} ({category_cache[cat_name]})")
 
                 category_id = category_cache[cat_name]
 
@@ -961,7 +1024,6 @@ def import_transactions_xlsx(request):
                         cursor.execute("SELECT id FROM core_account WHERE user_id = %s AND name = %s", [user_id, acc_name])
                         row_acc = cursor.fetchone()
                     account_cache[acc_name] = row_acc[0]
-                    print(f"🏦 Nova conta cache: {acc_name} ({account_cache[acc_name]})")
 
                 account_id = account_cache[acc_name]
 
@@ -972,17 +1034,15 @@ def import_transactions_xlsx(request):
                     timestamp, timestamp
                 ))
 
-                # Tags associadas a esta transação
+                # Tags
                 raw_tags = str(row.get("Tags", "")).split(",")
                 tags_cleaned = [t.strip() for t in raw_tags if t.strip()]
-                print(f"🏷 Tags da linha {idx + 1}: {tags_cleaned}")
                 for tag in tags_cleaned:
                     tag_links.append((len(transactions) - 1, tag))
 
             print(f"📝 Transações preparadas: {len(transactions)}")
-            print(f"🏷 Total tags identificadas: {len(tag_links)}")
 
-            # Inserir transações em chunks de 100
+            # Inserir transações
             def chunked(iterable, size=100):
                 for i in range(0, len(iterable), size):
                     yield iterable[i:i + size]
@@ -996,16 +1056,10 @@ def import_transactions_xlsx(request):
                     VALUES %s
                     RETURNING id
                 """, chunk)
-                returned_ids = cursor.fetchall()
-                transaction_ids.extend([row[0] for row in returned_ids])
-                print(f"✅ Inseridas {len(returned_ids)} transações neste chunk")
+                transaction_ids.extend([row[0] for row in cursor.fetchall()])
 
-            print(f"✅ Total inseridas: {len(transaction_ids)}")
-
-            # Criar/obter Tags associados ao user
+            # Tags
             all_tag_names = sorted(set(tag for _, tag in tag_links))
-            print(f"🏷 Tags para procurar no banco: {all_tag_names[:10]}...")
-
             if all_tag_names:
                 cursor.execute(
                     "SELECT id, name FROM core_tag WHERE name = ANY(%s) AND user_id = %s",
@@ -1023,12 +1077,8 @@ def import_transactions_xlsx(request):
                     """, [(user_id, name, 0) for name in missing])
                     for tag_id, tag_name in cursor.fetchall():
                         tag_cache[tag_name] = tag_id
-                    print(f"➕ Criadas {len(missing)} novas tags")
 
-            print(f"✅ Todas as tags já existem")
-            print(f"🏷 Tags no cache para associação: {len(tag_cache)}")
-
-            # Associar Tags às transações (com segurança)
+            # Ligações tag-transação
             links = []
             for i, tx_id in enumerate(transaction_ids):
                 for idx, tag_name in tag_links:
@@ -1043,8 +1093,13 @@ def import_transactions_xlsx(request):
                     VALUES %s
                     ON CONFLICT DO NOTHING
                 """, links)
-                print(f"🔗 {len(links)} ligações tag-transação criadas")
 
+        # 🧹 Limpar cache de transações do utilizador
+        if request.user.id in TX_LAST:
+            print(f"🧹 Limpar cache TX_LAST após importação (user_id={request.user.id})")
+            del TX_LAST[request.user.id]
+
+        # ✅ Mensagem de sucesso
         messages.success(request, f"✔ {len(transaction_ids)} transactions imported successfully!")
 
     except Exception as e:
@@ -1052,7 +1107,6 @@ def import_transactions_xlsx(request):
         messages.error(request, f"❌ Import failed: {str(e)}")
 
     return redirect("transaction_list")
-
 
 @login_required
 def import_transactions_template(request):

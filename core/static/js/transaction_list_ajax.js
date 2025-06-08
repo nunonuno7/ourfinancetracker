@@ -1,4 +1,6 @@
 $(document).ready(function () {
+  console.log('JavaScript carregado e $(document).ready() executado');
+
   // 🛠️ 0. Preencher "end-date" com hoje se estiver vazio
   const endInput = document.getElementById("end-date");
   if (endInput && !endInput.value) {
@@ -7,14 +9,14 @@ $(document).ready(function () {
   }
 
   // 🗓️ 1. Inicializar flatpickr com formato DD/MM/YYYY e calendário em inglês
-  flatpickr("#start-date", {
-    altInput: true,         // mostra data formatada
-    altFormat: "d/m/Y",     // o que o utilizador vê
-    dateFormat: "Y-m-d",    // o que é enviado para o backend
-    locale: "default"       // usa idioma do navegador (inglês se estiver en)
+  const startFlatpickr = flatpickr("#start-date", {
+    altInput: true,
+    altFormat: "d/m/Y",
+    dateFormat: "Y-m-d",
+    locale: "default"
   });
 
-  flatpickr("#end-date", {
+  const endFlatpickr = flatpickr("#end-date", {
     altInput: true,
     altFormat: "d/m/Y",
     dateFormat: "Y-m-d",
@@ -60,19 +62,14 @@ $(document).ready(function () {
     pageLength: 10,
     order: [[1, 'desc']],
     columns: [
-      { data: 'period' },
-      { data: 'date' },
-      { data: 'type' },
-      { data: 'amount' },
-      { data: 'category', defaultContent: '–' },
-      {
-        data: 'tags',
-        render: function (data, type, row, meta) {
-          return data || '–';
-        }
-      },
-      { data: 'account', defaultContent: '–' },
-      { data: 'actions', orderable: false, defaultContent: '' }
+      { data: 'period', orderable: true },
+      { data: 'date', type: 'date', orderable: true },
+      { data: 'type', orderable: true },
+      { data: 'amount', type: 'num', orderable: true },
+      { data: 'category', orderable: true },
+      { data: 'tags', orderable: false },
+      { data: 'account', orderable: true },
+      { data: 'actions', orderable: false }
     ]
   });
 
@@ -98,7 +95,7 @@ $(document).ready(function () {
     })
     .then(response => {
       if (response.ok) {
-        table.ajax.reload(null, false);  // 🔄 mantém página atual
+        table.ajax.reload(null, false);
       } else {
         alert('❌ Erro ao eliminar.');
       }
@@ -106,15 +103,49 @@ $(document).ready(function () {
     .catch(() => alert('❌ Erro ao contactar o servidor.'));
   });
 
-  // Função para limpar os filtros
+  // ✨ 7. Limpar filtros (exceto datas)
   $('#clear-filters').on('click', function() {
-    // Limpar todos os filtros, exceto os de data (start-date e end-date)
     $('#filter-type').val('');
     $('#filter-account').val('');
     $('#filter-category').val('');
     $('#filter-period').val('');
-
-    // Atualizar a tabela após limpar os filtros
     table.ajax.reload();
+  });
+
+  // 🔄 8. Botão Refresh: reaplica filtros e recarrega
+  $('#refresh-table').on('click', function () {
+    table.ajax.reload();
+  });
+
+  // 📦 9. Debug: regista ordenação (opcional)
+  table.off('order.dt').on('order.dt', function() {
+    const order = table.order();
+    if (order.length > 0) {
+      console.log('Coluna ordenada:', order[0][0], 'Direção:', order[0][1]);
+    }
+  });
+
+  // ⬅️ 10. Mês anterior
+  $('#prev-month').on('click', function () {
+    const currentDate = startFlatpickr.selectedDates[0];
+    if (currentDate) {
+      const prevDate = new Date(currentDate);
+      prevDate.setMonth(prevDate.getMonth() - 1);
+      startFlatpickr.setDate(prevDate);
+      endFlatpickr.setDate(prevDate);
+      table.ajax.reload();
+    }
+  });
+
+  // ➡️ 11. Mês seguinte
+  $('#next-month').on('click', function () {
+    const currentDate = startFlatpickr.selectedDates[0];
+    if (currentDate) {
+      const nextDate = new Date(currentDate);
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      startFlatpickr.setDate(nextDate);
+      endFlatpickr.setDate(nextDate);
+      table.ajax.reload();
+    }
   });
 });

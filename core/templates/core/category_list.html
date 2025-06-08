@@ -3,11 +3,13 @@
 
 {% block content %}
 <div class="container mt-4">
+  <!-- Cabeçalho -->
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0">Categories</h2>
     <a href="{% url 'category_create' %}" class="btn btn-success">➕ Add New</a>
   </div>
 
+  <!-- Lista de categorias -->
   {% if categories %}
     <ul class="list-group">
       {% for category in categories %}
@@ -17,10 +19,9 @@
           </div>
           <div class="btn-group">
             <a href="{% url 'category_update' category.pk %}" class="btn btn-sm btn-outline-primary">✏️ Edit</a>
-            <form method="post" action="{% url 'category_delete' category.pk %}" class="delete-form" data-name="{{ category.name }}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Delete</button>
-            </form>
+
+            <!-- ⚠️ Redireciona para a página de confirmação (não apaga direto) -->
+            <a href="{% url 'category_delete' category.pk %}" class="btn btn-sm btn-outline-danger">🗑 Delete</a>
           </div>
         </li>
       {% endfor %}
@@ -29,6 +30,4 @@
     <div class="alert alert-info">No categories yet.</div>
   {% endif %}
 </div>
-
-<script src="{% static 'js/category_list.js' %}"></script>
 {% endblock %}
