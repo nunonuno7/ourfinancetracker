@@ -4,7 +4,7 @@ $(document).ready(function () {
     url: '/categories/autocomplete/',
     success: function (data) {
       data.forEach(cat => {
-        $('#filter-category').append(new Option(cat.name, cat.id));
+        $('#filter-category').append(new Option(cat.name, cat.name));
       });
     }
   });
@@ -22,9 +22,13 @@ $(document).ready(function () {
   // 3. Inicializar DataTable com filtros enviados ao backend
   const table = $('#transaction-table').DataTable({
     serverSide: true,
+    processing: true,
     ajax: {
       url: '/transactions/json/',
+      dataSrc: 'data',
       data: function (d) {
+        d.date_start = $('#start-date').val();
+        d.date_end = $('#end-date').val();
         d.type = $('#filter-type').val();
         d.account = $('#filter-account').val();
         d.category = $('#filter-category').val();
@@ -37,45 +41,27 @@ $(document).ready(function () {
       { data: 'period' },
       { data: 'date' },
       { data: 'type' },
-      {
-        data: 'amount',
-        render: (data, type, row) => data + (row.currency ? ' ' + row.currency : '')
-      },
-      { data: 'category' },
+      { data: 'amount' },
+      { data: 'category', defaultContent: '–' },
       {
         data: 'tags',
-        render: function (data) {
-          if (!data || data.length === 0) return '–';
-          return data.map(t => `<span class="badge bg-secondary">${t}</span>`).join(' ');
+        render: function (data, type, row) {
+          return typeof data === 'string' ? data : '–';
         }
       },
-      { data: 'account' },
-      {
-        data: 'id',
-        orderable: false,
-        render: function (data, type, row) {
-          return `
-            <div class="d-flex gap-2 justify-content-center">
-              <a href="/transactions/${data}/edit/" class="btn btn-sm btn-outline-primary" title="Edit">✏️</a>
-              <form method="post" action="/transactions/${data}/delete/" class="delete-form d-inline" data-name="transaction on ${row.date}">
-                <input type="hidden" name="csrfmiddlewaretoken" value="${window.CSRF_TOKEN}">
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">🗑</button>
-              </form>
-            </div>`;
-        }
-      }
+      { data: 'account', defaultContent: '–' },
+      { data: 'actions', orderable: false, defaultContent: '' }
     ]
   });
 
   // 4. Recarregar tabela quando filtros mudam
-  $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
+  $('#filter-type, #filter-account, #filter-category, #filter-period, #start-date, #end-date').on('change', function () {
     table.ajax.reload();
   });
 
   // 5. Substituir submit por fetch com confirmação e recarregamento automático
   $(document).on('submit', 'form.delete-form', function (e) {
-    e.preventDefault(); // impedir submit normal
-
+    e.preventDefault();
     const form = this;
     const name = $(form).data('name') || 'this transaction';
 
@@ -90,7 +76,7 @@ $(document).ready(function () {
     })
     .then(response => {
       if (response.ok) {
-        table.ajax.reload(null, false); // recarrega sem perder a página atual
+        table.ajax.reload(null, false);
       } else {
         alert('❌ Erro ao eliminar.');
       }

@@ -92,6 +92,15 @@ from django.utils.dateparse import parse_date
 from datetime import date
 from django.db import transaction as db_transaction
 
+from django.contrib import messages
+from django.db import connection, transaction
+from django.utils.dateparse import parse_date
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+import pandas as pd
+from psycopg2.extras import execute_values
+
+from django.utils.timezone import now
 
 ################################################################################
 #                               Menu config API                                #
@@ -867,89 +876,171 @@ def export_transactions_xlsx(request):
     response['Content-Disposition'] = 'attachment; filename=transactions.xlsx'
     return response
 
+
 @login_required
 
 def import_transactions_xlsx(request):
     if request.method == "GET":
-        print("🚨 ENTROU NA VIEW GET", request.GET)
+        print("🧾 [GET] A mostrar formulário de importação")
         return render(request, "core/import_form.html")
 
-    if 'file' not in request.FILES:
-        messages.error(request, "Nenhum ficheiro enviado.")
-        return redirect("transaction_import_xlsx")
-
-    file = request.FILES['file']
+    print("🚀 [POST] Início da importação de transações via Excel")
 
     try:
-        wb = openpyxl.load_workbook(file)
-        ws = wb.active
+        file = request.FILES["file"]
+        df = pd.read_excel(file)
+        print(f"📄 Ficheiro recebido com {len(df)} linhas")
 
-        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-        print("🟢 Cabeçalhos encontrados:", headers)
-        expected_headers = ['Date', 'Type', 'Amount', 'Category', 'Tags', 'Account']
+        required = {"Date", "Type", "Amount", "Category", "Tags", "Account"}
+        if not required.issubset(df.columns):
+            missing = required - set(df.columns)
+            print(f"❌ Faltam colunas: {missing}")
+            messages.error(request, f"Missing columns: {', '.join(missing)}")
+            return redirect("transaction_import_xlsx")
 
-        if headers != expected_headers:
-            print("❌ Cabeçalhos inválidos:", headers)
-            messages.error(request, "Formato inválido. Verifica as colunas do ficheiro.")
-            return redirect("transaction_list")
+        user_id = request.user.id
+        transactions = []
+        tag_links = []
+        periods_cache = {}
+        category_cache = {}
+        account_cache = {}
+        tag_cache = {}
 
-        user = request.user
-        created_count = 0
+        timestamp = now()
+        print(f"📌 Timestamp para created_at/updated_at: {timestamp}")
 
-        with db_transaction.atomic():
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                print("🟡 Linha lida:", row)
-                date_str, type_, amount, category_name, tags_str, account_name = row
+        with connection.cursor() as cursor, transaction.atomic():
+            cursor.execute("SELECT id FROM core_accounttype WHERE name ILIKE 'Savings' LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                raise Exception("Tipo de conta 'Savings' não existe.")
+            default_account_type_id = row[0]
 
-                # 📅 Data
-                date_obj = parse_date(str(date_str)) or date.today()
+            for idx, row in df.iterrows():
+                date = parse_date(str(row["Date"]))
+                if not date:
+                    print(f"⚠️ Linha {idx+1} ignorada: data inválida")
+                    continue
 
-                # 📆 Periodo calculado a partir da data
-                year, month = date_obj.year, date_obj.month
-                period, _ = DatePeriod.objects.get_or_create(
-                    year=year,
-                    month=month,
-                    defaults={"label": date(year, month, 1).strftime("%B %Y")},
-                )
+                # Período
+                key_period = (date.year, date.month)
+                if key_period not in periods_cache:
+                    cursor.execute("""
+                        INSERT INTO core_dateperiod (year, month, label)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (year, month) DO NOTHING
+                        RETURNING id
+                    """, [date.year, date.month, date.strftime("%B %Y")])
+                    row_period = cursor.fetchone()
+                    if not row_period:
+                        cursor.execute("SELECT id FROM core_dateperiod WHERE year = %s AND month = %s", key_period)
+                        row_period = cursor.fetchone()
+                    periods_cache[key_period] = row_period[0]
+                period_id = periods_cache[key_period]
 
-                # 📂 Categoria
-                category = None
-                if category_name:
-                    category, _ = Category.objects.get_or_create(user=user, name=category_name.strip())
+                # Categoria
+                cat_name = str(row["Category"]).strip()
+                if cat_name not in category_cache:
+                    cursor.execute("""
+                        INSERT INTO core_category (user_id, name, position, created_at, updated_at)
+                        VALUES (%s, %s, 0, %s, %s)
+                        ON CONFLICT (user_id, name) DO NOTHING
+                        RETURNING id
+                    """, [user_id, cat_name, timestamp, timestamp])
+                    row_cat = cursor.fetchone()
+                    if not row_cat:
+                        cursor.execute("SELECT id FROM core_category WHERE user_id = %s AND name = %s", [user_id, cat_name])
+                        row_cat = cursor.fetchone()
+                    category_cache[cat_name] = row_cat[0]
+                category_id = category_cache[cat_name]
 
-                # 💳 Conta
-                account = None
-                if account_name:
-                    account = Account.objects.filter(user=user, name__iexact=account_name.strip()).first()
+                # Conta
+                acc_name = str(row["Account"]).strip()
+                if acc_name not in account_cache:
+                    cursor.execute("""
+                        INSERT INTO core_account (user_id, name, account_type_id, currency_id, created_at, position)
+                        VALUES (%s, %s, %s, NULL, %s, 0)
+                        ON CONFLICT (user_id, name) DO NOTHING
+                        RETURNING id
+                    """, [user_id, acc_name, default_account_type_id, timestamp])
+                    row_acc = cursor.fetchone()
+                    if not row_acc:
+                        cursor.execute("SELECT id FROM core_account WHERE user_id = %s AND name = %s", [user_id, acc_name])
+                        row_acc = cursor.fetchone()
+                    account_cache[acc_name] = row_acc[0]
+                account_id = account_cache[acc_name]
 
-                # ➕ Criar transação
-                tx = Transaction.objects.create(
-                    user=user,
-                    date=date_obj,
-                    type=type_ or "EX",
-                    amount=amount or 0,
-                    category=category,
-                    account=account,
-                    period=period,
-                )
+                # Transação
+                transactions.append((
+                    user_id, date, row["Amount"], row["Type"], period_id,
+                    category_id, account_id, "", False, True,
+                    timestamp, timestamp
+                ))
 
-                # 🏷️ Tags
-                tags = []
-                if tags_str:
-                    tag_names = [t.strip() for t in tags_str.split(",") if t.strip()]
-                    tags = [Tag.objects.get_or_create(user=user, name=name)[0] for name in tag_names]
-                tx.tags.set(tags)
+                # Tags associadas a esta transação
+                raw_tags = str(row.get("Tags", "")).split(",")
+                for tag in [t.strip() for t in raw_tags if t.strip()]:
+                    tag_links.append((len(transactions) - 1, tag))
 
-                created_count += 1
+            print(f"📝 Transações preparadas: {len(transactions)}")
+            print(f"🏷 Tags identificadas: {len(tag_links)}")
 
-        print("✅ Total de transações criadas:", created_count)
-        messages.success(request, f"{created_count} transações importadas com sucesso.")
-        return redirect("transaction_list")
+            # Inserir transações
+            execute_values(cursor, """
+                INSERT INTO core_transaction
+                (user_id, date, amount, type, period_id, category_id, account_id,
+                 notes, is_estimated, is_cleared, created_at, updated_at)
+                VALUES %s
+                RETURNING id
+            """, transactions)
+            transaction_ids = [row[0] for row in cursor.fetchall()]
+            print(f"✅ Inseridas {len(transaction_ids)} transações")
+
+            # Criar/obter Tags
+            all_tag_names = sorted(set(tag for _, tag in tag_links))
+            if all_tag_names:
+                cursor.execute("SELECT id, name FROM core_tag WHERE name = ANY(%s)", [all_tag_names])
+                for tag_id, tag_name in cursor.fetchall():
+                    tag_cache[tag_name] = tag_id
+
+                missing = [name for name in all_tag_names if name not in tag_cache]
+                if missing:
+                    execute_values(cursor, """
+                        INSERT INTO core_tag (name, position)
+                        VALUES %s
+                        RETURNING id, name
+                    """, [(name, 0) for name in missing])
+                    for tag_id, tag_name in cursor.fetchall():
+                        tag_cache[tag_name] = tag_id
+                    print(f"➕ Criadas {len(missing)} novas tags")
+
+            # Associar Tags às transações (com segurança)
+            links = []
+            for i, tx_id in enumerate(transaction_ids):
+                for idx, tag_name in tag_links:
+                    if idx == i:
+                        tag_id = tag_cache.get(tag_name)
+                        if tag_id:
+                            links.append((tx_id, tag_id))
+
+            if links:
+                execute_values(cursor, """
+                    INSERT INTO core_transactiontag (transaction_id, tag_id)
+                    VALUES %s
+                    ON CONFLICT DO NOTHING
+                """, links)
+                print(f"🔗 {len(links)} ligações tag-transação criadas")
+
+        messages.success(request, f"✔ {len(transaction_ids)} transactions imported successfully!")
 
     except Exception as e:
-        print("❌ ERRO AO IMPORTAR:", str(e))
-        messages.error(request, f"Erro ao importar: {str(e)}")
-        return redirect("transaction_list")
+        print("❌ Erro:", str(e))
+        messages.error(request, f"❌ Import failed: {str(e)}")
+
+    return redirect("transaction_list")
+
+
+
 
 @login_required
 def import_transactions_template(request):

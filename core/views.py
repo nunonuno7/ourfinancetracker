@@ -245,130 +245,140 @@ def period_autocomplete(request):
     return JsonResponse(results, safe=False)
 
 
-
+ 
 @require_GET
 @login_required
 def transactions_json(request):
-    print("🚨 ENTROU na transactions_json")
-
-    # ⛔ Ocultar GET gigante no terminal
     logging.getLogger("django.server").setLevel(logging.WARNING)
+    print("\n🚨 ENTROU na transactions_json (debug mode)")
 
-    user = request.user
-    params = request.GET.copy()
-    params.pop("_", None)  # remove timestamp do DataTables
-    query_string = urlencode(sorted(params.items()))
+    user_id = request.user.id
 
-    raw_key = f"transactions_json_user_{user.id}_{query_string}"
-    cache_key = "transactions_json_" + md5(raw_key.encode()).hexdigest()
-    print(f"🔁 CHAVE DE CACHE: {cache_key}")
+    # ⚠️ Corrigir nomes dos parâmetros de data
+    raw_start = request.GET.get("date_start") or "2023-01-01"
+    raw_end = request.GET.get("date_end") or date.today().isoformat()
+    start_date = parse_date(raw_start)
+    end_date = parse_date(raw_end)
 
-    # 📦 Tentar usar cache
-    cached_response = cache.get(cache_key)
-    if cached_response:
-        print("✅ USOU CACHE")
-        return cached_response
+    if not start_date or not end_date:
+        print(f"❌ Datas inválidas recebidas: date_start='{raw_start}', date_end='{raw_end}'")
+        return JsonResponse({"error": "Invalid date format"}, status=400)
 
-    print("❌ NÃO USOU CACHE — vai gerar a resposta")
+    print(f"📅 Intervalo recebido: {start_date} → {end_date}")
 
-    # 🧱 Colunas disponíveis
-    columns = [
-        'period', 'date', 'type', 'amount',
-        'category__name', 'tags__name', 'account__name', 'id'
-    ]
+    # Outros filtros
+    type_ = request.GET.get("type", "").strip()
+    category = request.GET.get("category", "").strip()
+    account = request.GET.get("account", "").strip()
+    period = request.GET.get("period", "").strip()
+    search = request.GET.get("search[value]", "").strip()
+    draw = int(request.GET.get("draw", "1"))
+    offset = int(request.GET.get("start", "0"))
+    length = int(request.GET.get("length", "10"))
 
-    # 🧩 Parâmetros do DataTables
-    draw = int(request.GET.get('draw', '1'))
-    start = int(request.GET.get('start', '0'))
-    length = int(request.GET.get('length', '10'))
-    search_value = request.GET.get('search[value]', '').strip()
+    print(f"🔍 Filtros: type={type_}, category={category}, account={account}, period={period}, search='{search}'")
 
-    # 🎯 Filtros específicos
-    filter_type = request.GET.get('type', '').strip()
-    filter_account = request.GET.get('account', '').strip()
-    filter_category = request.GET.get('category', '').strip()
-    filter_period = request.GET.get('period', '').strip()
+    # Query SQL com JOINs
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                tx.id,
+                tx.date,
+                dp.year,
+                dp.month,
+                tx.type,
+                tx.amount,
+                COALESCE(cat.name, '') AS category,
+                COALESCE(acc.name, '') AS account,
+                COALESCE(curr.symbol, '') AS currency,
+                STRING_AGG(tag.name, ', ') AS tags
+            FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_currency curr ON acc.currency_id = curr.id
+            LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
+            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
+            WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
+            GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount, cat.name, acc.name, curr.symbol
+        """, [user_id, start_date, end_date])
+        rows = cursor.fetchall()
 
-    # 🔽 Ordenação
-    order_col_index = int(request.GET.get('order[0][column]', 1))
-    order_dir = request.GET.get('order[0][dir]', 'desc')
-    order_field = columns[order_col_index] if order_col_index < len(columns) else 'date'
-    if order_dir == 'desc':
-        order_field = '-' + order_field
+    print(f"📦 SQL → {len(rows)} linhas retornadas")
 
-    # 🔍 Base QuerySet
-    qs = Transaction.objects.filter(user=user)
+    if not rows:
+        return JsonResponse({"draw": draw, "recordsTotal": 0, "recordsFiltered": 0, "data": []})
 
-    # ⛳ Aplicar filtros
-    if filter_type:
-        qs = qs.filter(type=filter_type)
-    if filter_account:
-        qs = qs.filter(account__id=filter_account)
-    if filter_category:
-        qs = qs.filter(category__id=filter_category)
-    if filter_period:
+    columns_raw = ["id", "date", "year", "month", "type", "amount", "category", "account", "currency", "tags"]
+    df = pd.DataFrame(rows, columns=columns_raw)
+    print(f"🧪 DataFrame inicial: {df.shape[0]} linhas")
+
+    # Filtros adicionais
+    if type_:
+        df = df[df["type"] == type_]
+    if category:
+        df = df[df["category"].str.contains(category, case=False, na=False)]
+    if account:
+        df = df[df["account"].str.contains(account, case=False, na=False)]
+    if period:
         try:
-            year, month = map(int, filter_period.split('-'))
-            qs = qs.filter(period__year=year, period__month=month)
-        except ValueError:
-            pass
+            y, m = map(int, period.split("-"))
+            df = df[(df["year"] == y) & (df["month"] == m)]
+        except:
+            print("⚠️ Período inválido ignorado")
+    if search:
+        df = df[
+            df["category"].str.contains(search, case=False, na=False) |
+            df["account"].str.contains(search, case=False, na=False) |
+            df["type"].str.contains(search, case=False, na=False) |
+            df["tags"].str.contains(search, case=False, na=False)
+        ]
 
-    # 🔎 Filtro global
-    if search_value:
-        qs = qs.filter(
-            Q(category__name__icontains=search_value) |
-            Q(type__icontains=search_value) |
-            Q(account__name__icontains=search_value)
-        ).distinct()
+    print(f"✅ Após filtros: {df.shape[0]} linhas restantes")
 
-    total_records = Transaction.objects.filter(user=user).count()
-    filtered_records = qs.count()
+    if df.empty:
+        return JsonResponse({"draw": draw, "recordsTotal": 0, "recordsFiltered": 0, "data": []})
 
-    # 🧮 Ordenar corretamente por ano/mês
-    if order_field.lstrip('-') == 'period':
-        prefix = '-' if order_field.startswith('-') else ''
-        qs = qs.order_by(f"{prefix}period__year", f"{prefix}period__month")
-    else:
-        qs = qs.order_by(order_field)
+    # Formatadores para DataTables
+    df["date"] = df["date"].astype(str)
+    df["period"] = df.apply(lambda r: f"{r['year']}-{int(r['month']):02}" if pd.notnull(r['year']) else "", axis=1)
+    df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
+    df["amount"] = df.apply(lambda r: f"{r['amount']:.2f} {r['currency']}".strip(), axis=1)
+    def format_tags(raw):
+        if not raw:
+            return "–"
+        tags = [tag.strip() for tag in raw.split(',') if tag.strip()]
+        return " ".join([f"<span class='badge bg-secondary'>{t}</span>" for t in tags]) if tags else "–"
 
-    # 📄 Paginação
-    qs = qs[start:start + length]
+    df["tags"] = df["tags"].apply(format_tags)
+    
+    
+    # Ações (botões)
+    csrf = request.COOKIES.get("csrftoken", "")
+    df["actions"] = df.apply(lambda r: f"""
+        <div class='d-flex gap-2 justify-content-center'>
+          <a href='/transactions/{r['id']}/edit/' class='btn btn-sm btn-outline-primary'>✏️</a>
+          <form method='post' action='/transactions/{r['id']}/delete/' class='delete-form d-inline' data-name='transaction on {r['date']}'>
+            <input type='hidden' name='csrfmiddlewaretoken' value='{csrf}'>
+            <button type='submit' class='btn btn-sm btn-outline-danger'>🗑</button>
+          </form>
+        </div>
+    """, axis=1)
 
-    # 📦 Preparar JSON
-    data = []
-    for tx in qs:
-        period_str = f"{tx.period.year}-{tx.period.month:02d}" if tx.period else ""
-        data.append({
-            "period": period_str,
-            "date": tx.date.strftime("%Y-%m-%d") if tx.date else "",
-            "type": tx.get_type_display(),
-            "amount": f"{tx.amount:.2f}" if tx.amount is not None else "",
-            "category": tx.category.name if tx.category else "–",
-            "tags": [tag.name for tag in tx.tags.all()],
-            "account": str(tx.account) if tx.account else "–",
-            "id": tx.pk,
-            "currency": tx.account.currency.symbol if tx.account and tx.account.currency else "",
-        })
+    # Paginação final
+    total = len(df)
+    df_page = df.iloc[offset:offset + length]
+    data = df_page[["period", "date", "type", "amount", "category", "tags", "account", "actions"]].to_dict(orient="records")
 
-    response_data = {
+    print(f"📤 Enviando {len(data)} linhas para o DataTables\n")
+
+    return JsonResponse({
         "draw": draw,
-        "recordsTotal": total_records,
-        "recordsFiltered": filtered_records,
-        "data": data,
-    }
+        "recordsTotal": total,
+        "recordsFiltered": total,
+        "data": data
+    })
 
-    # 💾 Guardar no cache por 5 minutos
-    response = JsonResponse(response_data)
-    cache.set(cache_key, response, timeout=300)
-
-    # 🧩 Guardar chave na lista do utilizador
-    key_list_name = f"transactions_json_keys_user_{user.id}"
-    key_list = cache.get(key_list_name, [])
-    if cache_key not in key_list:
-        key_list.append(cache_key)
-        cache.set(key_list_name, key_list, timeout=300)
-
-    return response
 
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
