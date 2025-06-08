@@ -34,10 +34,10 @@ from django.core.exceptions import ValidationError
 from django.utils.timezone import now
 
 from .models import Transaction, Account, Category, Tag, DatePeriod, User
-
+from django.forms import DateInput
+from datetime import date
 
 User = get_user_model()
-
 
 
 
@@ -52,13 +52,7 @@ class UserAwareMixin:
         self.user: User | None = user
 
 
-
-
-
-
-
-
-class TransactionForm(forms.ModelForm):
+class TransactionForm(UserAwareMixin, forms.ModelForm):
     category = forms.CharField(
         label="Category",
         required=False,
@@ -92,62 +86,49 @@ class TransactionForm(forms.ModelForm):
             "is_cleared",
         ]
         widgets = {
-            "amount": forms.TextInput(attrs={
-                "class": "form-control text-end",
-                "inputmode": "decimal",
-                "pattern": "[0-9.,]+",
-            }),
-            "date": forms.DateInput(
-                attrs={"class": "form-control", "type": "date"},
-                format="%Y-%m-%d"
-            ),
-            "period": forms.HiddenInput(),
+            "amount": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "type": forms.Select(attrs={"class": "form-control"}),
             "account": forms.Select(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
         self.user = user
 
-        self.fields["type"].widget.choices = list(Transaction.Type.choices)
-        self.fields["type"].required = True
-        self.fields["date"].input_formats = ["%d/%m/%Y"]
+        # Limita a dropdown de contas às contas do utilizador
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
 
+        # Inicializa campos se for criação
         if not self.instance.pk:
             today = dt_date.today()
-            self.initial.setdefault("date", today.strftime("%Y-%m-%d"))
-            self.initial.setdefault("type", Transaction.Type.EXPENSE)
-
+            self.initial.setdefault("date", today)
             period, _ = DatePeriod.objects.get_or_create(
                 year=today.year,
                 month=today.month,
                 defaults={"label": today.strftime("%B %Y")},
             )
-            self.initial.setdefault("period", period)
+            self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
 
-        else:
+        # Inicializa campos personalizados se for edição
+        if self.instance.pk:
             if self.instance.category:
                 self.initial.setdefault("category", self.instance.category.name)
             tags = self.instance.tags.values_list("name", flat=True)
             self.initial.setdefault("tags_input", ", ".join(tags))
 
     def clean_amount(self) -> Decimal:
-        raw = self.cleaned_data["amount"]
-        if isinstance(raw, (int, float, Decimal)):
-            amount = Decimal(raw)
-        else:
-            amount = Decimal(str(raw).replace(" ", "").replace(",", "."))
+        amount = self.cleaned_data["amount"]
         if amount == 0:
             raise ValidationError("Amount cannot be zero.")
         return amount
 
-    def clean(self) -> dict[str, Any]:
+    def clean(self):
         cleaned = super().clean()
 
+        # Processar categoria (criar se necessário)
         category_name = cleaned.get("category")
         if category_name:
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
@@ -155,6 +136,7 @@ class TransactionForm(forms.ModelForm):
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
 
+        # Processar período escondido vindo do seletor
         period_str = self.data.get("period")
         if period_str:
             try:
@@ -170,7 +152,7 @@ class TransactionForm(forms.ModelForm):
 
         return cleaned
 
-    def save(self, commit: bool = True) -> Transaction:
+    def save(self, commit=True) -> Transaction:
         instance = super().save(commit=False)
         instance.user = self.user
         instance.category = self.cleaned_data.get("category", instance.category)
@@ -178,12 +160,15 @@ class TransactionForm(forms.ModelForm):
         if commit:
             instance.save()
 
+        # Guardar as tags
         tags_raw = self.cleaned_data.get("tags_input", "")
         tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
-        tags = [Tag.objects.get_or_create(user=self.user, name=name)[0] for name in tag_names]
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
         instance.tags.set(tags)
 
         return instance
+
+
 
 class CategoryForm(UserAwareMixin, forms.ModelForm):
     class Meta:
