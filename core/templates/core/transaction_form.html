@@ -24,16 +24,33 @@
           </div>
         {% endif %}
 
+        <!-- TYPE -->
         <div class="mb-3">
-          <label for="{{ form.amount.id_for_label }}" class="form-label">Amount</label>
-          {{ form.amount|add_class:"form-control" }}
+          <label for="{{ form.type.id_for_label }}" class="form-label">Type</label>
+          {{ form.type|add_class:"form-control" }}
         </div>
 
+        <!-- AMOUNT (manual) -->
+        <div class="mb-3">
+          <label for="id_amount" class="form-label">Amount</label>
+          <input
+            type="text"
+            name="amount"
+            id="id_amount"
+            class="form-control text-end"
+            value="{{ form.amount.value|default_if_none:'' }}"
+            inputmode="decimal"
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- DATE -->
         <div class="mb-3">
           <label for="{{ form.date.id_for_label }}" class="form-label">Date</label>
           {{ form.date|add_class:"form-control" }}
         </div>
 
+        <!-- PERIOD -->
         <div class="mb-3">
           <label class="form-label">Period</label>
           <div class="d-flex align-items-center">
@@ -44,11 +61,7 @@
           <input type="hidden" name="period" id="id_period" value="{{ form.initial.period }}">
         </div>
 
-        <div class="mb-3">
-          <label for="{{ form.type.id_for_label }}" class="form-label">Type</label>
-          {{ form.type|add_class:"form-control" }}
-        </div>
-
+        <!-- CATEGORY -->
         <div class="mb-3">
           <label for="id_category" class="form-label">Category</label>
           <input
@@ -61,6 +74,7 @@
           />
         </div>
 
+        <!-- TAGS -->
         <div class="mb-3">
           <label for="id_tags_input" class="form-label">Tags</label>
           <input
@@ -74,21 +88,25 @@
           />
         </div>
 
+        <!-- ACCOUNT -->
         <div class="mb-3">
           <label for="{{ form.account.id_for_label }}" class="form-label">Account</label>
           {{ form.account|add_class:"form-control" }}
         </div>
 
+        <!-- NOTES -->
         <div class="mb-3">
           <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
           {{ form.notes|add_class:"form-control" }}
         </div>
 
+        <!-- CLEARED -->
         <div class="form-check mb-3">
           {{ form.is_cleared|add_class:"form-check-input" }}
           <label for="{{ form.is_cleared.id_for_label }}" class="form-check-label">Is cleared</label>
         </div>
 
+        <!-- BOTÕES -->
         <div class="d-flex justify-content-between">
           <a href="{% url 'transaction_list' %}" class="btn btn-outline-secondary">← Back</a>
           <button type="submit" class="btn btn-primary">

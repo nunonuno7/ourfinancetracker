@@ -4,9 +4,14 @@
 
 {% block content %}
 <div class="container mt-4">
+  <!-- Cabeçalho com botões de ação -->
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0">Transactions</h2>
-    <a href="{% url 'transaction_create' %}" class="btn btn-success">➕ New Transaction</a>
+    <div class="d-flex gap-2">
+      <a href="{% url 'transaction_export_xlsx' %}" class="btn btn-outline-primary">⬇ Exportar Excel</a>
+      <a href="{% url 'transaction_import_xlsx' %}" class="btn btn-outline-success">⬆ Importar Excel</a>
+      <a href="{% url 'transaction_create' %}" class="btn btn-success">➕ New Transaction</a>
+    </div>
   </div>
 
   <!-- Filtros avançados -->
@@ -20,6 +25,7 @@
         <option value="IV">Investment</option>
       </select>
     </div>
+
     <div class="col-md-3">
       <label for="filter-account" class="form-label">Account</label>
       <select id="filter-account" class="form-select">
@@ -29,6 +35,7 @@
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-3">
       <label for="filter-category" class="form-label">Category</label>
       <select id="filter-category" class="form-select">
@@ -36,6 +43,7 @@
         <!-- Opcões preenchidas via AJAX -->
       </select>
     </div>
+
     <div class="col-md-3">
       <label for="filter-period" class="form-label">Period</label>
       <select id="filter-period" class="form-select">
@@ -45,6 +53,7 @@
     </div>
   </div>
 
+  <!-- Tabela de transações -->
   <div class="table-responsive">
     <table id="transaction-table" class="table table-bordered table-hover align-middle" style="width: 100%">
       <thead class="table-light">
@@ -66,24 +75,23 @@
   </div>
 </div>
 
+<!-- CSRF token global para JS -->
 <script>
   window.CSRF_TOKEN = '{{ csrf_token }}';
 </script>
 
-<!-- jQuery CDN -->
+<!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <!-- Bootstrap JS (com Popper) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 
-<!-- DataTables CSS e JS -->
+<!-- DataTables -->
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
-<!-- Script AJAX para popular a tabela com filtros -->
+<!-- Scripts custom -->
 <script src="{% static 'js/transaction_list_ajax.js' %}"></script>
-
-<!-- Script custom -->
 <script src="{% static 'js/main.js' %}"></script>
 {% endblock %}

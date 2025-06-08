@@ -6,20 +6,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const nextBtn = document.getElementById("next-month");
 
   if (dateInput && monthSelector && periodInput) {
-    // Inicializar seletor com base na data
     const initialDate = new Date(dateInput.value || new Date());
     const initYear = initialDate.getFullYear();
     const initMonth = String(initialDate.getMonth() + 1).padStart(2, "0");
     monthSelector.value = `${initYear}-${initMonth}`;
     periodInput.value = `${initYear}-${initMonth}`;
 
-    // Atualizar campo oculto "period"
     function updatePeriodField() {
       const [year, month] = monthSelector.value.split("-");
       periodInput.value = `${year}-${month}`;
     }
 
-    // Quando a data muda → atualiza o período
     dateInput.addEventListener("change", () => {
       const d = new Date(dateInput.value);
       const y = d.getFullYear();
@@ -28,7 +25,6 @@ document.addEventListener("DOMContentLoaded", () => {
       updatePeriodField();
     });
 
-    // Quando o período muda → ajusta a data se necessário
     monthSelector.addEventListener("change", () => {
       const [year, month] = monthSelector.value.split("-");
       updatePeriodField();
@@ -45,7 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Botões de navegação
     function shiftMonth(delta) {
       let [year, month] = monthSelector.value.split("-").map(Number);
       month += delta;
@@ -67,10 +62,10 @@ document.addEventListener("DOMContentLoaded", () => {
     nextBtn?.addEventListener("click", () => shiftMonth(1));
   }
 
-  // Tom Select para o campo de categoria (apenas uma)
+  // ───── Tom Select para categoria (uma) ─────
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
-    const currentValue = categoryInput.value.trim();  // valor já existente no input (ex: "Groceries")
+    const currentValue = categoryInput.value.trim();
 
     const select = new TomSelect(categoryInput, {
       create: true,
@@ -88,15 +83,13 @@ document.addEventListener("DOMContentLoaded", () => {
       },
     });
 
-    // Adiciona a opção inicial manualmente se for necessário
     if (currentValue && !select.options[currentValue]) {
-      select.addOption({ name: currentValue });  // ⚠️ só funciona se o campo for do tipo "name"
+      select.addOption({ name: currentValue });
       select.setValue(currentValue);
     }
   }
 
-
-  // Tom Select para o campo de tags (múltiplas)
+  // ───── Tom Select para tags (múltiplas) ─────
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
     new TomSelect(tagsInput, {
@@ -115,6 +108,34 @@ document.addEventListener("DOMContentLoaded", () => {
           .then((data) => callback(data))
           .catch(() => callback());
       },
+    });
+  }
+
+  // ───── Formatação dinâmica do campo "amount" ─────
+  const amountInput = document.getElementById("id_amount");
+
+  if (amountInput) {
+    const formatNumber = (value) => {
+      const clean = value.replace(/[^\d,.-]/g, "").replace(",", ".");
+      const num = parseFloat(clean);
+      if (isNaN(num)) return value;  // ⚠️ Mantém o valor original se for inválido
+      return num.toLocaleString("pt-PT", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    };
+
+    amountInput.addEventListener("blur", () => {
+      const formatted = formatNumber(amountInput.value);
+      amountInput.value = formatted;
+    });
+
+    const form = document.getElementById("transaction-form");
+    form.addEventListener("submit", () => {
+      amountInput.value = amountInput.value
+        .replace(/\s/g, "")
+        .replace(/\./g, "")
+        .replace(",", ".");
     });
   }
 });

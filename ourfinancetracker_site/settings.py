@@ -143,6 +143,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 
+
 STATICFILES_DIRS = [BASE_DIR / 'core/static']
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -156,3 +157,33 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "ourfinancetracker-cache",
+    }
+}
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "DEBUG",
+    },
+
+
+}
+
+INSTALLED_APPS += ["debug_toolbar"]
+MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware"] + MIDDLEWARE
+
+INTERNAL_IPS = ["127.0.0.1"]

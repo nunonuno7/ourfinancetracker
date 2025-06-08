@@ -199,19 +199,6 @@ class Category(models.Model):
 
 
 
-@receiver(post_save, sender=User)
-def _create_cash_account(sender, instance: User, created: bool, **kwargs):
-    if created:
-        from django.apps import apps
-        Account = apps.get_model("core", "Account")  # 👈 esta linha estava em falta
-        if not Account.objects.filter(user=instance, name__iexact="Cash").exists():
-            Account.objects.create(
-                user=instance,
-                name="Cash",
-                account_type=get_default_account_type(),
-                currency=getattr(instance.settings, "default_currency", None) or get_default_currency()
-            )
-
 # ---------------------------------------------------------------------------
 # Transactions
 # ---------------------------------------------------------------------------
@@ -452,17 +439,17 @@ class DatePeriod(models.Model):
 
 
 class Tag(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tags")  # 👈 ADICIONADO
     name = models.CharField(max_length=100)
     position = models.PositiveIntegerField(default=0)
 
     class Meta:
+        unique_together = (("user", "name"),)
         ordering = ("position", "name")
         verbose_name_plural = "tags"
 
     def __str__(self):
         return self.name
-
-
 
 
 
