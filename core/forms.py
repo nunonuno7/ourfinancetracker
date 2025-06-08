@@ -40,20 +40,6 @@ from datetime import date
 User = get_user_model()
 
 
-
-class UserAwareMixin:
-    def __init__(
-        self,
-        *args: Any,
-        user: User | None = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        self.user: User | None = user
-
-
-
-
 class TransactionForm(forms.ModelForm):
     category = forms.CharField(
         label="Category",
@@ -111,19 +97,14 @@ class TransactionForm(forms.ModelForm):
         print(f"🔐 User: {self.user}")
 
         self.fields["type"].choices = Transaction.Type.choices
-
-        if not self.instance.pk:
-            print("➕ Novo formulário")
-            self.instance.type = "expense"
-            self.initial.setdefault("type", "expense")
-        else:
-            print(f"✏️ Editar transação #{self.instance.pk}")
-
         self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
 
         if not self.instance.pk:
+            print("➕ Novo formulário")
             today = dt_date.today()
             self.initial.setdefault("date", today)
+            self.initial.setdefault("type", "expense")
+
             period, _ = DatePeriod.objects.get_or_create(
                 year=today.year,
                 month=today.month,
@@ -132,24 +113,22 @@ class TransactionForm(forms.ModelForm):
             self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
             print(f"📅 Data inicial: {today} → Período: {self.initial['period']}")
         else:
+            print(f"✏️ Editar transação #{self.instance.pk}")
             if self.instance.date:
                 self.initial["date"] = self.instance.date
                 print(f"📅 Data carregada: {self.instance.date}")
-
             if self.instance.period:
                 period_str = f"{self.instance.period.year}-{self.instance.period.month:02d}"
                 self.initial["period"] = period_str
                 print(f"📆 Período carregado: {period_str}")
-                print(f"📆 Período carregado: {self.initial['period']}")
-
-        if self.instance.pk:
             if self.instance.category:
-                self.initial.setdefault("category", self.instance.category.name)
-            tags = self.instance.tags.values_list("name", flat=True)
-            self.initial.setdefault("tags_input", ", ".join(tags))
-            print(f"🏷️ Tags carregadas: {self.initial['tags_input']}")
-    
-    
+                self.initial["category"] = self.instance.category.name
+                print(f"📂 Categoria carregada: {self.instance.category.name}")
+            tags_qs = self.instance.tags.all()
+            tag_names = [t.name for t in tags_qs]
+            self.initial["tags_input"] = ", ".join(tag_names)
+            print(f"🏷️ Tags carregadas do objeto: {tag_names}")
+
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]
         print(f"💰 Valor inserido: {amount}")
@@ -207,11 +186,18 @@ class TransactionForm(forms.ModelForm):
             Tag.objects.create(user=self.user, name=name)
             for name in tag_names
         ]
-
         instance.tags.set(tags)
         print(f"🔗 Tags associadas: {[t.name for t in tags]}")
 
         return instance
+
+
+
+
+
+
+
+
 
 
 class CategoryForm(UserAwareMixin, forms.ModelForm):

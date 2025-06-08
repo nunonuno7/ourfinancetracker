@@ -23,15 +23,14 @@
 
         <!-- AMOUNT -->
         <div class="mb-3">
-          <label for="{{ form.amount.id_for_label }}" class="form-label">Amount</label>
+          {{ form.amount.label_tag }}
           {{ form.amount|add_class:"form-control text-end" }}
         </div>
 
-        <!-- DATE (usando flatpickr) -->
+        <!-- DATE -->
         <div class="mb-3">
-          <label for="id_date" class="form-label">Date</label>
-<input type="text" name="date" id="id_date" class="form-control"
-       value="{{ form.initial.date|date:'Y-m-d' }}">
+          {{ form.date.label_tag }}
+          {{ form.date }}
         </div>
 
         <!-- PERIOD -->
@@ -48,34 +47,31 @@
 
         <!-- TYPE -->
         <div class="mb-3">
-          <label for="{{ form.type.id_for_label }}" class="form-label">Type</label>
+          {{ form.type.label_tag }}
           {{ form.type|add_class:"form-select" }}
         </div>
 
         <!-- CATEGORY -->
         <div class="mb-3">
-          <label for="id_category" class="form-label">Category</label>
-          <input type="text" name="category" id="id_category" class="form-control"
-                 value="{{ form.initial.category|default:'' }}" autocomplete="off">
+          {{ form.category.label_tag }}
+          {{ form.category|add_class:"form-control" }}
         </div>
 
         <!-- TAGS -->
         <div class="mb-3">
-          <label for="id_tags_input" class="form-label">Tags</label>
-          <input type="text" name="tags_input" id="id_tags_input" class="form-control"
-                 value="{{ form.initial.tags_input|default:'' }}"
-                 placeholder="e.g. groceries, food, weekend" autocomplete="off">
+          {{ form.tags_input.label_tag }}
+          {{ form.tags_input|add_class:"form-control" }}
         </div>
 
         <!-- ACCOUNT -->
         <div class="mb-3">
-          <label for="{{ form.account.id_for_label }}" class="form-label">Account</label>
+          {{ form.account.label_tag }}
           {{ form.account|add_class:"form-select" }}
         </div>
 
         <!-- NOTES -->
         <div class="mb-3">
-          <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
+          {{ form.notes.label_tag }}
           {{ form.notes|add_class:"form-control" }}
         </div>
 
@@ -102,6 +98,5 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
-
 <script src="{% static 'js/transaction_form.js' %}"></script>
 {% endblock %}

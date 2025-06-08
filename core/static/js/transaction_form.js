@@ -5,12 +5,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
 
-  let fp; // flatpickr instance
+  let fp;
 
-  // ─── Inicializa o flatpickr ───
   if (dateInput) {
     const defaultDate = dateInput.value || new Date().toISOString().split("T")[0];
-
     fp = flatpickr(dateInput, {
       altInput: true,
       altFormat: "d/m/Y",
@@ -30,17 +28,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ─── Quando muda o período, atualizar a data para dia 1 ───
   if (monthSelector && periodInput && fp) {
     monthSelector.addEventListener("change", () => {
       const [year, month] = monthSelector.value.split("-");
       const dateStr = `${year}-${month}-01`;
-      fp.setDate(dateStr, true); // atualiza a data e o campo hidden
+      fp.setDate(dateStr, true);
       periodInput.value = `${year}-${month}`;
     });
   }
 
-  // ─── Botões ‹ e › para navegar mês ───
   function shiftMonth(delta) {
     if (!monthSelector || !fp) return;
     let [year, month] = monthSelector.value.split("-").map(Number);
@@ -58,7 +54,6 @@ document.addEventListener("DOMContentLoaded", () => {
   prevBtn?.addEventListener("click", () => shiftMonth(-1));
   nextBtn?.addEventListener("click", () => shiftMonth(1));
 
-  // ─── Tom Select para categoria ───
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
     const currentValue = categoryInput.value.trim();
@@ -84,9 +79,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ─── Tom Select para tags ───
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
+    const initialTags = tagsInput.value.split(",").map(t => t.trim()).filter(t => t.length > 0);
+
     new TomSelect(tagsInput, {
       plugins: ["remove_button"],
       delimiter: ",",
@@ -96,6 +92,9 @@ document.addEventListener("DOMContentLoaded", () => {
       valueField: "name",
       labelField: "name",
       searchField: "name",
+      preload: true,
+      options: initialTags.map(name => ({ name })),
+      items: initialTags,
       load: (query, callback) => {
         if (!query.length) return callback();
         fetch(`/tags/autocomplete/?q=${encodeURIComponent(query)}`)
@@ -106,7 +105,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ─── Formatador para o campo "amount" ───
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {

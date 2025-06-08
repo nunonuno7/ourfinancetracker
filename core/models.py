@@ -233,7 +233,12 @@ class Transaction(models.Model):
         blank=True,
         related_name="transactions",
     )
-    tags = models.ManyToManyField("Tag", blank=True, related_name="transactions")
+    tags = models.ManyToManyField(
+        "Tag",
+        through="TransactionTag",  # 💡 ligação explícita
+        blank=True,
+        related_name="transactions"
+    )
 
     account = models.ForeignKey(
         Account,
@@ -439,9 +444,19 @@ class DatePeriod(models.Model):
 
 
 class Tag(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tags")  # 👈 ADICIONADO
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tags")
     name = models.CharField(max_length=100)
     position = models.PositiveIntegerField(default=0)
+
+    # 💡 NOVO: ligação opcional à categoria
+    category = models.ForeignKey(
+        "Category",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tags",
+        help_text="(Opcional) Categoria associada a esta tag"
+    )
 
     class Meta:
         unique_together = (("user", "name"),)

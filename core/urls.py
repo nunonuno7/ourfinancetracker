@@ -45,13 +45,6 @@ from .views import (
     period_autocomplete,
 )
 
-# ───────────── Logout por GET (para links diretos ou testes) ─────────────
-class LogoutView(RedirectView):
-    pattern_name = "login"
-
-    def get(self, request, *args, **kwargs):
-        auth_logout(request)
-        return super().get(request, *args, **kwargs)
 
 urlpatterns = [
     # ───────────── Home ─────────────
@@ -102,6 +95,7 @@ urlpatterns = [
 
 
     path("transactions/template-excel/", views.import_transactions_template, name="transaction_import_template"),
+
 
 ]
 

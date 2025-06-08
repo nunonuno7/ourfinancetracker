@@ -10,127 +10,71 @@ The file was rewritten to:
 • add docstrings and type hints for easier maintenance
 • introduce a MergeView for account fusion with confirmation
 """
+
 from __future__ import annotations
-from openpyxl import Workbook
-from django.http import HttpResponse
-from django.db import connection
-from openpyxl import load_workbook
-from calendar import monthrange
-from datetime import date
-from typing import Any, Dict
-from .forms import TransactionImportForm
-import logging
-from django.views.decorators.http import require_POST
-from datetime import datetime
-import pandas as pd
-from django.http import HttpResponse
-from django.db import connection
+
+# Built-in
+import sys
+import json
+import hashlib
 from io import BytesIO
+from calendar import monthrange
+from datetime import date, datetime
+from typing import Any, Dict
+from urllib.parse import urlencode
+
+# 3rd party
+import pandas as pd
+import openpyxl
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
+from psycopg2.extras import execute_values
+
+# Django core
+from django.http import (
+    HttpResponse, JsonResponse, Http404, HttpResponseForbidden
+)
+from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse, reverse_lazy
+from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.cache import cache_page
+from django.utils.cache import patch_vary_headers
+from django.utils.dateparse import parse_date
+from django.utils.functional import cached_property
+from django.utils.timezone import now
 from django.contrib import messages
 from django.contrib.messages import get_messages
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import QuerySet, Sum, F
-from django.http import JsonResponse, Http404, HttpResponseForbidden
-from django.shortcuts import render, redirect, get_object_or_404
-import sys
-from django.urls import reverse_lazy, reverse
-from django.utils.functional import cached_property
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST, require_GET
+from django.core.paginator import Paginator
+from django.core.cache import cache
+from django.db import connection, transaction as db_transaction
+from django.db.models import Q, QuerySet, Sum, F
+
+# Django views
 from django.views.generic import (
     CreateView, DeleteView, ListView, RedirectView, TemplateView,
     UpdateView, View
 )
 
-
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-from django.core.cache import cache
-from hashlib import md5
-from .models import Transaction
-
-from .forms import (
-    AccountBalanceFormSet,
-    AccountForm,
-    CategoryForm,
-    CustomUserCreationForm,
-    TransactionForm,
+# App-specific
+from .models import (
+    Transaction, Account, AccountBalance, Category, Tag, DatePeriod
 )
-from .models import Account, AccountBalance, Category, Transaction, Tag
+from .forms import (
+    TransactionImportForm, TransactionForm, AccountForm,
+    AccountBalanceFormSet, CategoryForm, CustomUserCreationForm
+)
 
+from core.mixins import UserInFormKwargsMixin
 
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-import json
-from .models import Account
-from django.contrib.auth.decorators import login_required
-from .models import DatePeriod
-
-
-from django.http import JsonResponse
-from django.core.paginator import Paginator
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_GET
-
-
-import openpyxl
-from openpyxl.utils import get_column_letter
-from django.http import HttpResponse
-
-import openpyxl
-from django.shortcuts import redirect
-from django.contrib import messages
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
-from .models import Transaction, Category, Tag, Account, DatePeriod
-from django.utils.dateparse import parse_date
-from datetime import date
-from django.db import transaction as db_transaction
-
-from django.contrib import messages
-from django.db import connection, transaction
-from django.utils.dateparse import parse_date
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
-import pandas as pd
-from psycopg2.extras import execute_values
-
-from django.utils.timezone import now
-
-from django.http import JsonResponse
-from django.core.paginator import Paginator
-from django.views.decorators.http import require_GET
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-
-from django.db.models import Q
-from django.http import JsonResponse
-import hashlib
-
-from django.views.decorators.cache import cache_page
-from django.utils.cache import patch_vary_headers
-from django.core.cache import cache
-from django.db.models import Q
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_GET
-from .models import Transaction
-
-from urllib.parse import urlencode
-
-from django.views.generic import CreateView
-from django.urls import reverse_lazy
-from django.shortcuts import redirect
-from django.http import JsonResponse
-from django.contrib.auth.mixins import LoginRequiredMixin
-from .forms import TransactionForm
-from .models import Transaction, Account
 from core.cache import TX_LAST
+
+
+
 
 ################################################################################
 #                               Menu config API                                #
@@ -156,13 +100,7 @@ def menu_config(request):
 ################################################################################
 
 
-class UserInFormKwargsMixin:
-    """Injects the current *request.user* into ModelForm kwargs."""
 
-    def get_form_kwargs(self) -> Dict[str, Any]:  # type: ignore[override]
-        kwargs: Dict[str, Any] = super().get_form_kwargs()  # type: ignore[misc]
-        kwargs["user"] = self.request.user
-        return kwargs
 
 
 class OwnerQuerysetMixin(LoginRequiredMixin):
@@ -196,12 +134,6 @@ class TransactionListView(LoginRequiredMixin, ListView):
         )
 
 
-class UserInFormKwargsMixin:
-    """Injects current user into form via kwargs."""
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
 
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     """
@@ -273,16 +205,17 @@ def parse_safe_date(value, fallback):
             continue
     return fallback
 
-#TX_LAST = {}  # user_id: {"start": ..., "end": ..., "df": DataFrame}
 
 @login_required
 @require_GET
 def transactions_json(request):
-    # ⛔ Silencia logs gigantes
+    # ⛔ Silencia logs gigantescos no terminal
+    import logging
     logging.getLogger("django.server").setLevel(logging.WARNING)
+
     user_id = request.user.id
 
-    # 🗓️ Datas iniciais
+    # 🗓️ Intervalo de datas
     raw_start = request.GET.get("date_start")
     raw_end = request.GET.get("date_end")
     start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
@@ -293,9 +226,9 @@ def transactions_json(request):
 
     print(f"📅 Intervalo: {start_date} → {end_date}")
 
-    # 📥 Apenas faz a query SQL se o intervalo mudou
-    cache = TX_LAST.get(user_id)
-    if not cache or cache["start"] != start_date or cache["end"] != end_date:
+    # 🧠 Verificar cache local (memória)
+    cache_data = TX_LAST.get(user_id, {})
+    if cache_data.get("start") != start_date or cache_data.get("end") != end_date:
         print("📥 SQL QUERY nova")
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -303,7 +236,7 @@ def transactions_json(request):
                        COALESCE(cat.name, '') AS category,
                        COALESCE(acc.name, '') AS account,
                        COALESCE(curr.symbol, '') AS currency,
-                       STRING_AGG(tag.name, ', ') AS tags
+                       COALESCE(STRING_AGG(tag.name, ', '), '') AS tags
                 FROM core_transaction tx
                 LEFT JOIN core_category cat ON tx.category_id = cat.id
                 LEFT JOIN core_account acc ON tx.account_id = acc.id
@@ -324,9 +257,9 @@ def transactions_json(request):
         TX_LAST[user_id] = {"df": df, "start": start_date, "end": end_date}
     else:
         print("✅ A usar o DataFrame anterior em memória")
-        df = TX_LAST[user_id]["df"]
+        df = cache_data.get("df")
 
-    # 🔍 Filtros adicionais
+    # 🧪 Filtros adicionais via GET
     df = df.copy()
     type_ = request.GET.get("type", "").strip()
     category = request.GET.get("category", "").strip()
@@ -344,8 +277,8 @@ def transactions_json(request):
         try:
             y, m = map(int, period.split("-"))
             df = df[(df["year"] == y) & (df["month"] == m)]
-        except:
-            pass
+        except Exception as e:
+            print(f"❌ Erro no filtro por período: {e}")
     if search:
         df = df[
             df["category"].str.contains(search, case=False, na=False) |
@@ -354,20 +287,24 @@ def transactions_json(request):
             df["tags"].str.contains(search, case=False, na=False)
         ]
 
-    # 🧾 Formatação
+    # 🧾 Formatar colunas
     df["date"] = df["date"].astype(str)
     df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
     df["amount"] = df.apply(lambda r: f"{r['amount']:.2f} {r['currency']}".strip(), axis=1)
 
+    # 🏷️ Formatar tags como badges HTML
     def format_tags(raw):
-        if not raw:
+        if not raw or not isinstance(raw, str):
             return "–"
         tags = [t.strip() for t in raw.split(",") if t.strip()]
+        if not tags:
+            return "–"
         return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags)
 
-    df["tags"] = df["tags"].apply(format_tags)
+    df["tags"] = df["tags"].astype(str).apply(format_tags)
 
+    # ⚙️ Ações (Editar / Apagar)
     csrf = request.COOKIES.get("csrftoken", "")
     df["actions"] = df.apply(lambda r: f"""
         <div class='d-flex gap-2 justify-content-center'>
@@ -379,14 +316,16 @@ def transactions_json(request):
         </div>
     """, axis=1)
 
-    # 📄 Paginação
+    # 📄 Paginação para DataTables
     draw = int(request.GET.get("draw", "1"))
     start = int(request.GET.get("start", "0"))
     length = int(request.GET.get("length", "10"))
     total = len(df)
 
     df_page = df.iloc[start:start + length]
-    data = df_page[["period", "date", "type", "amount", "category", "tags", "account", "actions"]].to_dict(orient="records")
+    data = df_page[[
+        "period", "date", "type", "amount", "category", "tags", "account", "actions"
+    ]].to_dict(orient="records")
 
     return JsonResponse({
         "draw": draw,
@@ -394,12 +333,22 @@ def transactions_json(request):
         "recordsFiltered": total,
         "data": data
     })
+
+
+
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
     success_url = reverse_lazy("transaction_list")
 
+    def get_queryset(self):
+        # 🔁 Garante que as tags são carregadas com a transação (ManyToMany)
+        return super().get_queryset().prefetch_related("tags")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Transação atualizada com sucesso!")
+        return super().form_valid(form)
 
 class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
     model = Transaction
@@ -603,20 +552,22 @@ class AccountMergeView(OwnerQuerysetMixin, View):
 
 @login_required
 def account_balance_view(request):
+    # Limpa mensagens anteriores (ex: "Saldo guardado com sucesso")
     list(get_messages(request))
+
+    # 🗓️ Determinar o mês/ano selecionado
     today = date.today()
     year = int(request.GET.get("year", today.year))
     month = int(request.GET.get("month", today.month))
 
-    if request.method == "GET":
-        list(get_messages(request))
-
+    # 🔁 Obter ou criar o período correspondente
     period, _ = DatePeriod.objects.get_or_create(
         year=year,
         month=month,
         defaults={"label": date(year, month, 1).strftime("%B %Y")},
     )
 
+    # 📥 Query base dos saldos do utilizador nesse período
     qs_base = AccountBalance.objects.filter(
         account__user=request.user,
         period=period
@@ -633,18 +584,13 @@ def account_balance_view(request):
                     continue
 
                 inst = form.save(commit=False)
-
-                period, _ = DatePeriod.objects.get_or_create(
-                    year=year,
-                    month=month,
-                    defaults={"label": date(year, month, 1).strftime("%B %Y")},
-                )
-                inst.period = period
+                inst.period = period  # 🧠 já tínhamos o período acima
 
                 if inst.account.user_id is None:
                     inst.account.user = request.user
                     inst.account.save()
 
+                # Atualiza se já existir saldo para essa conta/período
                 existing = AccountBalance.objects.filter(
                     account=inst.account,
                     period=period,
@@ -656,7 +602,7 @@ def account_balance_view(request):
                 else:
                     inst.save()
 
-     
+            # 🔄 Fundir contas duplicadas (por nome)
             _merge_duplicate_accounts(request.user)
 
             messages.success(request, "Balances saved!")
@@ -666,7 +612,7 @@ def account_balance_view(request):
     else:
         formset = AccountBalanceFormSet(queryset=qs_base, user=request.user)
 
-    # 🔄 Agrupar e calcular totais
+    # 🧮 Agrupar saldos por tipo/moeda e calcular totais
     grouped_forms = {}
     totals_by_group = {}
     grand_total = 0
@@ -681,18 +627,18 @@ def account_balance_view(request):
         totals_by_group[key] = subtotal
         grand_total += subtotal
 
+    # 📦 Enviar dados para o template
     context = {
         "formset": formset,
         "grouped_forms": grouped_forms,
-        "totals_by_group": totals_by_group,  # 👈 para subtotais no template
-        "grand_total": grand_total,          # 👈 para total global no fim
+        "totals_by_group": totals_by_group,
+        "grand_total": grand_total,
         "year": year,
         "month": month,
         "selected_month": date(year, month, 1),
     }
 
     return render(request, "core/account_balance.html", context)
-
 
 def _merge_duplicate_accounts(user):
     seen = {}
@@ -846,9 +792,8 @@ def category_autocomplete(request):
 @login_required
 def tag_autocomplete(request):
     q = request.GET.get("q", "")
-    results = Tag.objects.filter(name__icontains=q).order_by("name")
+    results = Tag.objects.filter(user=request.user, name__icontains=q).order_by("name")
     return JsonResponse([{"name": t.name} for t in results], safe=False)
-
 
 
 @login_required
@@ -860,19 +805,22 @@ def export_transactions_xlsx(request):
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT
-              t.date AS Date,
-              t.type AS Type,
-              t.amount AS Amount,
-              COALESCE(c.name, '') AS Category,
-              STRING_AGG(tag.name, ', ') AS Tags,
-              COALESCE(a.name, '') AS Account,
-              CONCAT(p.year, '-', LPAD(p.month::text, 2, '0')) AS Period
+            t.date AS Date,
+            t.type AS Type,
+            t.amount AS Amount,
+            COALESCE(c.name, '') AS Category,
+            (
+                SELECT STRING_AGG(tg.name, ', ')
+                FROM core_transaction_tags tt
+                JOIN core_tag tg ON tg.id = tt.tag_id
+                WHERE tt.transaction_id = t.id
+            ) AS Tags,
+            COALESCE(a.name, '') AS Account,
+            CONCAT(p.year, '-', LPAD(p.month::text, 2, '0')) AS Period
             FROM core_transaction t
             LEFT JOIN core_category c ON t.category_id = c.id
             LEFT JOIN core_account a ON t.account_id = a.id
             LEFT JOIN core_dateperiod p ON t.period_id = p.id
-            LEFT JOIN core_transaction_tags tt ON t.id = tt.transaction_id
-            LEFT JOIN core_tag tag ON tag.id = tt.tag_id
             WHERE t.user_id = %s
             GROUP BY t.id, t.date, t.type, t.amount, c.name, a.name, p.year, p.month
             ORDER BY t.date DESC
@@ -884,7 +832,7 @@ def export_transactions_xlsx(request):
 
     # ⚙️ Criar DataFrame e exportar para Excel
     df = pd.DataFrame(rows, columns=columns)
-    print("📄 DataFrame criado com sucesso", flush=True)
+    #print("📄 DataFrame criado com sucesso", flush=True)
 
     buffer = BytesIO()
     df.to_excel(buffer, index=False, sheet_name="Transações")
@@ -901,7 +849,6 @@ def export_transactions_xlsx(request):
 
 
 @login_required
-
 def import_transactions_xlsx(request):
     if request.method == "GET":
         print("🧾 [GET] A mostrar formulário de importação")
@@ -932,33 +879,38 @@ def import_transactions_xlsx(request):
         timestamp = now()
         print(f"📌 Timestamp para created_at/updated_at: {timestamp}")
 
-        with connection.cursor() as cursor, transaction.atomic():
+        with connection.cursor() as cursor, db_transaction.atomic():
             cursor.execute("SELECT id FROM core_accounttype WHERE name ILIKE 'Savings' LIMIT 1")
             row = cursor.fetchone()
             if not row:
                 raise Exception("Tipo de conta 'Savings' não existe.")
             default_account_type_id = row[0]
 
+            # Preparar dados
             for idx, row in df.iterrows():
-                date = parse_date(str(row["Date"]))
-                if not date:
-                    print(f"⚠️ Linha {idx+1} ignorada: data inválida")
+                print(f"🔎 Linha {idx + 1}")
+
+                date_val = parse_date(str(row["Date"]))
+                if not date_val:
+                    print(f"⚠️ Linha {idx + 1} ignorada: data inválida")
                     continue
 
                 # Período
-                key_period = (date.year, date.month)
+                key_period = (date_val.year, date_val.month)
                 if key_period not in periods_cache:
                     cursor.execute("""
                         INSERT INTO core_dateperiod (year, month, label)
                         VALUES (%s, %s, %s)
                         ON CONFLICT (year, month) DO NOTHING
                         RETURNING id
-                    """, [date.year, date.month, date.strftime("%B %Y")])
+                    """, [date_val.year, date_val.month, date_val.strftime("%B %Y")])
                     row_period = cursor.fetchone()
                     if not row_period:
                         cursor.execute("SELECT id FROM core_dateperiod WHERE year = %s AND month = %s", key_period)
                         row_period = cursor.fetchone()
                     periods_cache[key_period] = row_period[0]
+                    print(f"⏳ Novo período cache: {periods_cache[key_period]}")
+
                 period_id = periods_cache[key_period]
 
                 # Categoria
@@ -975,6 +927,8 @@ def import_transactions_xlsx(request):
                         cursor.execute("SELECT id FROM core_category WHERE user_id = %s AND name = %s", [user_id, cat_name])
                         row_cat = cursor.fetchone()
                     category_cache[cat_name] = row_cat[0]
+                    print(f"📂 Nova categoria cache: {cat_name} ({category_cache[cat_name]})")
+
                 category_id = category_cache[cat_name]
 
                 # Conta
@@ -991,51 +945,72 @@ def import_transactions_xlsx(request):
                         cursor.execute("SELECT id FROM core_account WHERE user_id = %s AND name = %s", [user_id, acc_name])
                         row_acc = cursor.fetchone()
                     account_cache[acc_name] = row_acc[0]
+                    print(f"🏦 Nova conta cache: {acc_name} ({account_cache[acc_name]})")
+
                 account_id = account_cache[acc_name]
 
                 # Transação
                 transactions.append((
-                    user_id, date, row["Amount"], row["Type"], period_id,
+                    user_id, date_val, row["Amount"], row["Type"], period_id,
                     category_id, account_id, "", False, True,
                     timestamp, timestamp
                 ))
 
                 # Tags associadas a esta transação
                 raw_tags = str(row.get("Tags", "")).split(",")
-                for tag in [t.strip() for t in raw_tags if t.strip()]:
+                tags_cleaned = [t.strip() for t in raw_tags if t.strip()]
+                print(f"🏷 Tags da linha {idx + 1}: {tags_cleaned}")
+                for tag in tags_cleaned:
                     tag_links.append((len(transactions) - 1, tag))
 
             print(f"📝 Transações preparadas: {len(transactions)}")
-            print(f"🏷 Tags identificadas: {len(tag_links)}")
+            print(f"🏷 Total tags identificadas: {len(tag_links)}")
 
-            # Inserir transações
-            execute_values(cursor, """
-                INSERT INTO core_transaction
-                (user_id, date, amount, type, period_id, category_id, account_id,
-                 notes, is_estimated, is_cleared, created_at, updated_at)
-                VALUES %s
-                RETURNING id
-            """, transactions)
-            transaction_ids = [row[0] for row in cursor.fetchall()]
-            print(f"✅ Inseridas {len(transaction_ids)} transações")
+            # Inserir transações em chunks de 100
+            def chunked(iterable, size=100):
+                for i in range(0, len(iterable), size):
+                    yield iterable[i:i + size]
 
-            # Criar/obter Tags
+            transaction_ids = []
+            for chunk in chunked(transactions, 100):
+                execute_values(cursor, """
+                    INSERT INTO core_transaction
+                    (user_id, date, amount, type, period_id, category_id, account_id,
+                     notes, is_estimated, is_cleared, created_at, updated_at)
+                    VALUES %s
+                    RETURNING id
+                """, chunk)
+                returned_ids = cursor.fetchall()
+                transaction_ids.extend([row[0] for row in returned_ids])
+                print(f"✅ Inseridas {len(returned_ids)} transações neste chunk")
+
+            print(f"✅ Total inseridas: {len(transaction_ids)}")
+
+            # Criar/obter Tags associados ao user
             all_tag_names = sorted(set(tag for _, tag in tag_links))
+            print(f"🏷 Tags para procurar no banco: {all_tag_names[:10]}...")
+
             if all_tag_names:
-                cursor.execute("SELECT id, name FROM core_tag WHERE name = ANY(%s)", [all_tag_names])
+                cursor.execute(
+                    "SELECT id, name FROM core_tag WHERE name = ANY(%s) AND user_id = %s",
+                    [all_tag_names, user_id]
+                )
                 for tag_id, tag_name in cursor.fetchall():
                     tag_cache[tag_name] = tag_id
 
                 missing = [name for name in all_tag_names if name not in tag_cache]
                 if missing:
                     execute_values(cursor, """
-                        INSERT INTO core_tag (name, position)
+                        INSERT INTO core_tag (user_id, name, position)
                         VALUES %s
                         RETURNING id, name
-                    """, [(name, 0) for name in missing])
+                    """, [(user_id, name, 0) for name in missing])
                     for tag_id, tag_name in cursor.fetchall():
                         tag_cache[tag_name] = tag_id
                     print(f"➕ Criadas {len(missing)} novas tags")
+
+            print(f"✅ Todas as tags já existem")
+            print(f"🏷 Tags no cache para associação: {len(tag_cache)}")
 
             # Associar Tags às transações (com segurança)
             links = []
@@ -1063,10 +1038,9 @@ def import_transactions_xlsx(request):
     return redirect("transaction_list")
 
 
-
-
 @login_required
 def import_transactions_template(request):
+    
     # Cabeçalhos da tabela
     columns = ["Date", "Type", "Amount", "Category", "Tags", "Account"]
     df = pd.DataFrame(columns=columns)
@@ -1085,3 +1059,6 @@ def import_transactions_template(request):
     )
     response["Content-Disposition"] = 'attachment; filename="transactions_template.xlsx"'
     return response
+
+
+

@@ -67,8 +67,8 @@ $(document).ready(function () {
       { data: 'category', defaultContent: '–' },
       {
         data: 'tags',
-        render: function (data) {
-          return typeof data === 'string' ? data : '–';
+        render: function (data, type, row, meta) {
+          return data || '–';
         }
       },
       { data: 'account', defaultContent: '–' },
