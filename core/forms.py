@@ -24,6 +24,7 @@ from .models import (
 User = get_user_model()
 
 class TransactionForm(forms.ModelForm):
+    # Campo de texto livre para categorias, usado com Tom Select (1 item máx.)
     category = forms.CharField(
         label="Category",
         required=False,
@@ -33,6 +34,7 @@ class TransactionForm(forms.ModelForm):
         }),
     )
 
+    # Campo de texto livre para tags, separado por vírgulas
     tags_input = forms.CharField(
         label="Tags",
         required=False,
@@ -43,18 +45,14 @@ class TransactionForm(forms.ModelForm):
         }),
     )
 
+    # Hidden input sincronizado com flatpickr
     period = forms.CharField(widget=forms.HiddenInput())
 
     class Meta:
         model = Transaction
         fields = [
-            "amount",
-            "date",
-            "period",
-            "type",
-            "account",
-            "notes",
-            "is_cleared",
+            "amount", "date", "period", "type",
+            "account", "notes", "is_cleared"
         ]
         widgets = {
             "amount": forms.TextInput(attrs={
@@ -62,10 +60,7 @@ class TransactionForm(forms.ModelForm):
                 "inputmode": "decimal",
                 "autocomplete": "off"
             }),
-            "date": forms.TextInput(attrs={
-                "class": "form-control",
-                "autocomplete": "off"
-            }),
+            "date": forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
             "type": forms.Select(attrs={"class": "form-select"}),
             "account": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
@@ -78,86 +73,61 @@ class TransactionForm(forms.ModelForm):
         self.user = user
         print(f"🔐 User: {self.user}")
 
-        # ⚙️ Preenche choices e querysets
+        # Carregar opções dependentes do utilizador
         self.fields["type"].choices = Transaction.Type.choices
-        self.fields["account"].queryset = Account.objects.filter(user=self.user).order_by("name")
+        self.fields["account"].queryset = Account.objects.filter(user=user).order_by("name")
 
-        # 🧠 Sugestões de categorias existentes (para o Tom Select via data attribute)
-        categories = Category.objects.filter(user=self.user).order_by("name").values_list("name", flat=True)
+        # Sugerir categorias existentes no atributo data para JS
+        categories = Category.objects.filter(user=user).order_by("name").values_list("name", flat=True)
         self.fields["category"].widget.attrs["data-category-list"] = ",".join(categories)
 
-        # ⚙️ NOVA transação → valores iniciais
         if not self.instance.pk:
-            print("➕ Novo formulário")
+            # NOVA transação
             today = dt_date.today()
             self.initial.setdefault("date", today)
-            self.initial.setdefault("type", "EX")  # 💸 Default visual e funcional
-
+            self.initial.setdefault("type", "EX")
             period, _ = DatePeriod.objects.get_or_create(
                 year=today.year,
                 month=today.month,
                 defaults={"label": today.strftime("%B %Y")},
             )
             self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
-            print(f"📅 Data inicial: {today} → Período: {self.initial['period']}")
-
-        # ✏️ EDITAR transação → carregar dados do objeto
         else:
-            print(f"✏️ Editar transação #{self.instance.pk}")
+            # EDIÇÃO
             if self.instance.date:
                 self.initial["date"] = self.instance.date
-                print(f"📅 Data carregada: {self.instance.date}")
             if self.instance.type:
                 self.initial["type"] = self.instance.type
-                print(f"💳 Tipo carregado: {self.instance.type}")
             if self.instance.period:
-                period_str = f"{self.instance.period.year}-{self.instance.period.month:02d}"
-                self.initial["period"] = period_str
-                print(f"📆 Período carregado: {period_str}")
+                self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
             if self.instance.category:
                 self.initial["category"] = self.instance.category.name
-                print(f"📂 Categoria carregada: {self.instance.category.name}")
             tag_names = [t.name for t in self.instance.tags.all()]
             self.initial["tags_input"] = ", ".join(tag_names)
-            print(f"🏷️ Tags carregadas: {tag_names}")
-
-
-
 
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]
-        print(f"💰 Valor inserido: {amount}")
         if amount == 0:
             raise ValidationError("Amount cannot be zero.")
         return amount
 
     def clean(self):
-        print("🧽 TransactionForm.clean()")
         cleaned = super().clean()
-
-        tipo = cleaned.get("type")  # EX, IN, IV, TR
-        print(f"🔍 Tipo de transação: {tipo}")
-
-        # 🧠 Categoria
+        tipo = cleaned.get("type")
         category_name = (cleaned.get("category") or "").strip()
-        
+
         if tipo == "TR":
-            print("🔁 Transferência → ignorar categoria e tags")
             cleaned["category"] = None
-            self.cleaned_data["tags_input"] = ""  # opcionalmente limpar tags
+            self.cleaned_data["tags_input"] = ""
         elif category_name:
-            print(f"📂 Categoria recebida: {category_name}")
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
             if not category:
-                print(f"🆕 Criar nova categoria: {category_name}")
                 category = Category.objects.create(user=self.user, name=category_name)
             cleaned["category"] = category
         else:
-            print("⚠️ Categoria em branco → erro")
             self.add_error("category", "You must provide a category.")
             cleaned["category"] = None
 
-        # 🗓️ Período
         period_str = self.data.get("period", "").strip()
         if period_str:
             try:
@@ -168,37 +138,28 @@ class TransactionForm(forms.ModelForm):
                     defaults={"label": dt.strftime("%B %Y")},
                 )
                 cleaned["period"] = period
-                print(f"📦 Período processado: {period}")
             except ValueError:
                 raise ValidationError("Invalid period format (expected YYYY-MM).")
 
         return cleaned
 
     def save(self, commit=True) -> Transaction:
-        print("💾 TransactionForm.save()")
         instance = super().save(commit=False)
         instance.user = self.user
         instance.category = self.cleaned_data.get("category", instance.category)
 
         if commit:
             instance.save()
-            print(f"✅ Transação guardada: #{instance.pk}")
 
-        # 🏷️ Tags: associar ao utilizador
+        # Guardar tags
         tag_names = [t.strip() for t in self.cleaned_data.get("tags_input", "").split(",") if t.strip()]
-        print(f"🏷️ Tags recebidas: {tag_names}")
         tags = [
             Tag.objects.filter(user=self.user, name=name).first() or
             Tag.objects.create(user=self.user, name=name)
             for name in tag_names
         ]
         instance.tags.set(tags)
-        print(f"🔗 Tags associadas: {[t.name for t in tags]}")
-
         return instance
-
-
-
 
 
 

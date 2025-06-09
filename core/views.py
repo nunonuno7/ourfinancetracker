@@ -867,16 +867,26 @@ from django.contrib.auth.decorators import login_required
 
 @login_required
 def category_autocomplete(request):
-    q = request.GET.get("q", "")
-    user = request.user
-    results = Category.objects.filter(user=user, name__icontains=q).order_by("name")
-    return JsonResponse([{"name": c.name} for c in results], safe=False)
+    """Autocomplete de categorias filtradas por utilizador."""
+    q = request.GET.get("q", "").strip()
+    results = Category.objects.filter(
+        user=request.user,
+        name__icontains=q
+    ).order_by("name")
+
+    data = [{"name": c.name} for c in results]
+    return JsonResponse(data, safe=False)
 
 @login_required
 def tag_autocomplete(request):
-    q = request.GET.get("q", "")
-    results = Tag.objects.filter(user=request.user, name__icontains=q).order_by("name")
-    return JsonResponse([{"name": t.name} for t in results], safe=False)
+    """Autocomplete de tags globais do utilizador."""
+    q = request.GET.get("q", "").strip()
+    results = Tag.objects.filter(
+        user=request.user,
+        name__icontains=q
+    ).order_by("name").values("name").distinct()
+
+    return JsonResponse(list(results), safe=False)
 
 
 @login_required
