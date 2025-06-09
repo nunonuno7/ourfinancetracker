@@ -1,3 +1,8 @@
+// transaction_form.js (versão oficial completa)
+
+document.addEventListener("DOMContentLoaded", initTransactionForm);
+document.body.addEventListener("htmx:afterSwap", initTransactionForm);
+
 function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
   const periodInput = document.getElementById("id_period");
@@ -5,72 +10,71 @@ function initTransactionForm() {
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
 
-  // Destrói instância flatpickr anterior (se existir)
-  if (dateInput && dateInput._flatpickr) {
-    dateInput._flatpickr.destroy();
+  if (!dateInput || !periodInput || !monthSelector) return;
+
+  // 📅 Inicializar data com hoje se estiver vazia
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+  if (!dateInput.value) {
+    dateInput.value = todayStr;
   }
 
-  let fp;
+  // 📅 Flatpickr + sincronização com período
+  if (dateInput._flatpickr) dateInput._flatpickr.destroy();
+  flatpickr(dateInput, {
+    dateFormat: "Y-m-d",
+    defaultDate: dateInput.value,
+    altInput: true,
+    altFormat: "d/m/Y",
+    allowInput: true,
+    onChange: function ([selected]) {
+      if (!selected) return;
+      const year = selected.getFullYear();
+      const month = String(selected.getMonth() + 1).padStart(2, "0");
+      const period = `${year}-${month}`;
+      monthSelector.value = period;
+      periodInput.value = period;
+    },
+  });
 
-  if (dateInput) {
-    const defaultDate = dateInput.value || new Date().toISOString().split("T")[0];
-    fp = flatpickr(dateInput, {
-      altInput: true,
-      altFormat: "d/m/Y",
-      dateFormat: "Y-m-d",
-      defaultDate,
-      locale: "en",
-      allowInput: true,
-      onChange: ([selected]) => {
-        if (selected) {
-          const y = selected.getFullYear();
-          const m = String(selected.getMonth() + 1).padStart(2, "0");
-          const period = `${y}-${m}`;
-          if (monthSelector) monthSelector.value = period;
-          if (periodInput) periodInput.value = period;
-        }
-      }
-    });
+  // 📆 Alterar manualmente o período
+  monthSelector.addEventListener("change", () => {
+    const [year, month] = monthSelector.value.split("-");
+    const newDate = `${year}-${month}-01`;
+    dateInput.value = newDate;
+    periodInput.value = `${year}-${month}`;
+    if (dateInput._flatpickr) {
+      dateInput._flatpickr.setDate(newDate, true);
+    }
+  });
+
+  // ⬅➡ Botões anterior e seguinte
+  prevBtn?.addEventListener("click", () => changeMonth(-1));
+  nextBtn?.addEventListener("click", () => changeMonth(1));
+
+  function changeMonth(delta) {
+    const [year, month] = monthSelector.value.split("-").map(Number);
+    const newDate = new Date(year, month - 1 + delta, 1);
+    const newYear = newDate.getFullYear();
+    const newMonth = String(newDate.getMonth() + 1).padStart(2, "0");
+    const period = `${newYear}-${newMonth}`;
+    const dateStr = `${period}-01`;
+
+    monthSelector.value = period;
+    periodInput.value = period;
+    dateInput.value = dateStr;
+    if (dateInput._flatpickr) {
+      dateInput._flatpickr.setDate(dateStr, true);
+    }
   }
 
-  if (monthSelector && periodInput && fp) {
-    // Remove handlers antigos substituindo elementos
-    monthSelector.replaceWith(monthSelector.cloneNode(true));
-    const newMonthSelector = document.getElementById("period-selector");
-    newMonthSelector.addEventListener("change", () => {
-      const [year, month] = newMonthSelector.value.split("-");
-      const dateStr = `${year}-${month}-01`;
-      fp.setDate(dateStr, true);
-      periodInput.value = `${year}-${month}`;
-    });
-
-    prevBtn?.replaceWith(prevBtn.cloneNode(true));
-    document.getElementById("prev-month").addEventListener("click", () => shiftMonth(-1));
-
-    nextBtn?.replaceWith(nextBtn.cloneNode(true));
-    document.getElementById("next-month").addEventListener("click", () => shiftMonth(1));
-  }
-
-  function shiftMonth(delta) {
-    if (!monthSelector || !fp) return;
-    let [year, month] = monthSelector.value.split("-").map(Number);
-    month += delta;
-    if (month > 12) { month = 1; year++; }
-    if (month < 1) { month = 12; year--; }
-    const newMonth = String(month).padStart(2, "0");
-    const newPeriod = `${year}-${newMonth}`;
-    monthSelector.value = newPeriod;
-    const newDate = `${year}-${newMonth}-01`;
-    fp.setDate(newDate, true);
-    periodInput.value = newPeriod;
-  }
-
-  // Tom Select categoria
+  // 🏷️ Tom Select: Categoria
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
     if (categoryInput.tomselect) {
       categoryInput.tomselect.destroy();
     }
+
     const rawList = categoryInput.dataset.categoryList || "";
     const options = rawList
       .split(",")
@@ -88,12 +92,13 @@ function initTransactionForm() {
     });
   }
 
-  // Tom Select tags
+  // 🏷️ Tom Select: Tags
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
     if (tagsInput.tomselect) {
       tagsInput.tomselect.destroy();
     }
+
     const initialTags = tagsInput.value
       .split(",")
       .map(t => t.trim())
@@ -121,7 +126,7 @@ function initTransactionForm() {
     });
   }
 
-  // Formata o campo amount
+  // 💰 Formatar campo amount
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {
@@ -136,8 +141,7 @@ function initTransactionForm() {
     };
 
     amountInput.addEventListener("blur", () => {
-      const formatted = formatNumber(amountInput.value);
-      amountInput.value = formatted;
+      amountInput.value = formatNumber(amountInput.value);
     });
 
     const form = document.getElementById("transaction-form");
@@ -149,13 +153,3 @@ function initTransactionForm() {
     });
   }
 }
-
-// Inicializa na primeira carga da página
-document.addEventListener("DOMContentLoaded", initTransactionForm);
-
-// Inicializa após cada swap do HTMX no formulário
-document.body.addEventListener("htmx:afterSwap", (event) => {
-  if (event.detail.target.id === "transaction-form") {
-    initTransactionForm();
-  }
-});

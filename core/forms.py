@@ -60,7 +60,11 @@ class TransactionForm(forms.ModelForm):
                 "inputmode": "decimal",
                 "autocomplete": "off"
             }),
-            "date": forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+            "date": forms.DateInput(attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+                "id": "id_date",  # <- adicionado manualmente
+            }),
             "type": forms.Select(attrs={"class": "form-select"}),
             "account": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),

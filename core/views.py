@@ -53,6 +53,9 @@ from django.core.paginator import Paginator
 from django.core.cache import cache
 from django.db import connection, transaction as db_transaction
 from django.db.models import Q, QuerySet, Sum, F
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+
 
 
 # Django views
@@ -134,7 +137,7 @@ class TransactionListView(LoginRequiredMixin, ListView):
             .order_by("-date")
         )
 
-
+@method_decorator(cache_page(60 * 5), name='dispatch')
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     model = Transaction
     form_class = TransactionForm
