@@ -192,12 +192,11 @@ def period_autocomplete(request):
 
 
 @login_required
-def clear_transaction_cache(request):
-    if user_id := request.user.id:
-        TX_LAST.pop(user_id, None)
-        messages.success(request, "✅ Cache cleared. Data will be reloaded.")
+def transaction_clear_cache(request):
+    user_id = request.user.id
+    TX_LAST.pop(user_id, None)
+    messages.success(request, "✅ Cache limpa. Os dados serão recarregados.")
     return redirect("transaction_list")
- 
 
 def parse_safe_date(value, fallback):
     """Tenta converter uma string para date com múltiplos formatos."""
@@ -218,7 +217,6 @@ def transactions_json(request):
     from core.cache import TX_LAST
 
     logging.getLogger("django.server").setLevel(logging.WARNING)
-
     user_id = request.user.id
 
     # 🗓️ Datas de início e fim
@@ -232,14 +230,20 @@ def transactions_json(request):
 
     print(f"📅 Intervalo: {start_date} → {end_date}")
 
-    # 🧠 Verifica cache local (sem ordenação)
+    # 🧠 Verifica cache local
+
     cache_data = TX_LAST.get(user_id, {})
-    if cache_data.get("start") == start_date and cache_data.get("end") == end_date:
+    cached_start = cache_data.get("start")
+    cached_end = cache_data.get("end")
+
+    if cached_start and cached_end and cached_start <= start_date and cached_end >= end_date:
         print("✅ Cache usada — a aplicar filtros e ordenação em memória")
         df = cache_data["df"].copy()
     else:
         print("📅 Query SQL nova (cache vazia ou expirada)")
 
+
+        print("📅 Query SQL nova (cache vazia ou expirada)")
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
@@ -259,7 +263,6 @@ def transactions_json(request):
                          cat.name, acc.name, curr.symbol
                 ORDER BY tx.id
             """, [user_id, start_date, end_date])
-
             rows = cursor.fetchall()
 
         df = pd.DataFrame(rows, columns=[
@@ -268,48 +271,74 @@ def transactions_json(request):
         ])
         TX_LAST[user_id] = {"df": df.copy(), "start": start_date, "end": end_date}
 
-    # 🧪 Filtros adicionais
-    if t := request.GET.get("type", "").strip():
-        df = df[df["type"] == t]
-    if cat := request.GET.get("category", "").strip():
-        df = df[df["category"].str.contains(cat, case=False, na=False)]
-    if acc := request.GET.get("account", "").strip():
-        df = df[df["account"].str.contains(acc, case=False, na=False)]
-    if per := request.GET.get("period", "").strip():
-        try:
-            y, m = map(int, per.split("-"))
-            df = df[(df["year"] == y) & (df["month"] == m)]
-        except Exception as e:
-            print(f"❌ Erro no filtro por período: {e}")
-    if s := request.GET.get("search[value]", "").strip():
-        df = df[
-            df["category"].str.contains(s, case=False, na=False) |
-            df["account"].str.contains(s, case=False, na=False) |
-            df["type"].str.contains(s, case=False, na=False) |
-            df["tags"].str.contains(s, case=False, na=False)
-        ]
-
-    # 🧠 Criar colunas derivadas antes da ordenação
+    # 🧠 Preparar colunas
     df["date"] = df["date"].astype(str)
     df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
     df["amount_float"] = df["amount"].astype(float)
 
+    # 📊 Cópias para cada filtro (excluindo ele próprio)
+    df_for_type = df.copy()
+    df_for_category = df.copy()
+    df_for_account = df.copy()
+    df_for_period = df.copy()
+
+    # 🪟 Filtros recebidos
+    tx_type = request.GET.get("type", "").strip()
+    category = request.GET.get("category", "").strip()
+    account = request.GET.get("account", "").strip()
+    period = request.GET.get("period", "").strip()
+    search = request.GET.get("search[value]", "").strip()
+
+    if tx_type:
+        df = df[df["type"] == tx_type]
+        df_for_category = df_for_category[df_for_category["type"] == tx_type]
+        df_for_account = df_for_account[df_for_account["type"] == tx_type]
+        df_for_period = df_for_period[df_for_period["type"] == tx_type]
+
+    if category:
+        df = df[df["category"].str.contains(category, case=False, na=False)]
+        df_for_type = df_for_type[df_for_type["category"].str.contains(category, case=False, na=False)]
+        df_for_account = df_for_account[df_for_account["category"].str.contains(category, case=False, na=False)]
+        df_for_period = df_for_period[df_for_period["category"].str.contains(category, case=False, na=False)]
+
+    if account:
+        df = df[df["account"].str.contains(account, case=False, na=False)]
+        df_for_type = df_for_type[df_for_type["account"].str.contains(account, case=False, na=False)]
+        df_for_category = df_for_category[df_for_category["account"].str.contains(account, case=False, na=False)]
+        df_for_period = df_for_period[df_for_period["account"].str.contains(account, case=False, na=False)]
+
+    if period:
+        try:
+            y, m = map(int, period.split("-"))
+            df = df[(df["year"] == y) & (df["month"] == m)]
+            df_for_type = df_for_type[(df_for_type["year"] == y) & (df_for_type["month"] == m)]
+            df_for_category = df_for_category[(df_for_category["year"] == y) & (df_for_category["month"] == m)]
+            df_for_account = df_for_account[(df_for_account["year"] == y) & (df_for_account["month"] == m)]
+        except Exception as e:
+            print(f"❌ Erro no filtro por período: {e}")
+
+    if search:
+        df = df[
+            df["category"].str.contains(search, case=False, na=False) |
+            df["account"].str.contains(search, case=False, na=False) |
+            df["type"].str.contains(search, case=False, na=False) |
+            df["tags"].str.contains(search, case=False, na=False)
+    ]
+    # 🔢 Categorias e períodos com base nos dados visíveis (sem filtro próprio)
+    unique_types = sorted(df_for_type["type"].dropna().unique())
+    unique_categories = sorted(df_for_category["category"].dropna().unique())
+    unique_accounts = sorted(df_for_account["account"].dropna().unique())
+    available_periods = sorted(df_for_period["period"].dropna().unique(), reverse=True)
+
     # 🔄 Ordenação
     order_col = request.GET.get("order[0][column]", "1")
     order_dir = request.GET.get("order[0][dir]", "desc")
     ascending = order_dir != "desc"
-
     column_map = {
-        "0": "period",
-        "1": "date",
-        "2": "type",
-        "3": "amount_float",
-        "4": "category",
-        "5": "tags",
-        "6": "account",
+        "0": "period", "1": "date", "2": "type",
+        "3": "amount_float", "4": "category", "5": "tags", "6": "account"
     }
-
     sort_col = column_map.get(order_col, "date")
     if sort_col in df.columns:
         try:
@@ -317,31 +346,30 @@ def transactions_json(request):
         except Exception as e:
             print(f"⚠️ Erro ao ordenar por {sort_col}: {e}")
 
-    # 📃 Formatar colunas finais
+    # 💶 Formatar montante
     df["amount"] = df.apply(lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" {r['currency']}", axis=1)
 
+    # 🏷️ Formatar tags HTML
     def format_tags(raw):
         if not raw or not isinstance(raw, str): return "–"
         tags = [t.strip() for t in raw.split(",") if t.strip()]
         return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags) if tags else "–"
-
     df["tags"] = df["tags"].astype(str).apply(format_tags)
 
     # 🔗 Ações HTML
     csrf = request.COOKIES.get("csrftoken", "")
-
     df["actions"] = df.apply(lambda r: f"""
-    <div class='d-flex gap-2 justify-content-center'>
-        <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary btn-icon-fixed' title='Edit'>
-        <span>✏️</span>
-        </a>
-        <form method='post' action='/transactions/{r["id"]}/delete/' class='delete-form d-inline' data-name='transaction on {r["date"]}'>
-        <input type='hidden' name='csrfmiddlewaretoken' value='{csrf}'>
-        <button type='submit' class='btn btn-sm btn-outline-danger btn-icon-fixed' title='Delete'>
-            <span>🗑</span>
-        </button>
-        </form>
-    </div>
+        <div class='d-flex gap-2 justify-content-center'>
+            <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary btn-icon-fixed' title='Edit'>
+            <span>✏️</span>
+            </a>
+            <form method='post' action='/transactions/{r["id"]}/delete/' class='delete-form d-inline' data-name='transaction on {r["date"]}'>
+            <input type='hidden' name='csrfmiddlewaretoken' value='{csrf}'>
+            <button type='submit' class='btn btn-sm btn-outline-danger btn-icon-fixed' title='Delete'>
+                <span>🗑</span>
+            </button>
+            </form>
+        </div>
     """, axis=1)
 
     # 📄 Paginação
@@ -349,18 +377,19 @@ def transactions_json(request):
     start = int(request.GET.get("start", "0"))
     length = int(request.GET.get("length", "10"))
     total = len(df)
-
     df_page = df.iloc[start:start + length]
-    data = df_page[[
-        "period", "date", "type", "amount", "category", "tags", "account", "actions"
-    ]].to_dict(orient="records")
 
     return JsonResponse({
         "draw": draw,
         "recordsTotal": total,
         "recordsFiltered": total,
-        "data": data
+        "data": df_page[[ "period", "date", "type", "amount", "category", "tags", "account", "actions" ]].to_dict(orient="records"),
+        "unique_types": unique_types,
+        "unique_categories": unique_categories,
+        "unique_accounts": unique_accounts,
+        "available_periods": available_periods,
     })
+
 
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):

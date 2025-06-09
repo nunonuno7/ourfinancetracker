@@ -1,49 +1,48 @@
 $(document).ready(function () {
+
+  // 🧠 Recuperar filtro guardado do período (se existir)
+  const savedPeriod = sessionStorage.getItem("tx_filter_period");
+  if (savedPeriod) {
+    $('#filter-period').val(savedPeriod);
+  }
+
+  // 💾 Guardar no sessionStorage quando o utilizador mudar o período
+  $('#filter-period').on('change', function () {
+    sessionStorage.setItem("tx_filter_period", this.value);
+  });
+
   console.log('JavaScript carregado e $(document).ready() executado');
 
-  // 🛠️ 0. Preencher "end-date" com hoje se estiver vazio
+  // 🛠️ Preencher "end-date" com hoje se estiver vazio
   const endInput = document.getElementById("end-date");
   if (endInput && !endInput.value) {
     const today = new Date().toISOString().split("T")[0];
     endInput.value = today;
   }
 
-  // 🗓️ 1. Inicializar flatpickr com formato DD/MM/YYYY e calendário em inglês
-  const startFlatpickr = flatpickr("#start-date", {
-    altInput: true,
-    altFormat: "d/m/Y",
-    dateFormat: "Y-m-d",
-    locale: "default"
-  });
+// 🗓️ Inicializar flatpickr
+const startFlatpickr = flatpickr("#start-date", {
+  dateFormat: "Y-m-d",  // ✅ formato compatível com o input real
+  locale: "default"
+});
 
-  const endFlatpickr = flatpickr("#end-date", {
-    altInput: true,
-    altFormat: "d/m/Y",
-    dateFormat: "Y-m-d",
-    locale: "default"
-  });
+const endFlatpickr = flatpickr("#end-date", {
+  dateFormat: "Y-m-d",  // ✅ mantém o formato simples e funcional
+  locale: "default"
+});
 
-  // 🔄 2. Popular dropdown de categorias via AJAX
-  $.ajax({
-    url: '/categories/autocomplete/',
-    success: function (data) {
-      data.forEach(cat => {
-        $('#filter-category').append(new Option(cat.name, cat.name));
-      });
-    }
-  });
+// 🔄 Recarregar tabela ao mudar datas
+startFlatpickr.config.onChange.push(function () {
+  table.ajax.reload();
+});
+endFlatpickr.config.onChange.push(function () {
+  table.ajax.reload();
+});
 
-  // 🔄 3. Popular dropdown de períodos via AJAX
-  $.ajax({
-    url: '/periods/autocomplete/',
-    success: function (data) {
-      data.forEach(p => {
-        $('#filter-period').append(new Option(p.display_name, p.value));
-      });
-    }
-  });
 
-  // 📊 4. Inicializar DataTable com AJAX + filtros
+
+
+  // 📊 Inicializar DataTable
   const table = $('#transaction-table').DataTable({
     serverSide: true,
     processing: true,
@@ -51,12 +50,14 @@ $(document).ready(function () {
       url: '/transactions/json/',
       dataSrc: 'data',
       data: function (d) {
+        // ✅ Remove o símbolo ⭘ dos valores selecionados
+        const clean = val => val?.replace('⭘', '').trim() || '';
         d.date_start = $('#start-date').val();
         d.date_end = $('#end-date').val();
-        d.type = $('#filter-type').val();
-        d.account = $('#filter-account').val();
-        d.category = $('#filter-category').val();
-        d.period = $('#filter-period').val();
+        d.type = clean($('#filter-type').val());
+        d.account = clean($('#filter-account').val());
+        d.category = clean($('#filter-category').val());
+        d.period = clean($('#filter-period').val());
       }
     },
     pageLength: 10,
@@ -73,19 +74,51 @@ $(document).ready(function () {
     ]
   });
 
-  // 🔁 5. Recarregar tabela quando filtros mudam
+  // 🔁 Recarregar tabela quando filtros mudam
   $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
+    if (this.id === 'filter-period') {
+      sessionStorage.setItem("tx_filter_period", $(this).val());
+    }
     table.ajax.reload();
   });
 
-  // 🗑️ 6. Confirmação ao apagar transação
+  // 🧹 Atualizar filtros estilo Excel
+  table.on('xhr.dt', function (e, settings, json) {
+    if (!json) return;
+
+    // 🔁 Categoria
+    const catSelect = $('#filter-category');
+    const currentCat = catSelect.val();
+    const catSet = new Set(json.unique_categories || []);
+    catSelect.empty().append(`<option value="">All Categories</option>`);
+    if (currentCat && !catSet.has(currentCat)) {
+      catSelect.append(`<option value="${currentCat}" selected>${currentCat} ⭘</option>`);
+    }
+    Array.from(catSet).sort().forEach(c => {
+      const selected = (c === currentCat) ? 'selected' : '';
+      catSelect.append(`<option value="${c}" ${selected}>${c}</option>`);
+    });
+
+    // 🔁 Período
+    const perSelect = $('#filter-period');
+    const currentPer = perSelect.val();
+    const perSet = new Set(json.available_periods || []);
+    perSelect.empty().append(`<option value="">All Periods</option>`);
+    if (currentPer && !perSet.has(currentPer)) {
+      perSelect.append(`<option value="${currentPer}" selected>${currentPer} ⭘</option>`);
+    }
+    Array.from(perSet).forEach(p => {
+      const selected = (p === currentPer) ? 'selected' : '';
+      perSelect.append(`<option value="${p}" ${selected}>${p}</option>`);
+    });
+  });
+
+  // 🗑️ Confirmação ao apagar
   $(document).on('submit', 'form.delete-form', function (e) {
     e.preventDefault();
     const form = this;
     const name = $(form).data('name') || 'this transaction';
-
     if (!confirm(`⚠ Confirm delete ${name}?`)) return;
-
     fetch(form.action, {
       method: 'POST',
       headers: {
@@ -93,18 +126,18 @@ $(document).ready(function () {
         'X-Requested-With': 'XMLHttpRequest',
       }
     })
-    .then(response => {
-      if (response.ok) {
-        table.ajax.reload(null, false);
-      } else {
-        alert('❌ Erro ao eliminar.');
-      }
-    })
-    .catch(() => alert('❌ Erro ao contactar o servidor.'));
+      .then(response => {
+        if (response.ok) {
+          table.ajax.reload(null, false);
+        } else {
+          alert('❌ Erro ao eliminar.');
+        }
+      })
+      .catch(() => alert('❌ Erro ao contactar o servidor.'));
   });
 
-  // ✨ 7. Limpar filtros (exceto datas)
-  $('#clear-filters').on('click', function() {
+  // ✨ Limpar filtros
+  $('#clear-filters').on('click', function () {
     $('#filter-type').val('');
     $('#filter-account').val('');
     $('#filter-category').val('');
@@ -112,20 +145,15 @@ $(document).ready(function () {
     table.ajax.reload();
   });
 
-  // 🔄 8. Botão Refresh: reaplica filtros e recarrega
-  $('#refresh-table').on('click', function () {
-    table.ajax.reload();
-  });
-
-  // 📦 9. Debug: regista ordenação (opcional)
-  table.off('order.dt').on('order.dt', function() {
-    const order = table.order();
+  // Logs de ordenação
+  table.off('order.dt').on('order.dt', function () {
+    var order = table.order();
     if (order.length > 0) {
       console.log('Coluna ordenada:', order[0][0], 'Direção:', order[0][1]);
     }
   });
 
-  // ⬅️ 10. Mês anterior
+  // Navegação entre meses
   $('#prev-month').on('click', function () {
     const currentDate = startFlatpickr.selectedDates[0];
     if (currentDate) {
@@ -137,7 +165,6 @@ $(document).ready(function () {
     }
   });
 
-  // ➡️ 11. Mês seguinte
   $('#next-month').on('click', function () {
     const currentDate = startFlatpickr.selectedDates[0];
     if (currentDate) {
@@ -148,4 +175,5 @@ $(document).ready(function () {
       table.ajax.reload();
     }
   });
+
 });

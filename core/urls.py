@@ -43,7 +43,7 @@ from .views import (
     # Dashboard & Extras
     DashboardView,
     period_autocomplete,
-    clear_transaction_cache,
+    transaction_clear_cache,
 )
 
 
@@ -96,7 +96,7 @@ urlpatterns = [
 
 
     path("transactions/template-excel/", views.import_transactions_template, name="transaction_import_template"),
-    path("transactions/clear-cache/", clear_transaction_cache, name="transaction_clear_cache"),
+    path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("tags/autocomplete/", views.tag_autocomplete, name="tag_autocomplete"),
 
     

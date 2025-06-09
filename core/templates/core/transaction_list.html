@@ -19,28 +19,28 @@
   </div>
 
   <!-- Filtros por datas -->
-  <div class="row g-3 mb-3">
-    <div class="col-md-3">
-      <label for="start-date" class="form-label">Start Date</label>
-      <input type="text" id="start-date" name="start-date" class="form-control" value="2025-01-01">
-    </div>
-    <div class="col-md-3">
-      <label for="end-date" class="form-label">End Date</label>
-      <input type="text" id="end-date" name="end-date" class="form-control" value="{{ today }}">
-    </div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <label for="start-date" class="form-label" id="start-label">Start Date</label>
+    <input type="text" id="start-date" name="start-date" class="form-control" value="2025-01-01" aria-labelledby="start-label">
   </div>
+  <div class="col-md-3">
+    <label for="end-date" class="form-label" id="end-label">End Date</label>
+    <input type="text" id="end-date" name="end-date" class="form-control" value="{{ today }}" aria-labelledby="end-label">
+  </div>
+</div>
 
   <!-- Filtros adicionais -->
   <div class="row g-3 mb-3">
     <div class="col-md-3">
       <label for="filter-type" class="form-label">Type</label>
-      <select id="filter-type" name="filter-type" class="form-select">
-        <option value="">All Types</option>
-        <option value="EX">Expense</option>
-        <option value="IN">Income</option>
-        <option value="IV">Investment</option>
-        <option value="TR">Transfer</option>
-      </select>
+<select id="filter-type" name="filter-type" class="form-select">
+  <option value="">All Types</option>
+  <option value="Expense">Expense</option>
+  <option value="Income">Income</option>
+  <option value="Investment">Investment</option>
+  <option value="Transfer">Transfer</option>
+</select>
     </div>
 
     <div class="col-md-3">
