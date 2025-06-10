@@ -878,7 +878,6 @@ def move_account_down(request, pk):
         below.save()
     return redirect("account_list")
 
-@csrf_exempt  # Ou substitui por @login_required + token se estiver a funcionar corretamente
 @login_required
 def account_reorder(request):
     if request.method == "POST":
@@ -1354,3 +1353,55 @@ def account_balance_template_xlsx(request):
     response = HttpResponse(buffer.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = "attachment; filename=account_balances_template.xlsx"
     return response
+
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    template_name = "core/dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["balances"] = call_rpc(self.request.user.id, "get_account_balances")
+        return ctx
+    
+# ─── API para Looker -----------------------------------------------------------
+from django.views.decorators.http import require_GET
+from django.http import JsonResponse
+from core.utils.supabase_rpc import call_rpc          # utilitário já criado antes
+
+@require_GET
+@login_required                     # protege se for chamada pelo browser do utilizador
+def api_my_transactions(request):
+    """
+    Devolve, em JSON puro, todas as transacções do utilizador
+    para o Looker Studio (ou qualquer ferramenta BI).
+    """
+    rows = call_rpc(request.user.id, "get_my_transactions")
+    return JsonResponse(rows, safe=False)
+
+
+import jwt
+from django.conf import settings
+from django.http import JsonResponse, HttpResponseForbidden
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
+from core.utils.supabase_rpc import call_rpc
+
+@require_GET
+@csrf_exempt
+def api_jwt_my_transactions(request):
+    """
+    Endpoint seguro via JWT: devolve as transações do utilizador autenticado via token JWT.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return HttpResponseForbidden("Falta o header Authorization com token JWT.")
+
+    token = auth_header.replace("Bearer ", "").strip()
+    try:
+        payload = jwt.decode(token, settings.SUPABASE_JWT_SECRET, algorithms=["HS256"])
+        user_id = int(payload["user_id"])
+    except Exception as e:
+        return HttpResponseForbidden(f"Token inválido: {str(e)}")
+
+    rows = call_rpc(user_id, "get_my_transactions")
+    return JsonResponse(rows, safe=False)

@@ -1,0 +1,32 @@
+# ───── Ambiente interativo / debug ─────
+ipython==9.3.0
+ipykernel==6.29.5
+jupyter_client==8.6.3
+jupyter_core==5.8.1
+traitlets==5.14.3
+pyzmq==26.4.0
+parso==0.8.4
+jedi==0.19.2
+debugpy==1.8.14
+stack-data==0.6.3
+prompt_toolkit==3.0.51
+Pygments==2.19.1
+colorama==0.4.6
+platformdirs==4.3.8
+psutil==7.0.0
+nest-asyncio==1.6.0
+matplotlib-inline==0.1.7
+
+# ───── Integração com .env ─────
+python-dotenv==1.1.0
+
+# ───── Supabase JWT generation ─────
+pyjwt==2.8.0  # <- necessário para gerar JWT no backend
+pyjwt==2.8.0
+
+# ───── HTTP Client ─────
+requests==2.32.2  # <- para proxy seguro com Supabase REST API
+
+# ───── Webserver local (produção/dev) ─────
+gunicorn==23.0.0
+

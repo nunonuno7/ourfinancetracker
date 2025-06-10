@@ -35,8 +35,14 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     'ourfinancetracker.com',
     'www.ourfinancetracker.com',
-    'www.ourfinancetracker.com.'
+    'www.ourfinancetracker.com.',
+    "4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
+
     '*' # todos depois apagar
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app"
 ]
 
 LOGIN_URL = "/login/"
@@ -56,7 +62,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     'core',
-    'widget_tweaks'
+    'widget_tweaks',
+    'django.contrib.humanize',
 ]
 
 MIDDLEWARE = [

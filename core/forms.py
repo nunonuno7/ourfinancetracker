@@ -392,7 +392,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
             existing = existing_qs.first()
 
             if existing.name.strip().lower() == "cash":
-                raise ValidationError("Não é permitido fundir com a conta 'Cash'.")
+                raise ValidationError("Merging with 'Cash' account is not allowed.")
 
             if (
                 existing.currency_id != self.cleaned_data["currency"].id or

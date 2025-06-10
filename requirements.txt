@@ -7,3 +7,4 @@ tzdata==2025.2
 django-widget-tweaks==1.4.12
 XlsxWriter==3.2.0
 openpyxl==3.1.2
+gunicorn==21.2.0

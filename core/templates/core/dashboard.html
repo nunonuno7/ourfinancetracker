@@ -1,10 +1,45 @@
 {% extends "base.html" %}
-
+{% load humanize %}
 {% block content %}
 <div class="container mt-4">
   <h2 class="mb-4">📊 Dashboard</h2>
-  <div class="alert alert-info">
-    Página de resumo em construção.
-  </div>
+
+  {% if balances %}
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Período</th>
+            <th>Conta</th>
+            <th class="text-end">Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in balances %}
+            <tr>
+              <td>{{ b.year }}-{{ b.month|stringformat:"02d" }}</td>
+              <td>{{ b.account }}</td>
+              <td class="text-end">
+                {{ b.balance|floatformat:2|intcomma }} €
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# total global #}
+    {% with total=0 %}
+      {% for b in balances %}
+        {% with total=total|add:b.balance %}
+        {% endwith %}
+      {% endfor %}
+      <div class="alert alert-success fw-bold text-end">
+        Total: {{ total|floatformat:2|intcomma }} €
+      </div>
+    {% endwith %}
+  {% else %}
+    <div class="alert alert-info">Ainda não tens saldos registados.</div>
+  {% endif %}
 </div>
 {% endblock %}
