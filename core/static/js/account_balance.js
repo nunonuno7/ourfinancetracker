@@ -1,6 +1,4 @@
 function addRow() {
-  console.log("🟢 addRow() chamada");
-
   const table = document.getElementById("balance-table");
   const totalForms = document.getElementById("id_form-TOTAL_FORMS");
   const newIndex = parseInt(totalForms.value);
@@ -32,8 +30,7 @@ function deleteAccount(balanceId, button) {
   })
   .then(response => {
     if (response.ok) {
-      const row = button.closest("tr");
-      row.remove();
+      button.closest("tr").remove();
       updateTotalBalance();
     } else {
       alert("Error deleting balance.");
@@ -111,19 +108,15 @@ function toggleZeroBalances() {
   btn.dataset.state = show ? "all" : "hide";
 }
 
-// ───── Bind estático + delegação ─────
-document.addEventListener("DOMContentLoaded", () => {
-  console.log("✅ DOM carregado — JS ativo");
+function openExportModal() {
+  const modal = new bootstrap.Modal(document.getElementById("exportModal"));
+  modal.show();
+}
 
+document.addEventListener("DOMContentLoaded", () => {
   const addBtn = document.getElementById("add-row-btn");
   if (addBtn) {
-    console.log("🎯 Botão + Add Account encontrado");
-    addBtn.addEventListener("click", () => {
-      console.log("🖱 Botão + Add Account clicado");
-      addRow();
-    });
-  } else {
-    console.warn("⚠️ Botão + Add Account não encontrado no DOM");
+    addBtn.addEventListener("click", addRow);
   }
 
   document.getElementById("reset-btn")?.addEventListener("click", resetFormChanges);
@@ -135,15 +128,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!validateForm()) e.preventDefault();
   });
 
-  // ───── Delegação para botões dinâmicos ─────
   document.addEventListener("click", function (event) {
     const target = event.target;
 
     if (target.classList.contains("delete-btn")) {
       const balanceId = target.dataset.id;
-      if (balanceId) {
-        deleteAccount(balanceId, target);
-      }
+      if (balanceId) deleteAccount(balanceId, target);
     }
 
     if (target.classList.contains("remove-row-btn")) {

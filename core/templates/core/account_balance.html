@@ -5,16 +5,34 @@
 {% block content %}
 <h2 class="mb-3">Account Balances</h2>
 
-<div class="d-flex align-items-center mb-3">
-  <a class="btn btn-outline-secondary me-2"
+<!-- 🔁 Navegação e ações -->
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+  <!-- Mês anterior -->
+  <a class="btn btn-outline-secondary"
      href="?year={{ year }}&month={{ month|add:'-1' }}">‹</a>
+
+  <!-- Seletor mês -->
   <input type="month" id="selector"
          value="{{ year }}-{{ month|stringformat:'02d' }}"
-         onchange="window.location='?month='+this.value.split('-')[1]+'&year='+this.value.split('-')[0];">
-  <a class="btn btn-outline-secondary ms-2"
+         onchange="window.location='?month='+this.value.split('-')[1]+'&year='+this.value.split('-')[0];"
+         class="form-control" style="width: auto;">
+
+  <!-- Mês seguinte -->
+  <a class="btn btn-outline-secondary"
      href="?year={{ year }}&month={{ month|add:'1' }}">›</a>
+
+  <!-- Botão abre modal de exportação -->
+  <button class="btn btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#exportModal">
+    ⬇ Exportar Excel
+  </button>
+
+  <!-- Botão importar -->
+  <a href="{% url 'account_balance_import_xlsx' %}" class="btn btn-outline-success">
+    ⬆ Importar Excel
+  </a>
 </div>
 
+<!-- 📋 Formulário principal -->
 <form method="post">
   {% csrf_token %}
   {{ formset.management_form }}
@@ -31,37 +49,26 @@
             <th style="width: 40px;"></th>
           </tr>
         </thead>
-        <tbody class="sortable-table" data-reorder-url="{% url 'account_reorder' %}" {% if account_type == "Savings" and currency == "EUR" %}id="balance-table"{% endif %}>
-          {% with subtotal=0 %}
+        <tbody class="sortable-table"
+               data-reorder-url="{% url 'account_reorder' %}"
+               {% if account_type == "Savings" and currency == "EUR" %}id="balance-table"{% endif %}>
           {% for form in forms %}
-            {% with balance=form.instance.reported_balance %}
-              <tr class="form-row" data-id="{{ form.instance.account.id }}">
-                <td class="text-center handle">⋮⋮</td>
-                <td>
-                  {{ form.account }}{{ form.id }}
-                </td>
-                <td class="text-end">
-                  {{ form.reported_balance }}
-                </td>
-                <td>
-                  {% if form.instance.pk %}
-                    {{ form.DELETE.as_hidden }}
-                    <button type="button"
-                            class="btn btn-sm btn-outline-danger delete-btn"
-                            data-id="{{ form.instance.pk }}">×</button>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endwith %}
+            <tr class="form-row" data-id="{{ form.instance.account.id }}">
+              <td class="text-center handle">⋮⋮</td>
+              <td>{{ form.account }}{{ form.id }}</td>
+              <td class="text-end">{{ form.reported_balance }}</td>
+              <td>
+                {% if form.instance.pk %}
+                  {{ form.DELETE.as_hidden }}
+                  <button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-id="{{ form.instance.pk }}">×</button>
+                {% endif %}
+              </td>
+            </tr>
           {% endfor %}
-          {% endwith %}
           <!-- Subtotal -->
           <tr class="table-light">
             <td colspan="2"><strong>Total</strong></td>
-<td class="text-end fw-bold">
-  {{ totals_by_group|get_item:key|formatar_moeda }}
-</td>
-            </td>
+            <td class="text-end fw-bold">{{ totals_by_group|get_item:key|formatar_moeda }}</td>
             <td></td>
           </tr>
         </tbody>
@@ -69,13 +76,12 @@
     {% endwith %}
   {% endfor %}
 
-  <!-- Grand Total -->
-<h5 class="mt-4 text-end">
-  💰 Grand Total:
-  <strong>{{ grand_total|formatar_moeda }}</strong>
-</h5>
+  <!-- Total global -->
+  <h5 class="mt-4 text-end">
+    💰 Grand Total: <strong>{{ grand_total|formatar_moeda }}</strong>
+  </h5>
 
-  <!-- Template invisível (inserido em EUR + Savings) -->
+  <!-- 🧱 Template nova linha -->
   <template id="empty-form-template">
     <tr class="form-row">
       <td class="text-center handle">⋮⋮</td>
@@ -92,7 +98,8 @@
     </tr>
   </template>
 
-  <div class="d-flex justify-content-between align-items-center">
+  <!-- Ações de submissão -->
+  <div class="d-flex justify-content-between align-items-center mt-3">
     <div>
       <button type="submit" class="btn btn-primary">📂 Save</button>
     </div>
@@ -103,10 +110,34 @@
   </div>
 </form>
 
+<!-- ⚙️ Ações extra -->
 <div class="mt-3 d-flex gap-2">
   <button class="btn btn-outline-primary" id="copy-previous-btn">📋 Copy Previous Month</button>
   <button class="btn btn-outline-dark" id="toggle-zeros-btn" data-state="hide">👁 Show All</button>
   <a href="{% url 'account_list' %}" class="btn btn-outline-secondary">⚙ Manage Accounts</a>
+</div>
+
+<!-- 🧾 Modal de exportação -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="get" action="{% url 'account_balance_export_xlsx' %}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exportModalLabel">Exportar Saldos</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <label for="start">De:</label>
+          <input type="month" name="start" id="start" class="form-control mb-2" required>
+          <label for="end">Até:</label>
+          <input type="month" name="end" id="end" class="form-control" required>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">⬇ Exportar</button>
+        </div>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- JS -->

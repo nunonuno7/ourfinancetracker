@@ -1,7 +1,4 @@
-// transaction_form.js (versão oficial completa)
-
-document.addEventListener("DOMContentLoaded", initTransactionForm);
-document.body.addEventListener("htmx:afterSwap", initTransactionForm);
+// transaction_form.js (versão final com tags com lista visível)
 
 function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
@@ -12,14 +9,14 @@ function initTransactionForm() {
 
   if (!dateInput || !periodInput || !monthSelector) return;
 
-  // 📅 Inicializar data com hoje se estiver vazia
+  // Inicializar data com hoje se estiver vazia
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
   if (!dateInput.value) {
     dateInput.value = todayStr;
   }
 
-  // 📅 Flatpickr + sincronização com período
+  // Flatpickr com sincronização
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
   flatpickr(dateInput, {
     dateFormat: "Y-m-d",
@@ -27,17 +24,16 @@ function initTransactionForm() {
     altInput: true,
     altFormat: "d/m/Y",
     allowInput: true,
-    onChange: function ([selected]) {
+    onChange: function (selectedDates) {
+      const selected = selectedDates[0];
       if (!selected) return;
       const year = selected.getFullYear();
       const month = String(selected.getMonth() + 1).padStart(2, "0");
-      const period = `${year}-${month}`;
-      monthSelector.value = period;
-      periodInput.value = period;
+      monthSelector.value = `${year}-${month}`;
+      periodInput.value = `${year}-${month}`;
     },
   });
 
-  // 📆 Alterar manualmente o período
   monthSelector.addEventListener("change", () => {
     const [year, month] = monthSelector.value.split("-");
     const newDate = `${year}-${month}-01`;
@@ -48,7 +44,6 @@ function initTransactionForm() {
     }
   });
 
-  // ⬅➡ Botões anterior e seguinte
   prevBtn?.addEventListener("click", () => changeMonth(-1));
   nextBtn?.addEventListener("click", () => changeMonth(1));
 
@@ -57,30 +52,23 @@ function initTransactionForm() {
     const newDate = new Date(year, month - 1 + delta, 1);
     const newYear = newDate.getFullYear();
     const newMonth = String(newDate.getMonth() + 1).padStart(2, "0");
-    const period = `${newYear}-${newMonth}`;
-    const dateStr = `${period}-01`;
-
-    monthSelector.value = period;
-    periodInput.value = period;
-    dateInput.value = dateStr;
+    const newMonthValue = `${newYear}-${newMonth}`;
+    const newDateStr = `${newYear}-${newMonth}-01`;
+    monthSelector.value = newMonthValue;
+    periodInput.value = newMonthValue;
+    dateInput.value = newDateStr;
     if (dateInput._flatpickr) {
-      dateInput._flatpickr.setDate(dateStr, true);
+      dateInput._flatpickr.setDate(newDateStr, true);
     }
   }
 
-  // 🏷️ Tom Select: Categoria
+  // Tom Select Categoria
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
-    if (categoryInput.tomselect) {
-      categoryInput.tomselect.destroy();
-    }
+    if (categoryInput.tomselect) categoryInput.tomselect.destroy();
 
     const rawList = categoryInput.dataset.categoryList || "";
-    const options = rawList
-      .split(",")
-      .map(name => name.trim())
-      .filter(name => name.length > 0)
-      .map(name => ({ value: name, text: name }));
+    const options = rawList.split(",").map(name => ({ value: name.trim(), text: name.trim() }));
 
     new TomSelect(categoryInput, {
       create: true,
@@ -92,41 +80,40 @@ function initTransactionForm() {
     });
   }
 
-  // 🏷️ Tom Select: Tags
+  // Tom Select Tags (agora com lista visível)
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
-    if (tagsInput.tomselect) {
-      tagsInput.tomselect.destroy();
-    }
+    if (tagsInput.tomselect) tagsInput.tomselect.destroy();
 
     const initialTags = tagsInput.value
       .split(",")
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
-    new TomSelect(tagsInput, {
-      plugins: ["remove_button"],
-      delimiter: ",",
-      persist: false,
-      create: true,
-      placeholder: "Add tags...",
-      valueField: "name",
-      labelField: "name",
-      searchField: "name",
-      preload: true,
-      options: initialTags.map(name => ({ name })),
-      items: initialTags,
-      load: (query, callback) => {
-        if (!query.length) return callback();
-        fetch(`/tags/autocomplete/?q=${encodeURIComponent(query)}`)
-          .then(res => res.json())
-          .then(data => callback(data))
-          .catch(() => callback());
-      },
-    });
+    const allTags = initialTags.map(name => ({ name }));
+
+    fetch("/tags/autocomplete/?q=")
+      .then(res => res.json())
+      .then(data => {
+        const tagOptions = [...new Set([...allTags, ...data])];
+
+        new TomSelect(tagsInput, {
+          plugins: ["remove_button"],
+          delimiter: ",",
+          persist: false,
+          create: true,
+          placeholder: "Add tags...",
+          valueField: "name",
+          labelField: "name",
+          searchField: "name",
+          preload: true,
+          options: tagOptions,
+          items: initialTags,
+        });
+      });
   }
 
-  // 💰 Formatar campo amount
+  // Format amount
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {
@@ -153,3 +140,6 @@ function initTransactionForm() {
     });
   }
 }
+
+document.addEventListener("DOMContentLoaded", initTransactionForm);
+document.body.addEventListener("htmx:afterSwap", initTransactionForm);

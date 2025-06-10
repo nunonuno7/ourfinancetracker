@@ -1,4 +1,7 @@
+// 📁 static/js/transaction_list_ajax.js
+
 $(document).ready(function () {
+  console.log('JavaScript carregado e $(document).ready() executado');
 
   // 🧠 Recuperar filtro guardado do período (se existir)
   const savedPeriod = sessionStorage.getItem("tx_filter_period");
@@ -11,8 +14,6 @@ $(document).ready(function () {
     sessionStorage.setItem("tx_filter_period", this.value);
   });
 
-  console.log('JavaScript carregado e $(document).ready() executado');
-
   // 🛠️ Preencher "end-date" com hoje se estiver vazio
   const endInput = document.getElementById("end-date");
   if (endInput && !endInput.value) {
@@ -20,27 +21,19 @@ $(document).ready(function () {
     endInput.value = today;
   }
 
-// 🗓️ Inicializar flatpickr
-const startFlatpickr = flatpickr("#start-date", {
-  dateFormat: "Y-m-d",  // ✅ formato compatível com o input real
-  locale: "default"
-});
+  // 🗓️ Inicializar flatpickr
+  const startFlatpickr = flatpickr("#start-date", {
+    dateFormat: "Y-m-d",
+    locale: "default"
+  });
+  const endFlatpickr = flatpickr("#end-date", {
+    dateFormat: "Y-m-d",
+    locale: "default"
+  });
 
-const endFlatpickr = flatpickr("#end-date", {
-  dateFormat: "Y-m-d",  // ✅ mantém o formato simples e funcional
-  locale: "default"
-});
-
-// 🔄 Recarregar tabela ao mudar datas
-startFlatpickr.config.onChange.push(function () {
-  table.ajax.reload();
-});
-endFlatpickr.config.onChange.push(function () {
-  table.ajax.reload();
-});
-
-
-
+  // 🔄 Recarregar tabela ao mudar datas
+  startFlatpickr.config.onChange.push(() => table.ajax.reload());
+  endFlatpickr.config.onChange.push(() => table.ajax.reload());
 
   // 📊 Inicializar DataTable
   const table = $('#transaction-table').DataTable({
@@ -50,7 +43,7 @@ endFlatpickr.config.onChange.push(function () {
       url: '/transactions/json/',
       dataSrc: 'data',
       data: function (d) {
-        // ✅ Remove o símbolo ⭘ dos valores selecionados
+        // ✅ Remove símbolo ⭘ dos filtros ativos
         const clean = val => val?.replace('⭘', '').trim() || '';
         d.date_start = $('#start-date').val();
         d.date_end = $('#end-date').val();
@@ -74,7 +67,7 @@ endFlatpickr.config.onChange.push(function () {
     ]
   });
 
-  // 🔁 Recarregar tabela quando filtros mudam
+  // 🔁 Recarregar tabela ao mudar filtros
   $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
     if (this.id === 'filter-period') {
       sessionStorage.setItem("tx_filter_period", $(this).val());
@@ -82,43 +75,36 @@ endFlatpickr.config.onChange.push(function () {
     table.ajax.reload();
   });
 
-  // 🧹 Atualizar filtros estilo Excel
+  // 🧹 Atualizar dropdowns com valores visíveis (estilo Excel)
   table.on('xhr.dt', function (e, settings, json) {
     if (!json) return;
 
-    // 🔁 Categoria
-    const catSelect = $('#filter-category');
-    const currentCat = catSelect.val();
-    const catSet = new Set(json.unique_categories || []);
-    catSelect.empty().append(`<option value="">All Categories</option>`);
-    if (currentCat && !catSet.has(currentCat)) {
-      catSelect.append(`<option value="${currentCat}" selected>${currentCat} ⭘</option>`);
-    }
-    Array.from(catSet).sort().forEach(c => {
-      const selected = (c === currentCat) ? 'selected' : '';
-      catSelect.append(`<option value="${c}" ${selected}>${c}</option>`);
-    });
+    const updateDropdown = (selector, values, current) => {
+      const select = $(selector);
+      const set = new Set(values || []);
+      select.empty().append(`<option value="">All</option>`);
+      if (current && !set.has(current)) {
+        select.append(`<option value="${current}" selected>${current} ⭘</option>`);
+      }
+      Array.from(set).sort().forEach(val => {
+        const selected = (val === current) ? 'selected' : '';
+        select.append(`<option value="${val}" ${selected}>${val}</option>`);
+      });
+    };
 
-    // 🔁 Período
-    const perSelect = $('#filter-period');
-    const currentPer = perSelect.val();
-    const perSet = new Set(json.available_periods || []);
-    perSelect.empty().append(`<option value="">All Periods</option>`);
-    if (currentPer && !perSet.has(currentPer)) {
-      perSelect.append(`<option value="${currentPer}" selected>${currentPer} ⭘</option>`);
-    }
-    Array.from(perSet).forEach(p => {
-      const selected = (p === currentPer) ? 'selected' : '';
-      perSelect.append(`<option value="${p}" ${selected}>${p}</option>`);
-    });
+    updateDropdown('#filter-type', json.unique_types, $('#filter-type').val());
+    updateDropdown('#filter-category', json.unique_categories, $('#filter-category').val());
+    updateDropdown('#filter-account', json.unique_accounts, $('#filter-account').val());
+    updateDropdown('#filter-period', json.available_periods, $('#filter-period').val());
   });
 
-  // 🗑️ Confirmação ao apagar
+  // 🗑️ Confirmação ao apagar transações
   $(document).on('submit', 'form.delete-form', function (e) {
     e.preventDefault();
     const form = this;
     const name = $(form).data('name') || 'this transaction';
     if (!confirm(`⚠ Confirm delete ${name}?`)) return;
+
     fetch(form.action, {
       method: 'POST',
       headers: {
@@ -126,17 +112,17 @@ endFlatpickr.config.onChange.push(function () {
         'X-Requested-With': 'XMLHttpRequest',
       }
     })
-      .then(response => {
-        if (response.ok) {
-          table.ajax.reload(null, false);
-        } else {
-          alert('❌ Erro ao eliminar.');
-        }
-      })
-      .catch(() => alert('❌ Erro ao contactar o servidor.'));
+    .then(response => {
+      if (response.ok) {
+        table.ajax.reload(null, false);
+      } else {
+        alert('❌ Erro ao eliminar.');
+      }
+    })
+    .catch(() => alert('❌ Erro ao contactar o servidor.'));
   });
 
-  // ✨ Limpar filtros
+  // ✨ Botão "Clear Filters"
   $('#clear-filters').on('click', function () {
     $('#filter-type').val('');
     $('#filter-account').val('');
@@ -145,22 +131,22 @@ endFlatpickr.config.onChange.push(function () {
     table.ajax.reload();
   });
 
-  // Logs de ordenação
+  // 🔍 Debug ordenação
   table.off('order.dt').on('order.dt', function () {
-    var order = table.order();
+    const order = table.order();
     if (order.length > 0) {
       console.log('Coluna ordenada:', order[0][0], 'Direção:', order[0][1]);
     }
   });
 
-  // Navegação entre meses
+  // 🔄 Navegação entre meses
   $('#prev-month').on('click', function () {
     const currentDate = startFlatpickr.selectedDates[0];
     if (currentDate) {
-      const prevDate = new Date(currentDate);
-      prevDate.setMonth(prevDate.getMonth() - 1);
-      startFlatpickr.setDate(prevDate);
-      endFlatpickr.setDate(prevDate);
+      const prev = new Date(currentDate);
+      prev.setMonth(prev.getMonth() - 1);
+      startFlatpickr.setDate(prev);
+      endFlatpickr.setDate(prev);
       table.ajax.reload();
     }
   });
@@ -168,12 +154,11 @@ endFlatpickr.config.onChange.push(function () {
   $('#next-month').on('click', function () {
     const currentDate = startFlatpickr.selectedDates[0];
     if (currentDate) {
-      const nextDate = new Date(currentDate);
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      startFlatpickr.setDate(nextDate);
-      endFlatpickr.setDate(nextDate);
+      const next = new Date(currentDate);
+      next.setMonth(next.getMonth() + 1);
+      startFlatpickr.setDate(next);
+      endFlatpickr.setDate(next);
       table.ajax.reload();
     }
   });
-
 });

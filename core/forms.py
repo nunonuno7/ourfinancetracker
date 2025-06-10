@@ -77,27 +77,34 @@ class TransactionForm(forms.ModelForm):
         self.user = user
         print(f"🔐 User: {self.user}")
 
-        # Carregar opções dependentes do utilizador
+        # 🔄 Tipos disponíveis
         self.fields["type"].choices = Transaction.Type.choices
-        self.fields["account"].queryset = Account.objects.filter(user=user).order_by("name")
 
-        # Sugerir categorias existentes no atributo data para JS
+        # ✅ Corrige erro de cursor fechado (PostgreSQL)
+        qs = Account.objects.filter(user=user).order_by("name")
+        list(qs)  # força a avaliação para evitar erro no render()
+        self.fields["account"].queryset = qs
+        print(f"📋 Contas carregadas: {qs.count()}")
+
+        # 📦 Lista de categorias para o Tom Select (como string embutida no data attribute)
         categories = Category.objects.filter(user=user).order_by("name").values_list("name", flat=True)
         self.fields["category"].widget.attrs["data-category-list"] = ",".join(categories)
 
+        # 🎯 Nova transação
         if not self.instance.pk:
-            # NOVA transação
             today = dt_date.today()
             self.initial.setdefault("date", today)
             self.initial.setdefault("type", "EX")
+
             period, _ = DatePeriod.objects.get_or_create(
                 year=today.year,
                 month=today.month,
                 defaults={"label": today.strftime("%B %Y")},
             )
             self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
+
+        # 📝 Edição de transação existente
         else:
-            # EDIÇÃO
             if self.instance.date:
                 self.initial["date"] = self.instance.date
             if self.instance.type:
@@ -108,6 +115,7 @@ class TransactionForm(forms.ModelForm):
                 self.initial["category"] = self.instance.category.name
             tag_names = [t.name for t in self.instance.tags.all()]
             self.initial["tags_input"] = ", ".join(tag_names)
+
 
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]

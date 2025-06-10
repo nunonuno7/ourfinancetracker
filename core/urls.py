@@ -39,6 +39,7 @@ from .views import (
     account_balance_view,
     delete_account_balance,
     copy_previous_balances_view,
+    account_balance_export_xlsx, account_balance_import_xlsx, account_balance_template_xlsx,
 
     # Dashboard & Extras
     DashboardView,
@@ -86,6 +87,11 @@ urlpatterns = [
     path("account-balance/delete/<int:pk>/", delete_account_balance, name="account_balance_delete"),
     path("account-balance/copy/", copy_previous_balances_view, name="account_balance_copy"),
 
+    path("account-balance/export/", account_balance_export_xlsx, name="account_balance_export_xlsx"),
+    path("account-balance/import/", account_balance_import_xlsx, name="account_balance_import_xlsx"),
+        path("account-balance/template/", account_balance_template_xlsx, name="account_balance_template_xlsx"),
+
+
     # ─────────── Extras ───────────
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("periods/autocomplete/", period_autocomplete, name="period_autocomplete"),
@@ -98,6 +104,8 @@ urlpatterns = [
     path("transactions/template-excel/", views.import_transactions_template, name="transaction_import_template"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("tags/autocomplete/", views.tag_autocomplete, name="tag_autocomplete"),
+
+
 
     
 

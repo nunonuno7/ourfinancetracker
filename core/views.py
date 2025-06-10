@@ -326,8 +326,8 @@ def transactions_json(request):
             df["category"].str.contains(search, case=False, na=False) |
             df["account"].str.contains(search, case=False, na=False) |
             df["type"].str.contains(search, case=False, na=False) |
-            df["tags"].str.contains(search, case=False, na=False)
-    ]
+            df["tags"].str.contains(search, case=False, na=False)]
+        
     # 🔢 Categorias e períodos com base nos dados visíveis (sem filtro próprio)
     unique_types = sorted(df_for_type["type"].dropna().unique())
     unique_categories = sorted(df_for_category["category"].dropna().unique())
@@ -1013,7 +1013,16 @@ def import_transactions_xlsx(request):
 
             for idx, row in df.iterrows():
                 print(f"🔎 Linha {idx + 1}")
-                date_val = parse_date(str(row["Date"]))
+                raw_date = row["Date"]
+                if pd.isna(raw_date):
+                    print(f"⚠️ Linha {idx + 1} ignorada: data em branco")
+                    continue
+
+                try:
+                    date_val = pd.to_datetime(raw_date).date()
+                except Exception as e:
+                    print(f"⚠️ Linha {idx + 1} ignorada: data inválida → {raw_date} ({e})")
+                    continue
                 if not date_val:
                     print(f"⚠️ Linha {idx + 1} ignorada: data inválida")
                     continue
@@ -1150,12 +1159,22 @@ def import_transactions_xlsx(request):
 
     return redirect("transaction_list")
 
+
+
+
 @login_required
 def import_transactions_template(request):
-    
-    # Cabeçalhos da tabela
-    columns = ["Date", "Type", "Amount", "Category", "Tags", "Account"]
-    df = pd.DataFrame(columns=columns)
+    # Dados de exemplo
+    example_data = [{
+        "Date": "2025-06-10",
+        "Type": "Expense",
+        "Amount": 45.67,
+        "Category": "Groceries",
+        "Tags": "food,supermarket",
+        "Account": "Conta Principal"
+    }]
+
+    df = pd.DataFrame(example_data)
 
     # Criar ficheiro Excel em memória
     output = BytesIO()
@@ -1174,3 +1193,164 @@ def import_transactions_template(request):
 
 
 
+from openpyxl import Workbook, load_workbook
+
+# core/views.py
+
+@login_required
+def account_balance_export_xlsx(request):
+    user_id = request.user.id
+
+    # 🧠 Query SQL otimizada
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                p.year AS Year,
+                p.month AS Month,
+                a.name AS Account,
+                at.name AS Type,
+                COALESCE(curr.code, 'EUR') AS Currency,
+                ab.reported_balance AS Balance
+            FROM core_accountbalance ab
+            INNER JOIN core_account a ON ab.account_id = a.id
+            LEFT JOIN core_accounttype at ON a.account_type_id = at.id
+            LEFT JOIN core_currency curr ON a.currency_id = curr.id
+            INNER JOIN core_dateperiod p ON ab.period_id = p.id
+            WHERE a.user_id = %s
+            ORDER BY p.year, p.month, a.name
+        """, [user_id])
+        rows = cursor.fetchall()
+        columns = [col[0] for col in cursor.description]
+
+    # ⚙️ Criar DataFrame e exportar para Excel
+    df = pd.DataFrame(rows, columns=columns)
+
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, sheet_name="Balances")
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="account_balances.xlsx"'
+    return response
+
+
+
+
+
+
+@login_required
+def account_balance_import_xlsx(request):
+    if request.method == "POST":
+        file = request.FILES.get("file")
+        if not file or not file.name.endswith(".xlsx"):
+            messages.error(request, "Please upload a valid .xlsx Excel file.")
+            return redirect("account_balance_import_xlsx")
+
+        try:
+            df = pd.read_excel(file)
+        except Exception as e:
+            messages.error(request, f"Error reading Excel file: {e}")
+            return redirect("account_balance_import_xlsx")
+
+        required_cols = {"Year", "Month", "Account", "Balance"}
+        if not required_cols.issubset(df.columns):
+            messages.error(request, f"Missing required columns: {', '.join(required_cols)}")
+            return redirect("account_balance_import_xlsx")
+
+        user_id = request.user.id
+        created = 0
+        timestamp = now()
+
+        with connection.cursor() as cursor, db_transaction.atomic():
+            # Caches
+            periods_cache = {}
+            accounts_cache = {}
+
+            # ID's fixos
+            cursor.execute("SELECT id FROM core_accounttype WHERE name ILIKE 'Savings' LIMIT 1")
+            default_type_id = cursor.fetchone()[0]
+
+            cursor.execute("SELECT id FROM core_currency WHERE code = 'EUR'")
+            default_currency_id = cursor.fetchone()[0]
+
+            for idx, row in df.iterrows():
+                try:
+                    year = int(row["Year"])
+                    month = int(row["Month"])
+                    account_name = str(row["Account"]).strip()
+                    balance = float(row["Balance"])
+                except Exception as e:
+                    messages.warning(request, f"❌ Skipped row {idx + 1}: {e}")
+                    continue
+
+                key_period = (year, month)
+                if key_period not in periods_cache:
+                    cursor.execute("""
+                        INSERT INTO core_dateperiod (year, month, label)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (year, month) DO NOTHING
+                        RETURNING id
+                    """, [year, month, date(year, month, 1).strftime("%B %Y")])
+                    row_period = cursor.fetchone()
+                    if not row_period:
+                        cursor.execute("SELECT id FROM core_dateperiod WHERE year = %s AND month = %s", key_period)
+                        row_period = cursor.fetchone()
+                    periods_cache[key_period] = row_period[0]
+
+                period_id = periods_cache[key_period]
+
+                if account_name not in accounts_cache:
+                    cursor.execute("""
+                        INSERT INTO core_account (user_id, name, account_type_id, currency_id, created_at, position)
+                        VALUES (%s, %s, %s, %s, %s, 0)
+                        ON CONFLICT (user_id, name) DO NOTHING
+                        RETURNING id
+                    """, [user_id, account_name, default_type_id, default_currency_id, timestamp])
+                    row_acc = cursor.fetchone()
+                    if not row_acc:
+                        cursor.execute("SELECT id FROM core_account WHERE user_id = %s AND name = %s", [user_id, account_name])
+                        row_acc = cursor.fetchone()
+                    accounts_cache[account_name] = row_acc[0]
+
+                account_id = accounts_cache[account_name]
+
+                cursor.execute("""
+                    INSERT INTO core_accountbalance (account_id, period_id, reported_balance)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (account_id, period_id)
+                    DO UPDATE SET reported_balance = EXCLUDED.reported_balance
+                """, [account_id, period_id, balance])
+                created += 1
+
+        messages.success(request, f"✅ {created} balances imported successfully.")
+        return redirect("account_balance")
+
+    return render(request, "core/import_balances_form.html")
+
+
+
+@login_required
+def account_balance_template_xlsx(request):
+    from io import BytesIO
+    from django.http import HttpResponse
+    import pandas as pd
+
+    # Cabeçalho + linha de exemplo
+    df = pd.DataFrame([{
+        "Year": 2025,
+        "Month": 6,
+        "Account": "Bpi",
+        "Balance": 1234.56
+    }])
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Template")
+
+    buffer.seek(0)
+    response = HttpResponse(buffer.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = "attachment; filename=account_balances_template.xlsx"
+    return response
