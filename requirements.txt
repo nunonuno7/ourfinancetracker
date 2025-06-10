@@ -11,4 +11,4 @@ gunicorn==21.2.0
 python-dotenv==1.0.1
 django-debug-toolbar==4.3.0
 pandas==2.2.2
-
+requests==2.31.0
