@@ -45,7 +45,6 @@ from .views import (
     DashboardView,
     period_autocomplete,
     transaction_clear_cache,
-    api_my_transactions,
     api_jwt_my_transactions,
 )
 from core.views_reporting import proxy_report_csv_token
@@ -107,7 +106,7 @@ urlpatterns = [
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("tags/autocomplete/", views.tag_autocomplete, name="tag_autocomplete"),
 
-    path("api/my-transactions/", views.api_my_transactions, name="api_my_transactions"),
+
     path("api/jwt/my-transactions/", views.api_jwt_my_transactions, name="api_jwt_my_transactions"),
 
 ]
