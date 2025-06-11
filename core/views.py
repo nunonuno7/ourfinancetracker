@@ -1368,16 +1368,6 @@ from django.views.decorators.http import require_GET
 from django.http import JsonResponse
 from core.utils.supabase_rpc import call_rpc          # utilitário já criado antes
 
-@require_GET
-@login_required                     # protege se for chamada pelo browser do utilizador
-def api_my_transactions(request):
-    """
-    Devolve, em JSON puro, todas as transacções do utilizador
-    para o Looker Studio (ou qualquer ferramenta BI).
-    """
-    rows = call_rpc(request.user.id, "get_my_transactions")
-    return JsonResponse(rows, safe=False)
-
 
 import jwt
 from django.conf import settings
