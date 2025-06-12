@@ -130,7 +130,7 @@ class TransactionForm(forms.ModelForm):
 
         if tipo == "TR":
             cleaned["category"] = None
-            self.cleaned_data["tags_input"] = ""
+            self.cleaned_data["tags_input"] = self.cleaned_data.get("tags_input", "")
         elif category_name:
             category = Category.objects.filter(user=self.user, name__iexact=category_name).first()
             if not category:
@@ -163,16 +163,16 @@ class TransactionForm(forms.ModelForm):
         if commit:
             instance.save()
 
-        # Guardar tags
-        tag_names = [t.strip() for t in self.cleaned_data.get("tags_input", "").split(",") if t.strip()]
-        tags = [
-            Tag.objects.filter(user=self.user, name=name).first() or
-            Tag.objects.create(user=self.user, name=name)
-            for name in tag_names
-        ]
+        # Guardar tags (seguro mesmo se tags_input não existir)
+        raw_tags = self.cleaned_data.get("tags_input", "")
+        tag_names = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        tags = []
+        for name in tag_names:
+            tag, _ = Tag.objects.get_or_create(user=self.user, name=name)
+            tags.append(tag)
+
         instance.tags.set(tags)
         return instance
-
 
 
 

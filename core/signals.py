@@ -29,7 +29,7 @@ def create_default_account(sender, instance, created, **kwargs):
 
     # Criar conta "Cash" se ainda não existir
     if not Account.objects.filter(user=instance, name__iexact="Cash").exists():
-        acc_type = AccountType.objects.filter(name__iexact="Saving").first() 
+        acc_type = AccountType.objects.filter(name__iexact="Savings").first()
         currency = settings.default_currency or Currency.objects.filter(code="EUR").first()
 
         Account.objects.create(

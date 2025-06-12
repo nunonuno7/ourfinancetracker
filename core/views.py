@@ -604,8 +604,8 @@ class AccountDeleteView(OwnerQuerysetMixin, DeleteView):
 
     def dispatch(self, request, *args, **kwargs):
         account = self.get_object()
-        if account.name.lower() == "cash":
-            return HttpResponseForbidden("Default account cannot be deleted.")
+        if account.is_default():
+            return HttpResponseForbidden("⚠️ The default 'Cash' account cannot be deleted.")
         return super().dispatch(request, *args, **kwargs)
 
 
