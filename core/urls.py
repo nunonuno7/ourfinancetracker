@@ -46,6 +46,7 @@ from .views import (
     period_autocomplete,
     transaction_clear_cache,
     api_jwt_my_transactions,
+    dashboard_data,
 )
 from core.views_reporting import proxy_report_csv_token
 
@@ -108,6 +109,13 @@ urlpatterns = [
 
 
     path("api/jwt/my-transactions/", views.api_jwt_my_transactions, name="api_jwt_my_transactions"),
+
+
+    #----dashbord
+    path("api/dashboard-data/", views.dashboard_data, name="dashboard_data"),
+    path("account-balances/json/", views.account_balances_pivot_json, name="account_balances_json"),
+
+
 
 ]
 

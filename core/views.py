@@ -80,9 +80,245 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
 from core.cache import TX_LAST
 
+
+from django.db import connection
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+
+
+from django.db.models import Sum
+from core.models import AccountBalance, Account, Transaction, DatePeriod
+from datetime import date
+import pandas as pd
+
 ################################################################################
 #                               Menu config API                                #
 ################################################################################
+
+
+
+
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+from django.http import JsonResponse
+from django.db import connection
+import pandas as pd
+
+@login_required
+@require_GET
+def account_balances_pivot_json(request):
+    user_id = request.user.id
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                at.name AS type,
+                cur.code AS currency,
+                dp.year,
+                dp.month,
+                SUM(ab.reported_balance) AS total_balance
+            FROM core_accountbalance ab
+            JOIN core_account acc ON ab.account_id = acc.id
+            JOIN core_accounttype at ON acc.account_type_id = at.id
+            JOIN core_currency cur ON acc.currency_id = cur.id
+            JOIN core_dateperiod dp ON ab.period_id = dp.id
+            WHERE acc.user_id = %s
+            GROUP BY at.name, cur.code, dp.year, dp.month
+            ORDER BY dp.year, dp.month, at.name, cur.code
+        """, [user_id])
+        rows = cursor.fetchall()
+
+    if not rows:
+        return JsonResponse({"columns": [], "rows": []})
+
+    # Construir DataFrame
+    df = pd.DataFrame(rows, columns=["type", "currency", "year", "month", "total_balance"])
+    df["total_balance"] = pd.to_numeric(df["total_balance"], errors="coerce").fillna(0).astype(float)
+
+    # Criar label para o período
+    df["period"] = pd.to_datetime(dict(year=df.year, month=df.month, day=1)).dt.strftime("%b/%y")
+
+    # Pivotar tabela: index = tipo + moeda, colunas = período, valores = saldo
+    pivot = df.pivot_table(
+        index=["type", "currency"],
+        columns="period",
+        values="total_balance",
+        aggfunc="sum",
+        fill_value=0
+    ).sort_index(axis=1)
+
+    # Converter para JSON com cabeçalhos e linhas
+    pivot.reset_index(inplace=True)
+    columns = ["type", "currency"] + list(pivot.columns[2:])
+    rows = pivot.to_dict(orient="records")
+
+    return JsonResponse({
+        "columns": columns,
+        "rows": rows
+    })
+
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    template_name = "core/dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        # Períodos disponíveis (para o dropdown)
+        ctx["periods"] = DatePeriod.objects.order_by("-year", "-month")
+
+        # Filtro por período
+        start_period = self.request.GET.get("start-period")
+        end_period = self.request.GET.get("end-period")
+
+        # Preparar formato YYYY-MM para comparação
+        def period_str(y, m):
+            return f"{y}-{str(m).zfill(2)}"
+
+        # Carregar dados
+        txs = Transaction.objects.filter(user=user).select_related("period", "account")
+        saldos = AccountBalance.objects.filter(account__user=user).select_related("account", "period")
+
+        # DataFrames
+        df_tx = pd.DataFrame.from_records(
+            txs.values("date", "type", "amount", "period__year", "period__month")
+        )
+        df_bal = pd.DataFrame.from_records(
+            saldos.values("period__year", "period__month", "reported_balance", "account__account_type__name")
+        )
+
+        # Criar coluna period = YYYY-MM
+        df_tx["period"] = df_tx["period__year"].astype(str) + "-" + df_tx["period__month"].astype(str).str.zfill(2)
+        df_bal["period"] = df_bal["period__year"].astype(str) + "-" + df_bal["period__month"].astype(str).str.zfill(2)
+
+        # 🔎 Aplicar filtro de período se fornecido
+        if start_period and end_period:
+            df_tx = df_tx[(df_tx["period"] >= start_period) & (df_tx["period"] <= end_period)]
+            df_bal = df_bal[(df_bal["period"] >= start_period) & (df_bal["period"] <= end_period)]
+
+        # Investimento
+        df_invest = df_bal[df_bal["account__account_type__name"].str.lower() == "investment"]
+        patrimonio_por_mes = df_invest.groupby("period")["reported_balance"].sum()
+
+        if patrimonio_por_mes.empty:
+            patrimonio_final = 0
+            patrimonio_inicial = 0
+            aumento_patrimonio = 0
+            aumento_riqueza_medio = 0
+        else:
+            patrimonio_final = patrimonio_por_mes.iloc[-1]
+            patrimonio_inicial = patrimonio_por_mes.iloc[0]
+            aumento_patrimonio = patrimonio_final - patrimonio_inicial
+            aumento_riqueza = patrimonio_por_mes.diff().dropna()
+            aumento_riqueza_medio = aumento_riqueza.mean()
+
+        # Total investido
+        total_investido = df_tx[df_tx["type"] == "IV"]["amount"].sum()
+
+        # Receita mensal
+        receita_mensal = df_tx[df_tx["type"] == "IN"].groupby("period")["amount"].sum()
+        receita_media = receita_mensal.mean()
+
+        # Despesas estimadas
+        df_saving = df_bal[df_bal["account__account_type__name"].str.lower() == "savings"]
+        saving_por_mes = df_saving.groupby("period")["reported_balance"].sum()
+        periods = sorted(set(receita_mensal.index) & set(saving_por_mes.index))
+
+        despesas_estimadas = []
+        for i in range(len(periods) - 1):
+            p_n = periods[i]
+            p_n1 = periods[i + 1]
+            s_n = saving_por_mes.get(p_n, 0)
+            s_n1 = saving_por_mes.get(p_n1, 0)
+            r_n = receita_mensal.get(p_n, 0)
+            despesas_estimadas.append(s_n - s_n1 + r_n)
+        despesa_media = pd.Series(despesas_estimadas).mean()
+
+        # Poupança = receita - despesa - investimento médio
+        receita_mensal = receita_mensal.astype(float)
+        despesa_media = float(despesa_media)
+        total_investido = float(total_investido)
+
+        num_meses = len(receita_mensal) if len(receita_mensal) > 0 else 1
+        poupanca_mensal = receita_mensal - despesa_media - (total_investido / num_meses)
+        poupanca_media = poupanca_mensal.mean()
+
+        # KPIs formatados
+        ctx["kpis"] = {
+            "patrimonio": f"{patrimonio_final:,.0f} €",
+            "aumento": f"{aumento_patrimonio:,.0f} €",
+            "capital": f"{total_investido:,.0f} €",
+            "despesa_media": f"{despesa_media:,.0f} €",
+            "receita_media": f"{receita_media:,.0f} €",
+            "aumento_riqueza": f"{aumento_riqueza_medio:,.0f} €",
+            "poupanca_media": f"{poupanca_media:,.0f} €",
+        }
+
+        return ctx
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 print("✅ O ficheiro views.py foi carregado")
 
@@ -115,10 +351,6 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
         return qs.filter(user=self.request.user)
 
 
-
-
-class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = "core/dashboard.html"
 
 
 ################################################################################
@@ -1355,14 +1587,7 @@ def account_balance_template_xlsx(request):
     return response
 
 
-class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = "core/dashboard.html"
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["balances"] = call_rpc(self.request.user.id, "get_account_balances")
-        return ctx
-    
+ 
 # ─── API para Looker -----------------------------------------------------------
 from django.views.decorators.http import require_GET
 from django.http import JsonResponse
@@ -1395,3 +1620,56 @@ def api_jwt_my_transactions(request):
 
     rows = call_rpc(user_id, "get_my_transactions")
     return JsonResponse(rows, safe=False)
+
+
+
+
+@login_required
+def dashboard_data(request):
+    user_id = request.user.id
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH base AS (
+              SELECT p.year, p.month,
+                     SUM(CASE WHEN t.type = 'IN' THEN t.amount ELSE 0 END) AS income
+              FROM core_transaction t
+              JOIN core_dateperiod p ON t.period_id = p.id
+              WHERE t.user_id = %s
+              GROUP BY p.year, p.month
+            ),
+            saldos AS (
+              SELECT p.year, p.month, SUM(ab.reported_balance) AS saldo
+              FROM core_accountbalance ab
+              JOIN core_dateperiod p ON ab.period_id = p.id
+              JOIN core_account a ON ab.account_id = a.id
+              WHERE a.user_id = %s
+              GROUP BY p.year, p.month
+            )
+            SELECT b.year, b.month, b.income,
+                   s1.saldo AS saldo_n,
+                   s2.saldo AS saldo_nplus1,
+                   COALESCE(s1.saldo - s2.saldo + b.income, 0) AS expense_est
+            FROM base b
+            LEFT JOIN saldos s1 ON s1.year = b.year AND s1.month = b.month
+            LEFT JOIN saldos s2 ON (
+              (s2.year = b.year AND s2.month = b.month + 1) OR
+              (s2.year = b.year + 1 AND b.month = 12 AND s2.month = 1)
+            )
+            ORDER BY b.year, b.month;
+        """, [user_id, user_id])
+
+        rows = cursor.fetchall()
+
+    labels = [f"{y}-{m:02d}" for y, m, *_ in rows]
+    income = [float(inc or 0) for _, _, inc, *_ in rows]
+    expense = [float(e or 0) for *_, e in rows]
+
+    return JsonResponse({
+        "labels": labels,
+        "income": income,
+        "expense": expense
+    })
+
+
+

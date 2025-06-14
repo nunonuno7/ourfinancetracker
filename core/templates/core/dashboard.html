@@ -1,45 +1,79 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load static %}
+{% block title %}Dashboard{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-  <h2 class="mb-4">📊 Dashboard</h2>
-
-  {% if balances %}
-    <div class="table-responsive">
-      <table class="table table-striped align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>Período</th>
-            <th>Conta</th>
-            <th class="text-end">Saldo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for b in balances %}
-            <tr>
-              <td>{{ b.year }}-{{ b.month|stringformat:"02d" }}</td>
-              <td>{{ b.account }}</td>
-              <td class="text-end">
-                {{ b.balance|floatformat:2|intcomma }} €
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    {# total global #}
-    {% with total=0 %}
-      {% for b in balances %}
-        {% with total=total|add:b.balance %}
-        {% endwith %}
-      {% endfor %}
-      <div class="alert alert-success fw-bold text-end">
-        Total: {{ total|floatformat:2|intcomma }} €
-      </div>
-    {% endwith %}
-  {% else %}
-    <div class="alert alert-info">Ainda não tens saldos registados.</div>
-  {% endif %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">📊 Monthly Balances</h2>
+  <button class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#filterPanel">
+    ☰ Filters
+  </button>
 </div>
+
+<div class="collapse mb-3" id="filterPanel">
+  <div class="card card-body bg-light">
+    <div class="row g-3">
+      
+      <!-- 🔄 Intervalo de Anos -->
+      <div class="col-md-3">
+        <label class="form-label">Ano</label>
+        <div id="year-range"></div>
+        <div class="d-flex justify-content-between">
+          <span id="year-start-label"></span>
+          <span id="year-end-label"></span>
+        </div>
+      </div>
+
+      <!-- 🔄 Intervalo de Períodos -->
+      <div class="col-12 mt-3">
+        <label class="form-label">Período</label>
+        <div id="period-range"></div>
+        <div class="d-flex justify-content-between">
+          <span id="period-start-label"></span>
+          <span id="period-end-label"></span>
+        </div>
+      </div>
+
+      <!-- Botões -->
+      <div class="col-md-1 d-flex align-items-end">
+        <button class="btn btn-primary w-100" id="apply-filters">🔄 Apply</button>
+      </div>
+      <div class="col-md-1 d-flex align-items-end">
+        <button class="btn btn-outline-secondary w-100" id="reset-filters">🧹 Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 🧾 Tabela -->
+<div class="table-responsive mt-3">
+  <table id="balance-table" class="table table-bordered table-sm align-middle">
+    <thead class="table-light">
+      <tr id="balance-header-top"></tr>
+      <tr id="balance-header-bottom"></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- noUiSlider -->
+<link href="https://cdn.jsdelivr.net/npm/nouislider@15.7.0/dist/nouislider.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.0/dist/nouislider.min.js"></script>
+
+<!-- Estilos -->
+<style>
+  #balance-table th,
+  #balance-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  #period-range, #year-range {
+    margin-top: 10px;
+  }
+</style>
+
+<!-- Lógica principal -->
+<script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}
