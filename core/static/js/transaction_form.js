@@ -12,9 +12,12 @@ function initTransactionForm() {
   // Inicializar data com hoje se estiver vazia
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
-  if (!dateInput.value) {
-    dateInput.value = todayStr;
-  }
+const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
+
+if (isNewTransaction) {
+  console.log("📅 Forçar data de hoje via JS:", todayStr);
+  dateInput.value = todayStr;
+}
 
   // Flatpickr com sincronização
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
@@ -141,5 +144,18 @@ function initTransactionForm() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", initTransactionForm);
-document.body.addEventListener("htmx:afterSwap", initTransactionForm);
+document.addEventListener("DOMContentLoaded", () => {
+  initTransactionForm();
+});
+
+// ⚡ Atualiza tabela após o formulário ser trocado por HTMX (criação bem-sucedida)
+document.body.addEventListener("htmx:afterSwap", function (event) {
+  initTransactionForm();
+
+  const targetId = event.detail?.target?.id;
+  if (targetId === "transaction-form" && window.transactionTable) {
+    console.log("🔄 Reload da DataTable após HTMX swap do formulário de transação");
+    window.transactionTable.ajax.reload(null, false);
+  }
+});
+

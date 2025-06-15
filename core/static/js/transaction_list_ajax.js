@@ -31,10 +31,6 @@ $(document).ready(function () {
     locale: "default"
   });
 
-  // 🔄 Recarregar tabela ao mudar datas
-  startFlatpickr.config.onChange.push(() => table.ajax.reload());
-  endFlatpickr.config.onChange.push(() => table.ajax.reload());
-
   // 📊 Inicializar DataTable
   const table = $('#transaction-table').DataTable({
     serverSide: true,
@@ -65,7 +61,13 @@ $(document).ready(function () {
       { data: 'account', orderable: true },
       { data: 'actions', orderable: false }
     ]
-  });
+  })
+  
+  window.transactionTable = table; 
+
+  // 🔄 Recarregar tabela ao mudar datas
+  startFlatpickr.config.onChange.push(() => table.ajax.reload());
+  endFlatpickr.config.onChange.push(() => table.ajax.reload());
 
   // 🔁 Recarregar tabela ao mudar filtros
   $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
@@ -161,4 +163,35 @@ $(document).ready(function () {
       table.ajax.reload();
     }
   });
+
+  // 🔄 Limpar cache e recarregar tabela com os filtros atuais
+  $('#clear-cache-btn').on('click', function (e) {
+    e.preventDefault();
+
+    console.log("🧪 Clique detectado no botão #clear-cache-btn");
+
+fetch("/transactions/clear-cache/", {
+  method: "GET",
+  credentials: "same-origin",
+  headers: {
+    "X-Requested-With": "XMLHttpRequest",
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      console.log("✅ Cache limpa com sucesso");
+      setTimeout(() => {
+        table.ajax.reload(null, false);
+      }, 100);
+    } else {
+      alert("❌ Erro ao limpar cache.");
+    }
+  })
+      .catch(error => {
+        console.error("Erro ao contactar o servidor:", error);
+        alert("❌ Erro ao contactar o servidor.");
+      });
+  });
+
 });

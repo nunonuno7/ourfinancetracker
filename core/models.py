@@ -31,6 +31,7 @@ from django.utils import timezone
 
 User = get_user_model()
 from datetime import date
+from django.db.models import UniqueConstraint
 
 __all__ = [
     "Currency",
@@ -57,6 +58,15 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Helpers (re‑used in defaults)
 # ---------------------------------------------------------------------------
+
+def get_default_currency_id() -> int:
+    return get_default_currency().pk
+
+def get_default_account_type_id() -> int:
+    return get_default_account_type().pk
+
+
+
 
 def get_default_currency() -> "Currency":
     """Return the default *EUR* currency (create if missing)."""
@@ -118,26 +128,31 @@ class AccountType(models.Model):
 class Account(models.Model):
     """A bank or investment account owned by the user."""
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="accounts")  # type: ignore[valid‑type]
-    name = models.CharField(max_length=100)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="accounts")  # ✅ campo obrigatório
+    name = models.CharField(max_length=100)  # ✅ nome da conta (ex.: BPI, Revolut)
+
     account_type = models.ForeignKey(
         AccountType,
         on_delete=models.PROTECT,
-        default=get_default_account_type,  # ← tentará usar "Savings"
+        default=get_default_account_type_id,
     )
+
     currency = models.ForeignKey(
         Currency,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        default=get_default_currency,  # ← tentará usar "EUR"
+        default=get_default_currency_id,
     )
+
     created_at = models.DateField(auto_now_add=True)
     position = models.PositiveIntegerField(default=0)
-    class Meta:
-        unique_together = (("user", "name"),)
-        ordering = ("name",)
 
+    class Meta:
+        ordering = ("name",)
+        constraints = [
+            UniqueConstraint(fields=["user", "name"], name="unique_account_user_name")
+        ]
     def __str__(self) -> str:
         return f"{self.name} – {self.user}"
 
@@ -164,14 +179,26 @@ class AccountBalance(models.Model):
     period = models.ForeignKey("DatePeriod", on_delete=models.CASCADE, related_name="account_balances")
     reported_balance = models.DecimalField(max_digits=14, decimal_places=2)
 
+
     class Meta:
-        unique_together = (("account", "period"),)
         ordering = ("-period__year", "-period__month")
+        constraints = [
+            UniqueConstraint(fields=["account", "period"], name="unique_accountbalance_account_period")
+        ]
 
     def __str__(self) -> str:
         return f"{self.account} @ {self.period}: {self.reported_balance}"
     
     
+
+    def merge_into(self, target: 'Category') -> None:
+        if self.pk == target.pk:
+            return
+        from core.models import Transaction
+        Transaction.objects.filter(category=self).update(category=target)
+        self.delete()
+    
+
 class Category(models.Model):
     """User-defined flat category (no hierarchy)."""
 
@@ -182,9 +209,11 @@ class Category(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = (("user", "name"),)
         ordering = ("position", "name")
         verbose_name_plural = "categories"
+        constraints = [
+            UniqueConstraint(fields=["user", "name"], name="unique_category_user_name")
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -221,7 +250,7 @@ class Transaction(models.Model):
         INVESTMENT = "IV", "Investment"
         TRANSFER = "TR", "Transfer"
 
-    user: User = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")  # type: ignore[valid-type]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
     date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     type = models.CharField(max_length=2, choices=Type.choices)
@@ -242,9 +271,10 @@ class Transaction(models.Model):
         blank=True,
         related_name="transactions",
     )
+
     tags = models.ManyToManyField(
         "Tag",
-        through="TransactionTag",  # 💡 ligação explícita
+        through="TransactionTag",  # 🔗 ligação explícita
         blank=True,
         related_name="transactions"
     )
@@ -256,6 +286,7 @@ class Transaction(models.Model):
         blank=True,
         related_name="transactions",
     )
+
     notes = models.TextField(blank=True)
     is_estimated = models.BooleanField(default=False)
     is_cleared = models.BooleanField(default=True)
@@ -275,7 +306,11 @@ class Transaction(models.Model):
     def save(self, *args, **kwargs):
         """Aplica defaults à transação antes de guardar."""
 
-        # Preenche o período com base na data, se ainda não existir
+        # 🚫 Garante que pelo menos um dos dois está definido
+        if not self.date and not self.period:
+            raise ValueError("Transaction must have either a date or a period defined.")
+
+        # 🔁 Preenche período com base na data
         if not self.period and self.date:
             self.period, _ = DatePeriod.objects.get_or_create(
                 year=self.date.year,
@@ -283,15 +318,15 @@ class Transaction(models.Model):
                 defaults={"label": self.date.strftime("%B %Y")}
             )
 
-        # Se não houver data mas houver período, usa o dia 1 desse mês
+        # 🔁 Preenche data com base no período
         if not self.date and self.period:
             self.date = date(self.period.year, self.period.month, 1)
 
-        # Tipo default: Expense
+        # Tipo default
         if not self.type:
             self.type = self.Type.EXPENSE
 
-        # Categoria mais usada (ou fallback para "Geral") — apenas se nova
+        # Atribui categoria mais usada se não houver
         if not self.pk and not self.category_id:
             most_used = (
                 Category.objects.filter(user=self.user)
@@ -300,9 +335,8 @@ class Transaction(models.Model):
                 .first()
             )
             self.category = most_used or Category.get_default(self.user)
-            
-        super().save(*args, **kwargs)
 
+        super().save(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +345,8 @@ class Transaction(models.Model):
 
 
 class UserSettings(models.Model):
-    user: User = models.OneToOneField(User, on_delete=models.CASCADE, related_name="settings")  # type: ignore[valid‑type]
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="settings")
+
     default_currency = models.ForeignKey(
         Currency,
         on_delete=models.PROTECT,
@@ -429,7 +464,12 @@ class ExchangeRate(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = (("from_currency", "to_currency", "rate_date"),)
+        constraints = [
+            UniqueConstraint(
+                fields=["from_currency", "to_currency", "rate_date"],
+                name="unique_exchangerate_from_to_date"
+            )
+        ]
 
     def __str__(self):
         return f"{self.from_currency} → {self.to_currency} @ {self.rate_date}: {self.rate}"
@@ -442,8 +482,10 @@ class DatePeriod(models.Model):
     label = models.CharField(max_length=20)  # Ex: "Junho 2025"
 
     class Meta:
-        unique_together = (("year", "month"),)
         ordering = ("-year", "-month")
+        constraints = [
+            UniqueConstraint(fields=["year", "month"], name="unique_dateperiod_year_month")
+        ]
 
     def __str__(self):
         return f"{self.label} ({self.year}-{self.month:02})"
@@ -468,9 +510,11 @@ class Tag(models.Model):
     )
 
     class Meta:
-        unique_together = (("user", "name"),)
         ordering = ("position", "name")
         verbose_name_plural = "tags"
+        constraints = [
+            UniqueConstraint(fields=["user", "name"], name="unique_tag_user_name")
+        ]
 
     def __str__(self):
         return self.name
@@ -482,53 +526,13 @@ class TransactionTag(models.Model):
     tag = models.ForeignKey("Tag", on_delete=models.CASCADE, related_name="transaction_links")
 
     class Meta:
-        unique_together = (("transaction", "tag"),)
         verbose_name = "Transaction Tag"
         verbose_name_plural = "Transaction Tags"
-
+        constraints = [
+            UniqueConstraint(fields=["transaction", "tag"], name="unique_transactiontag_tx_tag")
+        ]
     def __str__(self):
         return f"{self.transaction_id} → {self.tag.name}"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -1,346 +1,220 @@
-
 """
-Views for the *ourfinancetracker* core app.
+Django *views* for **ourfinancetracker** – versão limpa.
 
-The file was rewritten to:
-• remove duplicated imports
-• share common behaviour in mix‑ins (user injection & ownership filtering)
-• add a dedicated ``AccountForm`` (see ``core/forms.py``) and reuse it in the account CBVs
-• tighten querysets so a user can only access her own data
-• add docstrings and type hints for easier maintenance
-• introduce a MergeView for account fusion with confirmation
+• Imports organizados e sem duplicações
+• Cache segura (isolada por utilizador + intervalo) via Django cache backend
+• Helpers extra em `core.utils`
+• @csrf_exempt removido de endpoints não‑públicos
 """
 
 from __future__ import annotations
 
-# Built-in
-import sys
-import json
-import hashlib
-from io import BytesIO
-from calendar import monthrange
+# ─────────────────────────────── Imports ────────────────────────────────
 from datetime import date, datetime
-from typing import Any, Dict
+from io import BytesIO
+from typing import Any, Dict, Iterable
 from urllib.parse import urlencode
 
-# 3rd party
 import pandas as pd
-import openpyxl
-from openpyxl import Workbook, load_workbook
-from openpyxl.utils import get_column_letter
 from psycopg2.extras import execute_values
-
-# Django core
-from django.http import (
-    HttpResponse, JsonResponse, Http404, HttpResponseForbidden
-)
-from django.shortcuts import render, redirect, get_object_or_404
-from django.urls import reverse, reverse_lazy
-from django.views.decorators.http import require_POST, require_GET
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.cache import cache_page
-from django.utils.cache import patch_vary_headers
-from django.utils.dateparse import parse_date
-from django.utils.functional import cached_property
-from django.utils.timezone import now
 from django.contrib import messages
-from django.contrib.messages import get_messages
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
+from django.contrib.messages import get_messages
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import connection, transaction as db_transaction
-from django.db.models import Q, QuerySet, Sum, F
+from django.db.models import QuerySet
+from django.http import (
+    Http404,
+    HttpResponse,
+    HttpResponseForbidden,
+    JsonResponse,
+)
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse, reverse_lazy
+from django.utils.timezone import now
 from django.views.decorators.cache import cache_page
-from django.utils.decorators import method_decorator
-
-
-
-# Django views
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import (
-    CreateView, DeleteView, ListView, RedirectView, TemplateView,
-    UpdateView, View
+    CreateView,
+    DeleteView,
+    ListView,
+    RedirectView,
+    TemplateView,
+    UpdateView,
+    View,
 )
 
-# App-specific
-from .models import (
-    Transaction, Account, AccountBalance, Category, Tag, DatePeriod
+from core.forms import (
+    AccountBalanceFormSet,
+    AccountForm,
+    CategoryForm,
+    CustomUserCreationForm,
+    TransactionForm,
+    TransactionImportForm,
 )
-from .forms import (
-    TransactionImportForm, TransactionForm, AccountForm,
-    AccountBalanceFormSet, CategoryForm, CustomUserCreationForm
-)
-
 from core.mixins import UserInFormKwargsMixin
-
-
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
-from core.cache import TX_LAST
-
-
-from django.db import connection
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-
-
-from django.db.models import Sum
-from core.models import AccountBalance, Account, Transaction, DatePeriod
-from datetime import date
-import pandas as pd
+from core.models import (
+    Account,
+    AccountBalance,
+    Category,
+    DatePeriod,
+    Tag,
+    Transaction,
+)
+from core.utils.cache_helpers import clear_tx_cache
+from core.utils.supabase_rpc import call_rpc
+import logging
+logging.getLogger("django.server").setLevel(logging.WARNING)  # ou logging.ERROR
 
 ################################################################################
 #                               Menu config API                                #
 ################################################################################
 
 
-
-
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_GET
-from django.http import JsonResponse
-from django.db import connection
-import pandas as pd
-
 @login_required
 @require_GET
 def account_balances_pivot_json(request):
+    """Retorna saldos agregados por tipo/moeda num pivot ready‑to‑chart."""
     user_id = request.user.id
-
     with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT
-                at.name AS type,
-                cur.code AS currency,
-                dp.year,
-                dp.month,
-                SUM(ab.reported_balance) AS total_balance
+        cursor.execute(
+            """
+            SELECT at.name, cur.code, dp.year, dp.month, SUM(ab.reported_balance)
             FROM core_accountbalance ab
-            JOIN core_account acc ON ab.account_id = acc.id
-            JOIN core_accounttype at ON acc.account_type_id = at.id
-            JOIN core_currency cur ON acc.currency_id = cur.id
-            JOIN core_dateperiod dp ON ab.period_id = dp.id
+            JOIN core_account acc ON acc.id = ab.account_id
+            JOIN core_accounttype at ON at.id = acc.account_type_id
+            JOIN core_currency cur ON cur.id = acc.currency_id
+            JOIN core_dateperiod dp ON dp.id = ab.period_id
             WHERE acc.user_id = %s
             GROUP BY at.name, cur.code, dp.year, dp.month
-            ORDER BY dp.year, dp.month, at.name, cur.code
-        """, [user_id])
+            ORDER BY dp.year, dp.month
+            """,
+            [user_id],
+        )
         rows = cursor.fetchall()
 
     if not rows:
         return JsonResponse({"columns": [], "rows": []})
 
-    # Construir DataFrame
-    df = pd.DataFrame(rows, columns=["type", "currency", "year", "month", "total_balance"])
-    df["total_balance"] = pd.to_numeric(df["total_balance"], errors="coerce").fillna(0).astype(float)
+    df = pd.DataFrame(
+        rows, columns=["type", "currency", "year", "month", "balance"]
+    )
+    df["period"] = pd.to_datetime(
+        dict(year=df.year, month=df.month, day=1)
+    ).dt.strftime("%b/%y")
 
-    # Criar label para o período
-    df["period"] = pd.to_datetime(dict(year=df.year, month=df.month, day=1)).dt.strftime("%b/%y")
+    pivot = (
+        df.pivot_table(
+            index=["type", "currency"],
+            columns="period",
+            values="balance",
+            aggfunc="sum",
+            fill_value=0,
+        )
+        .sort_index(axis=1)
+        .reset_index()
+    )
 
-    # Pivotar tabela: index = tipo + moeda, colunas = período, valores = saldo
-    pivot = df.pivot_table(
-        index=["type", "currency"],
-        columns="period",
-        values="total_balance",
-        aggfunc="sum",
-        fill_value=0
-    ).sort_index(axis=1)
+    return JsonResponse({"columns": list(pivot.columns), "rows": pivot.to_dict("records")})
 
-    # Converter para JSON com cabeçalhos e linhas
-    pivot.reset_index(inplace=True)
-    columns = ["type", "currency"] + list(pivot.columns[2:])
-    rows = pivot.to_dict(orient="records")
 
-    return JsonResponse({
-        "columns": columns,
-        "rows": rows
-    })
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs):  # type: ignore[override]
         ctx = super().get_context_data(**kwargs)
         user = self.request.user
 
-        # Períodos disponíveis (para o dropdown)
         ctx["periods"] = DatePeriod.objects.order_by("-year", "-month")
-
-        # Filtro por período
         start_period = self.request.GET.get("start-period")
         end_period = self.request.GET.get("end-period")
 
-        # Preparar formato YYYY-MM para comparação
-        def period_str(y, m):
-            return f"{y}-{str(m).zfill(2)}"
-
-        # Carregar dados
         txs = Transaction.objects.filter(user=user).select_related("period", "account")
-        saldos = AccountBalance.objects.filter(account__user=user).select_related("account", "period")
+        bal = AccountBalance.objects.filter(account__user=user).select_related("period", "account__account_type")
 
-        # DataFrames
         df_tx = pd.DataFrame.from_records(
             txs.values("date", "type", "amount", "period__year", "period__month")
         )
         df_bal = pd.DataFrame.from_records(
-            saldos.values("period__year", "period__month", "reported_balance", "account__account_type__name")
+            bal.values("period__year", "period__month", "reported_balance", "account__account_type__name")
         )
 
-        # Criar coluna period = YYYY-MM
-        df_tx["period"] = df_tx["period__year"].astype(str) + "-" + df_tx["period__month"].astype(str).str.zfill(2)
-        df_bal["period"] = df_bal["period__year"].astype(str) + "-" + df_bal["period__month"].astype(str).str.zfill(2)
+        df_tx["period"] = (
+            df_tx["period__year"].astype(str)
+            + "-"
+            + df_tx["period__month"].astype(str).str.zfill(2)
+        )
+        df_bal["period"] = (
+            df_bal["period__year"].astype(str)
+            + "-"
+            + df_bal["period__month"].astype(str).str.zfill(2)
+        )
 
-        # 🔎 Aplicar filtro de período se fornecido
         if start_period and end_period:
             df_tx = df_tx[(df_tx["period"] >= start_period) & (df_tx["period"] <= end_period)]
             df_bal = df_bal[(df_bal["period"] >= start_period) & (df_bal["period"] <= end_period)]
 
-        # Investimento
         df_invest = df_bal[df_bal["account__account_type__name"].str.lower() == "investment"]
-        patrimonio_por_mes = df_invest.groupby("period")["reported_balance"].sum()
+        patrimonio_mes = df_invest.groupby("period")["reported_balance"].sum()
 
-        if patrimonio_por_mes.empty:
-            patrimonio_final = 0
-            patrimonio_inicial = 0
-            aumento_patrimonio = 0
-            aumento_riqueza_medio = 0
-        else:
-            patrimonio_final = patrimonio_por_mes.iloc[-1]
-            patrimonio_inicial = patrimonio_por_mes.iloc[0]
-            aumento_patrimonio = patrimonio_final - patrimonio_inicial
-            aumento_riqueza = patrimonio_por_mes.diff().dropna()
-            aumento_riqueza_medio = aumento_riqueza.mean()
+        patrimonio_final = float(patrimonio_mes.iloc[-1]) if not patrimonio_mes.empty else 0
+        patrimonio_inicial = float(patrimonio_mes.iloc[0]) if not patrimonio_mes.empty else 0
+        aumento_patrimonio = patrimonio_final - patrimonio_inicial
+        aumento_medio = patrimonio_mes.diff().dropna().mean() if len(patrimonio_mes) > 1 else 0
 
-        # Total investido
-        total_investido = df_tx[df_tx["type"] == "IV"]["amount"].sum()
+        df_income = df_tx[df_tx["type"] == "IN"]
+        receita_mes = df_income.groupby("period")["amount"].sum().astype(float)
+        receita_media = receita_mes.mean() if not receita_mes.empty else 0
 
-        # Receita mensal
-        receita_mensal = df_tx[df_tx["type"] == "IN"].groupby("period")["amount"].sum()
-        receita_media = receita_mensal.mean()
-
-        # Despesas estimadas
         df_saving = df_bal[df_bal["account__account_type__name"].str.lower() == "savings"]
-        saving_por_mes = df_saving.groupby("period")["reported_balance"].sum()
-        periods = sorted(set(receita_mensal.index) & set(saving_por_mes.index))
-
-        despesas_estimadas = []
+        saving_mes = df_saving.groupby("period")["reported_balance"].sum().astype(float)
+        periods = sorted(set(receita_mes.index) & set(saving_mes.index))
+        despesas_estimadas: list[float] = []
         for i in range(len(periods) - 1):
-            p_n = periods[i]
-            p_n1 = periods[i + 1]
-            s_n = saving_por_mes.get(p_n, 0)
-            s_n1 = saving_por_mes.get(p_n1, 0)
-            r_n = receita_mensal.get(p_n, 0)
-            despesas_estimadas.append(s_n - s_n1 + r_n)
-        despesa_media = pd.Series(despesas_estimadas).mean()
+            p, p1 = periods[i], periods[i + 1]
+            despesas_estimadas.append(saving_mes[p] - saving_mes[p1] + receita_mes.get(p, 0))
+        despesa_media = pd.Series(despesas_estimadas).mean() if despesas_estimadas else 0
 
-        # Poupança = receita - despesa - investimento médio
-        receita_mensal = receita_mensal.astype(float)
-        despesa_media = float(despesa_media)
-        total_investido = float(total_investido)
+        total_investido = float(df_tx[df_tx["type"] == "IV"]["amount"].sum())
+        n_meses = max(len(receita_mes), 1)
+        poupanca_media = receita_media - despesa_media - total_investido / n_meses
 
-        num_meses = len(receita_mensal) if len(receita_mensal) > 0 else 1
-        poupanca_mensal = receita_mensal - despesa_media - (total_investido / num_meses)
-        poupanca_media = poupanca_mensal.mean()
-
-        # KPIs formatados
         ctx["kpis"] = {
             "patrimonio": f"{patrimonio_final:,.0f} €",
             "aumento": f"{aumento_patrimonio:,.0f} €",
             "capital": f"{total_investido:,.0f} €",
             "despesa_media": f"{despesa_media:,.0f} €",
             "receita_media": f"{receita_media:,.0f} €",
-            "aumento_riqueza": f"{aumento_riqueza_medio:,.0f} €",
+            "aumento_riqueza": f"{aumento_medio:,.0f} €",
             "poupanca_media": f"{poupanca_media:,.0f} €",
         }
-
         return ctx
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-print("✅ O ficheiro views.py foi carregado")
-
 @login_required
 def menu_config(request):
-    return JsonResponse({
-        "username": request.user.username,
-        "links": [
-            {"name": "Dashboard", "url": reverse("transaction_list")},
-            {"name": "New Transaction", "url": reverse("transaction_create")},
-            {"name": "Categories", "url": reverse("category_list")},
-            {"name": "Account Balances", "url": reverse("account_balance")},
-        ]
-    })
+    return JsonResponse(
+        {
+            "username": request.user.username,
+            "links": [
+                {"name": "Dashboard", "url": reverse("transaction_list")},
+                {"name": "New Transaction", "url": reverse("transaction_create")},
+                {"name": "Categories", "url": reverse("category_list")},
+                {"name": "Account Balances", "url": reverse("account_balance")},
+            ],
+        }
+    )
 
 
 ################################################################################
 #                               Shared mix‑ins                                 #
 ################################################################################
-
-
-
 
 
 class OwnerQuerysetMixin(LoginRequiredMixin):
@@ -349,7 +223,6 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
     def get_queryset(self) -> QuerySet:  # type: ignore[override]
         qs: QuerySet = super().get_queryset()  # type: ignore[misc]
         return qs.filter(user=self.request.user)
-
 
 
 
@@ -362,14 +235,11 @@ class TransactionListView(LoginRequiredMixin, ListView):
     template_name = "core/transaction_list.html"
     context_object_name = "transactions"
 
-    def get_queryset(self) -> QuerySet:
-        return (
-            super().get_queryset()
-            .filter(user=self.request.user)
-            .order_by("-date")
-        )
+    def get_queryset(self):  # type: ignore[override]
+        return Transaction.objects.filter(user=self.request.user).order_by("-date")
 
-@method_decorator(cache_page(60 * 5), name='dispatch')
+
+
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     model = Transaction
     form_class = TransactionForm
@@ -378,27 +248,31 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 
     def form_valid(self, form):
         self.object = form.save()
+
+        # 🔁 Limpa cache ao criar nova transação
+        from core.utils.cache_helpers import clear_tx_cache
+        clear_tx_cache(self.request.user.id)
+
         if self.request.headers.get("HX-Request") == "true":
-            # Responde com JSON simples para sucesso
             return JsonResponse({"success": True})
         return redirect(self.get_success_url())
 
-    def form_invalid(self, form):
+    def form_invalid(self, form):  # opcional, mas ajuda no debug com HTMX
         if self.request.headers.get("HX-Request") == "true":
-            # Retorna erros JSON para o frontend processar e mostrar
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
-        print("\U0001f6d8 Formulário inválido:", form.errors)
         return super().form_invalid(form)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["accounts"] = Account.objects.filter(user=self.request.user).order_by("name")
 
-        # Garante que a lista de categorias está disponível apenas para GET
-        if self.request.method == "GET":
-            context["category_list"] = list(
-                Category.objects.filter(user=self.request.user).values_list("name", flat=True)
-            )
+        user = self.request.user
+        context["accounts"] = Account.objects.filter(user=user).order_by("name")
+
+        # ⚠️ Importante: adicionar a lista de categorias para o Tom Select
+        context["category_list"] = list(
+            Category.objects.filter(user=user).values_list("name", flat=True)
+        )
+
         return context
 
 
@@ -407,41 +281,44 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 @login_required
 def period_autocomplete(request):
     q = request.GET.get("q", "")
-    periods = DatePeriod.objects.all().order_by("-year", "-month")
-
+    periods = DatePeriod.objects.order_by("-year", "-month")
     if q:
         try:
-            year, month = map(int, q.split("-"))
-            periods = periods.filter(year=year, month=month)
-        except:
+            y, m = map(int, q.split("-"))
+            periods = periods.filter(year=y, month=m)
+        except Exception:
             periods = periods.none()
-
-    results = [
-        {
-            "value": f"{p.year}-{p.month:02}",
-            "display_name": f"{p.label}",
-        }
-        for p in periods
-    ]
-    return JsonResponse(results, safe=False)
-
+    return JsonResponse(
+        [{"value": f"{p.year}-{p.month:02}", "display": p.label} for p in periods], safe=False
+    )
 
 @login_required
 def transaction_clear_cache(request):
-    user_id = request.user.id
-    TX_LAST.pop(user_id, None)
-    messages.success(request, "✅ Cache limpa. Os dados serão recarregados.")
+    clear_tx_cache(request.user.id)
+
+    # Se for pedido AJAX, devolve JSON simples (útil para fetch/htmx)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"success": True})
+
+    # Caso contrário, redireciona normalmente com mensagem
+    messages.success(request, "✅ Cache limpa.")
     return redirect("transaction_list")
 
-def parse_safe_date(value, fallback):
-    """Tenta converter uma string para date com múltiplos formatos."""
+
+# Cache key helper
+def _cache_key(user_id: int, start: date, end: date) -> str:
+    return f"tx_cache_user_{user_id}_{start}_{end}"
+
+
+
+def parse_safe_date(value: str | None, fallback: date) -> date:
+    """Tenta converter *value* para `date` em formatos comuns."""
     for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
-            return datetime.strptime(value, fmt).date()
+            return datetime.strptime(value or "", fmt).date()
         except (ValueError, TypeError):
             continue
     return fallback
-
 
 
 @login_required
@@ -449,7 +326,6 @@ def parse_safe_date(value, fallback):
 def transactions_json(request):
     import logging
     import pandas as pd
-    from core.cache import TX_LAST
 
     logging.getLogger("django.server").setLevel(logging.WARNING)
     user_id = request.user.id
@@ -465,20 +341,18 @@ def transactions_json(request):
 
     print(f"📅 Intervalo: {start_date} → {end_date}")
 
-    # 🧠 Verifica cache local
+    # ✅ Cache segura por utilizador + intervalo
+    raw_key = f"tx_cache_user_{user_id}_{start_date}_{end_date}"
+    cache_key = cache.make_key(raw_key)
+    print(f"🔑 A aceder ao cache_key: {cache_key}")
 
-    cache_data = TX_LAST.get(user_id, {})
-    cached_start = cache_data.get("start")
-    cached_end = cache_data.get("end")
+    cached_df = cache.get(cache_key)
 
-    if cached_start and cached_end and cached_start <= start_date and cached_end >= end_date:
-        print("✅ Cache usada — a aplicar filtros e ordenação em memória")
-        df = cache_data["df"].copy()
+    if cached_df is not None:
+        print("✅ Cache segura usada via Django")
+        df = cached_df.copy()
     else:
-        print("📅 Query SQL nova (cache vazia ou expirada)")
-
-
-        print("📅 Query SQL nova (cache vazia ou expirada)")
+        print("📅 Query SQL nova (cache ausente ou expirada)")
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
@@ -504,7 +378,7 @@ def transactions_json(request):
             "id", "date", "year", "month", "type", "amount",
             "category", "account", "currency", "tags"
         ])
-        TX_LAST[user_id] = {"df": df.copy(), "start": start_date, "end": end_date}
+        cache.set(raw_key, df.copy(), timeout=300)
 
     # 🧠 Preparar colunas
     df["date"] = df["date"].astype(str)
@@ -559,7 +433,7 @@ def transactions_json(request):
             df["account"].str.contains(search, case=False, na=False) |
             df["type"].str.contains(search, case=False, na=False) |
             df["tags"].str.contains(search, case=False, na=False)]
-        
+
     # 🔢 Categorias e períodos com base nos dados visíveis (sem filtro próprio)
     unique_types = sorted(df_for_type["type"].dropna().unique())
     unique_categories = sorted(df_for_category["category"].dropna().unique())
@@ -618,7 +492,7 @@ def transactions_json(request):
         "draw": draw,
         "recordsTotal": total,
         "recordsFiltered": total,
-        "data": df_page[[ "period", "date", "type", "amount", "category", "tags", "account", "actions" ]].to_dict(orient="records"),
+        "data": df_page[["period", "date", "type", "amount", "category", "tags", "account", "actions"]].to_dict(orient="records"),
         "unique_types": unique_types,
         "unique_categories": unique_categories,
         "unique_accounts": unique_accounts,
@@ -660,10 +534,21 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
         return context
 
 
-class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
+
+
+class TransactionDeleteView(LoginRequiredMixin, DeleteView):
     model = Transaction
     template_name = "core/confirms/transaction_confirm_delete.html"
     success_url = reverse_lazy("transaction_list")
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        user_id = self.object.user_id
+        response = super().delete(request, *args, **kwargs)
+        print(f"🧹 Eliminação via view — limpando cache para user_id={user_id}")
+        clear_tx_cache(user_id)
+        return response
+
 
 ################################################################################
 #                               Category views                                 #
@@ -988,15 +873,15 @@ def account_balance_view(request):
     return render(request, "core/account_balance.html", context)
 
 def _merge_duplicate_accounts(user):
-    seen = {}
+    seen: dict[str, Account] = {}
     for acc in Account.objects.filter(user=user).order_by("name"):
-        name = acc.name.strip().lower()
-        if name in seen:
-            primary = seen[name]
+        key = acc.name.strip().lower()
+        if key in seen:
+            primary = seen[key]
             AccountBalance.objects.filter(account=acc).update(account=primary)
             acc.delete()
         else:
-            seen[name] = acc
+            seen[key] = acc
 
 ################################################################################
 #                               Misc views                                     #
@@ -1027,7 +912,6 @@ class HomeView(TemplateView):
 
 
 @require_POST
-@csrf_exempt
 @login_required
 def delete_account_balance(request, pk):
     try:
@@ -1125,8 +1009,6 @@ def account_reorder(request):
     return JsonResponse({"error": "invalid method"}, status=405)
 
 
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
 
 @login_required
 def category_autocomplete(request):
@@ -1377,9 +1259,8 @@ def import_transactions_xlsx(request):
                 """, links)
 
         # 🧹 Limpar cache de transações do utilizador
-        if request.user.id in TX_LAST:
-            print(f"🧹 Limpar cache TX_LAST após importação (user_id={request.user.id})")
-            del TX_LAST[request.user.id]
+        from core.utils.cache_helpers import clear_tx_cache
+        clear_tx_cache(request.user.id)
 
         # ✅ Mensagem de sucesso
         messages.success(request, f"✔ {len(transaction_ids)} transactions imported successfully!")
@@ -1589,8 +1470,6 @@ def account_balance_template_xlsx(request):
 
  
 # ─── API para Looker -----------------------------------------------------------
-from django.views.decorators.http import require_GET
-from django.http import JsonResponse
 from core.utils.supabase_rpc import call_rpc          # utilitário já criado antes
 
 
@@ -1598,11 +1477,9 @@ import jwt
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET
 from core.utils.supabase_rpc import call_rpc
 
 @require_GET
-@csrf_exempt
 def api_jwt_my_transactions(request):
     """
     Endpoint seguro via JWT: devolve as transações do utilizador autenticado via token JWT.

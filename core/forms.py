@@ -177,7 +177,6 @@ class TransactionForm(forms.ModelForm):
 
 
 
-
 class CategoryForm(UserAwareMixin, forms.ModelForm):
     class Meta:
         model = Category

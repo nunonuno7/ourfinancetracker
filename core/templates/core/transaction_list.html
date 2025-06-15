@@ -12,8 +12,8 @@
     <div class="d-flex gap-2">
       <a href="{% url 'transaction_export_xlsx' %}" class="btn btn-outline-primary">⬇ Exportar Excel</a>
       <a href="{% url 'transaction_import_xlsx' %}" class="btn btn-outline-success">⬆ Importar Excel</a>
-      <a href="{% url 'transaction_clear_cache' %}" class="btn btn-outline-secondary" title="Clear cache">
-        <i class="bi bi-arrow-clockwise"></i>
+      <a href="#" class="btn btn-outline-secondary" id="clear-cache-btn" title="Limpar cache">
+        🧹 Limpar cache
       </a>
       <a href="{% url 'transaction_create' %}" class="btn btn-success">➕ New Transaction</a>
     </div>
