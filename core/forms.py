@@ -1,121 +1,133 @@
-from __future__ import annotations
+# forms.py - Versão Corrigida
 
-# Built-in
-from datetime import date, datetime
-from decimal import Decimal
+import re
 from typing import Any
-from datetime import date as dt_date
-# Django
+from datetime import datetime
 from django import forms
-from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from django.forms import BaseModelFormSet, modelformset_factory
-from django.forms.widgets import HiddenInput
-from django.utils.timezone import now
+from decimal import Decimal
 
-# Project
-from .mixins import UserAwareMixin
-from .models import (
-    Account, AccountBalance, AccountType, Category, Currency,
-    DatePeriod, Tag, Transaction
+from core.models import (
+    Transaction,
+    Category,
+    Account,
+    AccountBalance,
+    DatePeriod,
+    AccountType,
+    Currency,
+    Tag,
 )
 
-User = get_user_model()
 
-class TransactionForm(forms.ModelForm):
-    # Campo de texto livre para categorias, usado com Tom Select (1 item máx.)
+class UserAwareMixin:
+    """Mixin to provide user information to forms."""
+
+    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
+        self.user = user
+        super().__init__(*args, **kwargs)  # type: ignore
+
+
+class UserInFormKwargsMixin:
+    """
+    View mixin that adds request.user to form kwargs on both
+    get_form_kwargs() and get_form() methods. Most views just need one.
+    """
+
+    def get_form_kwargs(self):
+        """Add request.user to form kwargs."""
+        kwargs = super().get_form_kwargs()  # type: ignore[misc]
+        kwargs["user"] = self.request.user  # type: ignore[misc]
+        return kwargs
+
+
+class TransactionForm(UserAwareMixin, forms.ModelForm):
+    """Form for Transaction creation/editing."""
+
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        required=False,
+    )
+
+    period = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "YYYY-MM",
+                "data-autocomplete": "periods",
+            }
+        ),
+    )
+
     category = forms.CharField(
-        label="Category",
         required=False,
-        widget=forms.TextInput(attrs={
-            "class": "form-control",
-            "autocomplete": "off"
-        }),
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Category",
+                "data-autocomplete": "categories",
+            }
+        ),
     )
 
-    # Campo de texto livre para tags, separado por vírgulas
     tags_input = forms.CharField(
-        label="Tags",
         required=False,
-        widget=forms.TextInput(attrs={
-            "class": "form-control",
-            "placeholder": "e.g. groceries, food, weekend",
-            "autocomplete": "off"
-        }),
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Tags (comma-separated)",
+                "data-autocomplete": "tags",
+            }
+        ),
     )
-
-    # Hidden input sincronizado com flatpickr
-    period = forms.CharField(widget=forms.HiddenInput())
 
     class Meta:
         model = Transaction
         fields = [
-            "amount", "date", "period", "type",
-            "account", "notes", "is_cleared"
+            "date",
+            "period",
+            "type",
+            "amount",
+            "account",
+            "category",
+            "tags_input",
+            "notes",
+            "is_cleared",
         ]
         widgets = {
-            "amount": forms.TextInput(attrs={
-                "class": "form-control text-end",
-                "inputmode": "decimal",
-                "autocomplete": "off"
-            }),
-            "date": forms.DateInput(attrs={
-                "class": "form-control",
-                "autocomplete": "off",
-                "id": "id_date",  # <- adicionado manualmente
-            }),
             "type": forms.Select(attrs={"class": "form-select"}),
+            "amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01"}
+            ),
             "account": forms.Select(attrs={"class": "form-select"}),
-            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "notes": forms.Textarea(
+                attrs={"class": "form-control", "rows": "3", "style": "height: 5em;"}
+            ),
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    def __init__(self, *args, user=None, **kwargs):
-        print("🧩 TransactionForm __init__")
-        super().__init__(*args, **kwargs)
-        self.user = user
-        print(f"🔐 User: {self.user}")
+    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, user=user, **kwargs)
 
-        # 🔄 Tipos disponíveis
-        self.fields["type"].choices = Transaction.Type.choices
+        # Define available accounts
+        if user:
+            self.fields["account"].queryset = Account.objects.filter(user=user)
 
-        # ✅ Corrige erro de cursor fechado (PostgreSQL)
-        qs = Account.objects.filter(user=user).order_by("name")
-        list(qs)  # força a avaliação para evitar erro no render()
-        self.fields["account"].queryset = qs
-        print(f"📋 Contas carregadas: {qs.count()}")
-
-        # 📦 Lista de categorias para o Tom Select (como string embutida no data attribute)
-        categories = Category.objects.filter(user=user).order_by("name").values_list("name", flat=True)
-        self.fields["category"].widget.attrs["data-category-list"] = ",".join(categories)
-
-        # 🎯 Nova transação
-        if not self.instance.pk:
-            today = dt_date.today()
-            self.initial.setdefault("date", today)
-            self.initial.setdefault("type", "EX")
-
-            period, _ = DatePeriod.objects.get_or_create(
-                year=today.year,
-                month=today.month,
-                defaults={"label": today.strftime("%B %Y")},
-            )
-            self.initial.setdefault("period", f"{period.year}-{period.month:02d}")
-
-        # 📝 Edição de transação existente
-        else:
-            if self.instance.date:
-                self.initial["date"] = self.instance.date
-            if self.instance.type:
-                self.initial["type"] = self.instance.type
-            if self.instance.period:
-                self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
+        # For edit: preencher campos transient
+        if self.instance and self.instance.pk:
             if self.instance.category:
                 self.initial["category"] = self.instance.category.name
-            tag_names = [t.name for t in self.instance.tags.all()]
-            self.initial["tags_input"] = ", ".join(tag_names)
 
+            if self.instance.tags.exists():
+                self.initial["tags_input"] = ", ".join(
+                    self.instance.tags.values_list("name", flat=True)
+                )
+
+            if self.instance.period:
+                self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
 
     def clean_amount(self) -> Decimal:
         amount = self.cleaned_data["amount"]
@@ -123,6 +135,7 @@ class TransactionForm(forms.ModelForm):
             raise ValidationError("Amount cannot be zero.")
         return amount
 
+    # CORRIGIDO: Melhoria no tratamento de exceções na validação do período
     def clean(self):
         cleaned = super().clean()
         tipo = cleaned.get("type")
@@ -144,14 +157,16 @@ class TransactionForm(forms.ModelForm):
         if period_str:
             try:
                 dt = datetime.strptime(period_str, "%Y-%m")
+                if dt.month < 1 or dt.month > 12:
+                    raise ValueError("Invalid month")
                 period, _ = DatePeriod.objects.get_or_create(
                     year=dt.year,
                     month=dt.month,
                     defaults={"label": dt.strftime("%B %Y")},
                 )
                 cleaned["period"] = period
-            except ValueError:
-                raise ValidationError("Invalid period format (expected YYYY-MM).")
+            except ValueError as e:
+                raise ValidationError(f"Invalid period format: {str(e)}")
 
         return cleaned
 
@@ -175,8 +190,6 @@ class TransactionForm(forms.ModelForm):
         return instance
 
 
-
-
 class CategoryForm(UserAwareMixin, forms.ModelForm):
     class Meta:
         model = Category
@@ -190,20 +203,21 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         if self.instance:
             self.instance.user = self.user
 
+    # CORRIGIDO: Validação melhorada para "Other"
     def clean_name(self) -> str:
         name = self.cleaned_data.get("name", "").strip()
 
-        # ⚠️ Impedir criação manual da categoria "Other"
-        if name.lower() == "other" and not self.instance.pk:
-            raise ValidationError("The category 'Other' is reserved and cannot be created manually.")
+        # Impedir criação manual da categoria "Other" (e variantes)
+        if name.lower() in ['other', 'outro', 'others']:
+            if not self.instance.pk:
+                raise ValidationError("Reserved category names cannot be created manually.")
 
         # Verificar duplicados
         if (
             self.user
-            and Category.objects
-                .filter(user=self.user, name__iexact=name)
-                .exclude(pk=self.instance.pk)
-                .exists()
+            and Category.objects.filter(user=self.user, name__iexact=name)
+            .exclude(pk=self.instance.pk)
+            .exists()
         ):
             raise ValidationError("A category with this name already exists.")
 
@@ -240,9 +254,6 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         return self.instance
 
 
-
-
-
 class CustomUserCreationForm(UserCreationForm):
     username = forms.CharField(
         min_length=3,
@@ -254,6 +265,7 @@ class CustomUserCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = User
         fields = ["username", "password1", "password2"]
+
 
 class AccountBalanceForm(forms.ModelForm):
     account = forms.CharField(
@@ -322,10 +334,6 @@ class AccountBalanceForm(forms.ModelForm):
         return instance
 
 
-
-
-
-
 class _BaseBalanceFormSet(BaseModelFormSet):
     def __init__(self, *args, user=None, **kwargs):
         self.user = user
@@ -336,13 +344,15 @@ class _BaseBalanceFormSet(BaseModelFormSet):
         kwargs["user"] = self.user
         return kwargs
 
+
 AccountBalanceFormSet = modelformset_factory(
     AccountBalance,
     form=AccountBalanceForm,
     formset=_BaseBalanceFormSet,
-    can_delete=True,  # 👈 este é o ponto importante
+    can_delete=True,
     extra=0,
 )
+
 
 class AccountForm(UserAwareMixin, forms.ModelForm):
     class Meta:
@@ -357,10 +367,8 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
 
-
         self.fields["account_type"].queryset = AccountType.objects.order_by("name")
         self.fields["currency"].queryset = Currency.objects.order_by("code")
-
 
         if not self.instance.pk and getattr(user, "settings", None) and user.settings.default_currency:
             self.initial["currency"] = user.settings.default_currency
@@ -427,9 +435,6 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         if commit:
             self.instance.save()
         return self.instance
-
-
-
 
 
 class TransactionImportForm(forms.Form):

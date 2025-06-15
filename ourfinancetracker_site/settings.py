@@ -1,3 +1,5 @@
+# settings.py - Versão Corrigida
+
 """
 Django settings for ourfinancetracker_site project.
 
@@ -19,16 +21,20 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-8icb2_0x#s_iw^ql-kb!)3k%+s80k+=)3ojs+q^i%(b_dmcv4j"
+# CORRIGIDO: SECRET_KEY vem agora do ambiente
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG=True
+# CORRIGIDO: DEBUG controlado por variável de ambiente
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
+# CORRIGIDO: ALLOWED_HOSTS mais restritivo, sem '*'
 ALLOWED_HOSTS = [
     'ourfinancetracker.onrender.com',
     'localhost',
@@ -36,24 +42,35 @@ ALLOWED_HOSTS = [
     'ourfinancetracker.com',
     'www.ourfinancetracker.com',
     'www.ourfinancetracker.com.',
-    "4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
-
-    '*' # todos depois apagar
 ]
+
+# Adicionar host do Render apenas se especificado
+if host := os.getenv("RENDER_EXTERNAL_HOSTNAME"):
+    ALLOWED_HOSTS.append(host)
+
+# Adicionar hosts de desenvolvimento apenas se DEBUG=True
+if DEBUG:
+    dev_hosts = [
+        "4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
+    ]
+    ALLOWED_HOSTS.extend(dev_hosts)
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app"
+    "https://ourfinancetracker.onrender.com",
+    "https://ourfinancetracker.com",
+    "https://www.ourfinancetracker.com",
 ]
+
+# Adicionar origens de desenvolvimento se DEBUG=True
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS.extend([
+        "https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app"
+    ])
 
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 
-# permitir por variável de ambiente:
-if host := os.getenv("RENDER_EXTERNAL_HOSTNAME"):
-    ALLOWED_HOSTS.append(host)
-
 # Application definition
-
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -75,8 +92,13 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    
 ]
+
+# CORRIGIDO: Debug toolbar apenas em desenvolvimento
+if DEBUG:
+    INSTALLED_APPS += ["debug_toolbar"]
+    MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware"] + MIDDLEWARE
+    INTERNAL_IPS = ["127.0.0.1"]
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
 
@@ -87,6 +109,7 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
+                "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -97,10 +120,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -112,10 +133,8 @@ DATABASES = {
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -131,66 +150,95 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = "en-gb"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = '/static/'
-
-
-
 STATICFILES_DIRS = [BASE_DIR / 'core/static']
-
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
-
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
+# CORRIGIDO: Cache configuração mais robusta
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "ourfinancetracker-cache",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache" if not DEBUG else "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1') if not DEBUG else "ourfinancetracker-cache",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        } if not DEBUG else {},
+        "KEY_PREFIX": "ourft",
+        "TIMEOUT": 300,
     }
 }
 
-
+# CORRIGIDO: Logging melhorado para produção
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{levelname}] {asctime} {name} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "[{levelname}] {message}",
+            "style": "{",
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
+            "formatter": "simple" if DEBUG else "verbose",
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": os.path.join(BASE_DIR, "django.log"),
+            "formatter": "verbose",
+        } if not DEBUG else {
+            "class": "logging.NullHandler",
         },
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEBUG",
+        "level": "DEBUG" if DEBUG else "INFO",
     },
-
-
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"] if not DEBUG else ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "core": {
+            "handlers": ["console", "file"] if not DEBUG else ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+    },
 }
 
-INSTALLED_APPS += ["debug_toolbar"]
-MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware"] + MIDDLEWARE
+# Configurações de segurança para produção
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 ano
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    X_FRAME_OPTIONS = 'DENY'
 
-INTERNAL_IPS = ["127.0.0.1"]
+# Configurações adicionais para Supabase (se usado)
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')

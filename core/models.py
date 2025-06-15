@@ -1,98 +1,47 @@
+# models.py - Versão Corrigida
 
-from __future__ import annotations
-
-"""
-Revised data‑model for *ourfinancetracker* (Phase 2‑MVP).
-
-Principais mudanças
-===================
-1. **Defaults seguros** em `AccountType` e `Currency` para permitir a
-   criação automática de contas a partir de texto‑livre (balance form).
-2. `Account.currency` deixa de ser obrigatória na **DB layer**, mas um
-   *default callable* assegura que é sempre preenchida com a moeda
-   definida nas *user‑settings* (ou EUR quando inexistente).
-3. Funções utilitárias de **lookup + fallback** partilhadas por views e
-   forms (`get_default_currency`, `get_default_account_type`).
-4. Pequenas melhorias de estilo/typing e *docstrings*.
-
-Esta versão deve ser usada em conjunto com as refactorizações propostas
-nos *forms* (ver `forms/account_utils.py`).
-"""
-
-from decimal import Decimal
-from typing import Callable
-
-from django.contrib.auth import get_user_model
-from django.db import models, transaction
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from django.utils import timezone
-
-
-User = get_user_model()
-from datetime import date
+from django.db import models
+from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.db.models import UniqueConstraint
+from datetime import date
+from django.dispatch import receiver
+from django.db.models.signals import post_save
 
-__all__ = [
-    "Currency",
-    "AccountType",
-    "Account",
-    "AccountBalance",
-    "Category",
-    "Transaction",
-    "TransactionAttachment",
-    "TransactionTag",
-    "Tag",
-    "Budget",
-    "RecurringTransaction",
-    "ImportLog",
-    "ExchangeRate",
-    "DatePeriod",
-    "UserSettings",
-    # helpers
-    "get_default_currency",
-    "get_default_account_type",
-]
-
-
-# ---------------------------------------------------------------------------
-# Helpers (re‑used in defaults)
-# ---------------------------------------------------------------------------
 
 def get_default_currency_id() -> int:
     return get_default_currency().pk
 
+
 def get_default_account_type_id() -> int:
     return get_default_account_type().pk
-
-
 
 
 def get_default_currency() -> "Currency":
     """Return the default *EUR* currency (create if missing)."""
     from django.apps import apps
 
-    Currency: type["Currency"] = apps.get_model("core", "Currency")  # type: ignore[name‑defined]
+    Currency: type["Currency"] = apps.get_model("core", "Currency")  # type: ignore[name-defined]
     obj, _ = Currency.objects.get_or_create(code="EUR", defaults={"symbol": "€", "decimals": 2})
     return obj
 
 
 def get_default_account_type() -> "AccountType":
-    """Return the fallback *Savings* account‑type (create if missing)."""
+    """Return the fallback *Savings* account-type (create if missing)."""
     from django.apps import apps
 
-    AccountType: type["AccountType"] = apps.get_model("core", "AccountType")  # type: ignore[name‑defined]
+    AccountType: type["AccountType"] = apps.get_model("core", "AccountType")  # type: ignore[name-defined]
     obj, _ = AccountType.objects.get_or_create(name="Savings")
     return obj
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 # Reference / lookup tables
-# ---------------------------------------------------------------------------
-
+# --------------------------------------------------------------------------------
 
 class Currency(models.Model):
-    """ISO‑4217 currency definition (e.g. EUR, USD)."""
+    """ISO-4217 currency definition (e.g. EUR, USD)."""
 
     code = models.CharField(max_length=3, unique=True)
     symbol = models.CharField(max_length=5, blank=True)
@@ -120,16 +69,15 @@ class AccountType(models.Model):
         return self.name
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 # Core objects
-# ---------------------------------------------------------------------------
-
+# --------------------------------------------------------------------------------
 
 class Account(models.Model):
     """A bank or investment account owned by the user."""
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="accounts")  # ✅ campo obrigatório
-    name = models.CharField(max_length=100)  # ✅ nome da conta (ex.: BPI, Revolut)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="accounts")
+    name = models.CharField(max_length=100)
 
     account_type = models.ForeignKey(
         AccountType,
@@ -153,23 +101,29 @@ class Account(models.Model):
         constraints = [
             UniqueConstraint(fields=["user", "name"], name="unique_account_user_name")
         ]
+
     def __str__(self) -> str:
         return f"{self.name} – {self.user}"
 
+    # CORRIGIDO: Account.save() com tratamento de exceções
     def save(self, *args, **kwargs):
         """Ensure `account_type` and `currency` are not null when saving."""
         if not self.account_type_id:
             self.account_type = get_default_account_type() or AccountType.objects.first()
+        
         if not self.currency_id:
-            default_curr = getattr(getattr(self.user, "settings", None), "default_currency", None)
-            self.currency = default_curr or get_default_currency()
+            try:
+                user_settings = getattr(self.user, "settings", None)
+                default_curr = getattr(user_settings, "default_currency", None)
+                self.currency = default_curr or get_default_currency()
+            except AttributeError:
+                self.currency = get_default_currency()
+        
         super().save(*args, **kwargs)
 
     def is_default(self) -> bool:
         """Returns True if this account is the default 'Cash' account."""
         return self.name.strip().lower() == "cash"
-
-    
 
 
 class AccountBalance(models.Model):
@@ -179,7 +133,6 @@ class AccountBalance(models.Model):
     period = models.ForeignKey("DatePeriod", on_delete=models.CASCADE, related_name="account_balances")
     reported_balance = models.DecimalField(max_digits=14, decimal_places=2)
 
-
     class Meta:
         ordering = ("-period__year", "-period__month")
         constraints = [
@@ -188,16 +141,22 @@ class AccountBalance(models.Model):
 
     def __str__(self) -> str:
         return f"{self.account} @ {self.period}: {self.reported_balance}"
-    
-    
 
-    def merge_into(self, target: 'Category') -> None:
+    # CORRIGIDO: merge_into() corrigido para AccountBalance
+    def merge_into(self, target: 'AccountBalance') -> None:
+        """Merge this balance into target balance for the same period."""
         if self.pk == target.pk:
             return
-        from core.models import Transaction
-        Transaction.objects.filter(category=self).update(category=target)
+        
+        # Verificar se são do mesmo período
+        if self.period != target.period:
+            raise ValueError("Cannot merge balances from different periods")
+        
+        # Somar os saldos
+        target.reported_balance += self.reported_balance
+        target.save()
         self.delete()
-    
+
 
 class Category(models.Model):
     """User-defined flat category (no hierarchy)."""
@@ -218,7 +177,7 @@ class Category(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    # ---------------------- helpers ------------------------
+    # -------------------- helpers ----------------------
 
     @classmethod
     def get_fallback(cls, user: User) -> "Category":
@@ -236,10 +195,18 @@ class Category(models.Model):
         """
         return cls.get_fallback(user)
 
-# ---------------------------------------------------------------------------
-# Transactions
-# ---------------------------------------------------------------------------
+    def merge_into(self, target: 'Category') -> None:
+        """Merge this category into target category."""
+        if self.pk == target.pk:
+            return
+        from core.models import Transaction
+        Transaction.objects.filter(category=self).update(category=target)
+        self.delete()
 
+
+# --------------------------------------------------------------------------------
+# Transactions
+# --------------------------------------------------------------------------------
 
 class Transaction(models.Model):
     """Money movement. Expenses can be estimated if not recorded."""
@@ -339,10 +306,9 @@ class Transaction(models.Model):
         super().save(*args, **kwargs)
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 # User settings – lightweight, avoids custom user model
-# ---------------------------------------------------------------------------
-
+# --------------------------------------------------------------------------------
 
 class UserSettings(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="settings")
@@ -363,10 +329,6 @@ class UserSettings(models.Model):
         return f"Settings for {self.user}"
 
 
-
-
-
-
 class TransactionAttachment(models.Model):
     transaction = models.ForeignKey("Transaction", on_delete=models.CASCADE, related_name="attachments")
     file_path = models.CharField(max_length=255)
@@ -377,12 +339,6 @@ class TransactionAttachment(models.Model):
         return f"Attachment for transaction {self.transaction_id}"
 
 
-
-
-
-
-
-
 class Budget(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="budgets")
     category = models.ForeignKey("Category", on_delete=models.CASCADE, related_name="budgets")
@@ -390,16 +346,12 @@ class Budget(models.Model):
     end_date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     rollover = models.BooleanField(default=False)
-    position = models.PositiveIntegerField(default=0)  # ← ADICIONADO
+    position = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.category} budget ({self.start_date} – {self.end_date})"
-
-
-
-
 
 
 class RecurringTransaction(models.Model):
@@ -438,6 +390,7 @@ class RecurringTransaction(models.Model):
     def __str__(self):
         return f"{self.user} – {self.amount} ({self.frequency})"
 
+
 class ImportLog(models.Model):
     class Status(models.TextChoices):
         SUCCESS = "success", "Success"
@@ -452,7 +405,6 @@ class ImportLog(models.Model):
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
 
 
 class ExchangeRate(models.Model):
@@ -475,10 +427,12 @@ class ExchangeRate(models.Model):
         return f"{self.from_currency} → {self.to_currency} @ {self.rate_date}: {self.rate}"
 
 
-
+# CORRIGIDO: DatePeriod com validação de mês
 class DatePeriod(models.Model):
     year = models.PositiveIntegerField()
-    month = models.PositiveIntegerField()
+    month = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
     label = models.CharField(max_length=20)  # Ex: "Junho 2025"
 
     class Meta:
@@ -490,8 +444,10 @@ class DatePeriod(models.Model):
     def __str__(self):
         return f"{self.label} ({self.year}-{self.month:02})"
 
-
-
+    def clean(self):
+        """Validação adicional para garantir que o mês está entre 1-12."""
+        if self.month < 1 or self.month > 12:
+            raise ValidationError("Month must be between 1 and 12")
 
 
 class Tag(models.Model):
@@ -520,7 +476,6 @@ class Tag(models.Model):
         return self.name
 
 
-
 class TransactionTag(models.Model):
     transaction = models.ForeignKey("Transaction", on_delete=models.CASCADE, related_name="tag_links")
     tag = models.ForeignKey("Tag", on_delete=models.CASCADE, related_name="transaction_links")
@@ -531,17 +486,14 @@ class TransactionTag(models.Model):
         constraints = [
             UniqueConstraint(fields=["transaction", "tag"], name="unique_transactiontag_tx_tag")
         ]
+
     def __str__(self):
         return f"{self.transaction_id} → {self.tag.name}"
 
 
-
-
-
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 # Signals
-# ---------------------------------------------------------------------------
-
+# --------------------------------------------------------------------------------
 
 @receiver(post_save, sender=Account)
 def _create_initial_balance_on_account_creation(sender, instance, created, **kwargs):
@@ -557,7 +509,3 @@ def _create_initial_balance_on_account_creation(sender, instance, created, **kwa
             period=period,
             reported_balance=0
         )
-
-
-
-

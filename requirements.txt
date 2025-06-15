@@ -1,15 +1,77 @@
+# SUBSTITUIR O requirements.txt EXISTENTE POR ESTE CONTEÚDO
+# Requirements atualizados para ourfinancetracker com correções de segurança
+
+# Django e extensões essenciais
 Django==5.2.1
-psycopg2-binary==2.9.10
-sqlparse==0.5.3
-whitenoise==6.9.0
-python-dateutil==2.9.0.post0
-tzdata==2025.2
-django-widget-tweaks==1.4.12
-XlsxWriter==3.2.0
-openpyxl==3.1.2
-gunicorn==21.2.0
+django-extensions==3.2.3
+
+# Base de dados
+psycopg2-binary==2.9.9
+dj-database-url==2.2.0
+
+# Cache (Redis para produção)
+redis==5.0.8
+django-redis==5.4.0
+
+# Configuração segura de ambiente
 python-dotenv==1.0.1
-django-debug-toolbar==4.3.0
+
+# Análise de dados e manipulação
 pandas==2.2.2
-requests==2.31.0
-PyJWT==2.8.0
+numpy==1.26.4
+
+# Exportação de ficheiros
+openpyxl==3.1.5
+xlsxwriter==3.2.0
+
+# Processamento de datas
+python-dateutil==2.9.0
+
+# Desenvolvimento e debug
+django-debug-toolbar==4.4.6
+
+# Produção
+gunicorn==22.0.0
+whitenoise==6.7.0
+
+# Segurança e monitoring
+django-cors-headers==4.4.0
+django-ratelimit==4.1.0
+
+# Utilitários
+requests==2.32.3
+pytz==2024.1
+
+# Validação e linting (desenvolvimento)
+flake8==7.1.1
+black==24.8.0
+isort==5.13.2
+
+# Testes
+pytest==8.3.2
+pytest-django==4.8.0
+pytest-cov==5.0.0
+
+# Performance
+django-cachalot==2.6.3
+
+# Logs estruturados
+django-structlog==8.1.0
+
+# Backup e utilitários
+django-dbbackup==4.2.0
+
+# NOTAS IMPORTANTES:
+# 1. python-dotenv: OBRIGATÓRIO para ler ficheiros .env
+# 2. redis + django-redis: Para cache segura em produção  
+# 3. psycopg2-binary: Para PostgreSQL
+# 4. pandas + openpyxl: Para funcionalidades de import/export existentes
+# 5. django-debug-toolbar: Apenas para desenvolvimento
+
+# INSTALAÇÃO:
+# pip install -r requirements.txt
+
+# PARA PRODUÇÃO, remover estas dependências de desenvolvimento:
+# - django-debug-toolbar
+# - flake8, black, isort
+# - pytest, pytest-django, pytest-cov
