@@ -122,102 +122,195 @@ def account_balances_pivot_json(request):
 
 
 
+
+# ============================================================================
+# DASHBOARD VIEWS - ADICIONAR AO FICHEIRO views.py
+# ============================================================================
+
+
 class DashboardView(LoginRequiredMixin, TemplateView):
+    """
+    Vista principal do dashboard financeiro.
+    Renderiza a página do dashboard com todos os controlos necessários.
+    """
     template_name = "core/dashboard.html"
 
-    def get_context_data(self, **kwargs):  # type: ignore[override]
-        ctx = super().get_context_data(**kwargs)
-        user = self.request.user
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Dashboard Financeiro"
+        return context
 
-        ctx["periods"] = DatePeriod.objects.order_by("-year", "-month")
-        start_period = self.request.GET.get("start-period")
-        end_period = self.request.GET.get("end-period")
 
-        txs = Transaction.objects.filter(user=user).select_related("period", "account")
-        bal = AccountBalance.objects.filter(account__user=user).select_related("period", "account__account_type")
+@login_required
+def account_balances_pivot_json(request):
+    """
+    Endpoint JSON que fornece dados de saldos de contas organizados por período.
+    Usado pelo dashboard.js para criar a tabela interativa.
+    """
+    user_id = request.user.id
 
-        df_tx = pd.DataFrame.from_records(
-            txs.values("date", "type", "amount", "period__year", "period__month")
-        )
-        df_bal = pd.DataFrame.from_records(
-            bal.values("period__year", "period__month", "reported_balance", "account__account_type__name")
-        )
+    try:
+        # Query SQL otimizada para obter saldos por período
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
+                    CONCAT(dp.month, '/', RIGHT(dp.year::text, 2)) as period_short,
+                    at.name as account_type,
+                    curr.code as currency,
+                    a.name as account_name,
+                    ab.reported_balance,
+                    dp.year,
+                    dp.month
+                FROM core_accountbalance ab
+                INNER JOIN core_account a ON ab.account_id = a.id
+                INNER JOIN core_accounttype at ON a.account_type_id = at.id
+                INNER JOIN core_currency curr ON a.currency_id = curr.id
+                INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
+                WHERE a.user_id = %s
+                ORDER BY dp.year, dp.month, at.name, a.name
+            """, [user_id])
 
-        # Garantir que as colunas existem antes de manipular
-        for df, year_col, month_col in [
-            (df_tx, "period__year", "period__month"),
-            (df_bal, "period__year", "period__month"),
-        ]:
-            if not df.empty:
-                if year_col not in df.columns:
-                    df[year_col] = None
-                if month_col not in df.columns:
-                    df[month_col] = None
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
 
-        # Criar coluna "period" apenas se as colunas necessárias existirem
-        if not df_tx.empty and "period__year" in df_tx.columns and "period__month" in df_tx.columns:
-            df_tx["period"] = (
-                df_tx["period__year"].astype(str)
-                + "-"
-                + df_tx["period__month"].astype(str).str.zfill(2)
-            )
-        else:
-            df_tx["period"] = pd.Series([], dtype=str)
+        # Converter para DataFrame para pivot
+        df = pd.DataFrame(rows, columns=columns)
 
-        if not df_bal.empty and "period__year" in df_bal.columns and "period__month" in df_bal.columns:
-            df_bal["period"] = (
-                df_bal["period__year"].astype(str)
-                + "-"
-                + df_bal["period__month"].astype(str).str.zfill(2)
-            )
-        else:
-            df_bal["period"] = pd.Series([], dtype=str)
+        if df.empty:
+            return JsonResponse({
+                "columns": ["type", "currency"],
+                "rows": [],
+                "message": "Não existem dados de saldos disponíveis."
+            })
 
-        if start_period and end_period:
-            if not df_tx.empty and "period" in df_tx.columns:
-                df_tx = df_tx[(df_tx["period"] >= start_period) & (df_tx["period"] <= end_period)]
-            if not df_bal.empty and "period" in df_bal.columns:
-                df_bal = df_bal[(df_bal["period"] >= start_period) & (df_bal["period"] <= end_period)]
+        # Criar pivot table agrupando por tipo de conta e moeda
+        df['type_currency'] = df['account_type'] + ' (' + df['currency'] + ')'
 
-        df_invest = df_bal[df_bal.get("account__account_type__name", pd.Series([])).str.lower() == "investment"] if not df_bal.empty else pd.DataFrame()
-        patrimonio_mes = df_invest.groupby("period")["reported_balance"].sum() if not df_invest.empty else pd.Series(dtype=float)
+        # Agrupar saldos por tipo/moeda e período
+        pivot_data = df.groupby(['type_currency', 'period_short'])['reported_balance'].sum().unstack(fill_value=0)
 
-        patrimonio_final = float(patrimonio_mes.iloc[-1]) if not patrimonio_mes.empty else 0
-        patrimonio_inicial = float(patrimonio_mes.iloc[0]) if not patrimonio_mes.empty else 0
-        aumento_patrimonio = patrimonio_final - patrimonio_inicial
-        aumento_medio = patrimonio_mes.diff().dropna().mean() if len(patrimonio_mes) > 1 else 0
+        # Preparar dados para a resposta JSON
+        periods = sorted(pivot_data.columns, key=lambda x: pd.to_datetime(x.replace('/', '/20'), format='%m/%Y'))
 
-        df_income = df_tx[df_tx.get("type", pd.Series([])) == "IN"] if not df_tx.empty else pd.DataFrame()
-        receita_mes = df_income.groupby("period")["amount"].sum().astype(float) if not df_income.empty else pd.Series(dtype=float)
-        receita_media = receita_mes.mean() if not receita_mes.empty else 0
+        rows = []
+        for type_currency in pivot_data.index:
+            row = {"type": type_currency.split(' (')[0], "currency": type_currency.split(' (')[1].replace(')', '')}
+            for period in periods:
+                row[period] = float(pivot_data.loc[type_currency, period])
+            rows.append(row)
 
-        df_saving = df_bal[df_bal.get("account__account_type__name", pd.Series([])).str.lower() == "savings"] if not df_bal.empty else pd.DataFrame()
-        saving_mes = df_saving.groupby("period")["reported_balance"].sum().astype(float) if not df_saving.empty else pd.Series(dtype=float)
-        periods = sorted(set(receita_mes.index) & set(saving_mes.index))
-        despesas_estimadas: list[float] = []
-        for i in range(len(periods) - 1):
-            p, p1 = periods[i], periods[i + 1]
-            despesas_estimadas.append(saving_mes.get(p, 0) - saving_mes.get(p1, 0) + receita_mes.get(p, 0))
-        despesa_media = pd.Series(despesas_estimadas).mean() if despesas_estimadas else 0
-
-        total_investido = float(df_tx[df_tx.get("type", pd.Series([])) == "IV"]["amount"].sum()) if not df_tx.empty else 0
-        n_meses = max(len(receita_mes), 1)
-        poupanca_media = receita_media - despesa_media - total_investido / n_meses
-
-        ctx["kpis"] = {
-            "patrimonio": f"{patrimonio_final:,.0f} €",
-            "aumento": f"{aumento_patrimonio:,.0f} €",
-            "capital": f"{total_investido:,.0f} €",
-            "despesa_media": f"{despesa_media:,.0f} €",
-            "receita_media": f"{receita_media:,.0f} €",
-            "aumento_riqueza": f"{aumento_medio:,.0f} €",
-            "poupanca_media": f"{poupanca_media:,.0f} €",
+        response_data = {
+            "columns": ["type", "currency"] + periods,
+            "rows": rows
         }
 
-        # Enviar dados da tabela de saldos para o template
-        ctx["tabela_saldos"] = df_bal.to_dict(orient="records") if not df_bal.empty else []
+        return JsonResponse(response_data)
 
-        return ctx
+    except Exception as e:
+        print(f"❌ Erro em account_balances_pivot_json: {str(e)}")
+        return JsonResponse({
+            "error": f"Erro ao carregar dados: {str(e)}",
+            "columns": ["type", "currency"],
+            "rows": []
+        }, status=500)
+
+
+@login_required 
+def dashboard_kpis_json(request):
+    """
+    Endpoint JSON que fornece KPIs financeiros para o dashboard.
+    Calcula receitas, despesas, saldos e poupanças.
+    """
+    user_id = request.user.id
+
+    try:
+        with connection.cursor() as cursor:
+            # Calcular KPIs principais
+            cursor.execute("""
+                WITH monthly_data AS (
+                    SELECT 
+                        dp.year,
+                        dp.month,
+                        CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
+
+                        -- Receitas do mês
+                        COALESCE(SUM(CASE WHEN t.type = 'IN' THEN t.amount ELSE 0 END), 0) as income,
+
+                        -- Despesas do mês
+                        COALESCE(SUM(CASE WHEN t.type = 'EX' THEN t.amount ELSE 0 END), 0) as expenses,
+
+                        -- Saldo total do mês (soma de todas as contas)
+                        COALESCE((
+                            SELECT SUM(ab.reported_balance)
+                            FROM core_accountbalance ab
+                            INNER JOIN core_account a ON ab.account_id = a.id
+                            WHERE a.user_id = %s AND ab.period_id = dp.id
+                        ), 0) as total_balance
+
+                    FROM core_dateperiod dp
+                    LEFT JOIN core_transaction t ON t.period_id = dp.id AND t.user_id = %s
+                    WHERE dp.id IN (
+                        SELECT DISTINCT period_id 
+                        FROM core_accountbalance ab
+                        INNER JOIN core_account a ON ab.account_id = a.id
+                        WHERE a.user_id = %s
+                    )
+                    GROUP BY dp.year, dp.month, dp.id
+                    ORDER BY dp.year, dp.month
+                )
+                SELECT 
+                    COUNT(*) as total_months,
+                    SUM(income) as total_income,
+                    SUM(expenses) as total_expenses,
+                    AVG(income) as avg_income,
+                    AVG(expenses) as avg_expenses,
+                    (SELECT total_balance FROM monthly_data ORDER BY year DESC, month DESC LIMIT 1) as current_balance,
+                    AVG(income - expenses) as avg_savings
+                FROM monthly_data
+            """, [user_id, user_id, user_id])
+
+            result = cursor.fetchone()
+
+            if result:
+                total_months, total_income, total_expenses, avg_income, avg_expenses, current_balance, avg_savings = result
+
+                kpis = {
+                    "total_income": float(total_income or 0),
+                    "total_expenses": float(total_expenses or 0),
+                    "current_balance": float(current_balance or 0),
+                    "average_savings": float(avg_savings or 0),
+                    "average_income": float(avg_income or 0),
+                    "average_expenses": float(avg_expenses or 0),
+                    "total_months": int(total_months or 0)
+                }
+            else:
+                kpis = {
+                    "total_income": 0.0,
+                    "total_expenses": 0.0,
+                    "current_balance": 0.0,
+                    "average_savings": 0.0,
+                    "average_income": 0.0,
+                    "average_expenses": 0.0,
+                    "total_months": 0
+                }
+
+        return JsonResponse(kpis)
+
+    except Exception as e:
+        print(f"❌ Erro em dashboard_kpis_json: {str(e)}")
+        return JsonResponse({
+            "error": f"Erro ao calcular KPIs: {str(e)}"
+        }, status=500)
+
+
+
+
+
+
+
+
+
 
 @login_required
 def menu_config(request):

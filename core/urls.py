@@ -47,6 +47,7 @@ from .views import (
     transaction_clear_cache,
     api_jwt_my_transactions,
     dashboard_data,
+    account_balances_pivot_json, dashboard_kpis_json
 )
 from core.views_reporting import proxy_report_csv_token
 
@@ -114,19 +115,19 @@ urlpatterns = [
     #----dashbord
     path("api/dashboard-data/", views.dashboard_data, name="dashboard_data"),
     path("account-balances/json/", views.account_balances_pivot_json, name="account_balances_json"),
-
-
-
-]
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
+    path("api/dashboard-kpis/", dashboard_kpis_json, name="dashboard_kpis"),
+    
+    ]
 
     
     
-
-
-
 # ─────────── Debug Toolbar ───────────
 urlpatterns += [path("__debug__/", include(debug_toolbar.urls))]
 urlpatterns += [
         path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),
 
 ]
+
+
