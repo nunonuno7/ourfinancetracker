@@ -1576,3 +1576,122 @@ def api_jwt_my_transactions(request):
 # ==============================================================================
 # FIM DO FICHEIRO
 # ==============================================================================
+
+@login_required
+def dashboard_kpis_json(request):
+    """
+    API JSON para KPIs do dashboard - função em falta no views.py original.
+    
+    Esta função calcula e retorna indicadores financeiros principais:
+    - Patrimônio total atual
+    - Receita média mensal
+    - Despesa média estimada
+    - Poupança média
+    - Taxa de crescimento patrimonial
+    """
+    user_id = request.user.id
+    
+    try:
+        with connection.cursor() as cursor:
+            # Query para obter dados financeiros agregados
+            cursor.execute("""
+                WITH monthly_data AS (
+                    -- Receitas mensais
+                    SELECT 
+                        dp.year, dp.month,
+                        COALESCE(SUM(CASE WHEN tx.type = 'IN' THEN tx.amount ELSE 0 END), 0) as income,
+                        COALESCE(SUM(CASE WHEN tx.type = 'EX' THEN tx.amount ELSE 0 END), 0) as expenses
+                    FROM core_dateperiod dp
+                    LEFT JOIN core_transaction tx ON tx.period_id = dp.id AND tx.user_id = %s
+                    GROUP BY dp.year, dp.month
+                ),
+                patrimonio_data AS (
+                    -- Patrimônio mensal (contas de investimento)
+                    SELECT 
+                        dp.year, dp.month,
+                        COALESCE(SUM(ab.reported_balance), 0) as patrimonio
+                    FROM core_dateperiod dp
+                    LEFT JOIN core_accountbalance ab ON ab.period_id = dp.id
+                    LEFT JOIN core_account acc ON ab.account_id = acc.id AND acc.user_id = %s
+                    LEFT JOIN core_accounttype at ON acc.account_type_id = at.id
+                    WHERE LOWER(at.name) LIKE '%%investment%%' OR at.name IS NULL
+                    GROUP BY dp.year, dp.month
+                ),
+                savings_data AS (
+                    -- Saldos de poupança
+                    SELECT 
+                        dp.year, dp.month,
+                        COALESCE(SUM(ab.reported_balance), 0) as savings
+                    FROM core_dateperiod dp
+                    LEFT JOIN core_accountbalance ab ON ab.period_id = dp.id
+                    LEFT JOIN core_account acc ON ab.account_id = acc.id AND acc.user_id = %s
+                    LEFT JOIN core_accounttype at ON acc.account_type_id = at.id
+                    WHERE LOWER(at.name) LIKE '%%saving%%' OR LOWER(at.name) LIKE '%%deposit%%'
+                    GROUP BY dp.year, dp.month
+                )
+                SELECT 
+                    md.year, md.month, md.income, md.expenses,
+                    pd.patrimonio, sd.savings
+                FROM monthly_data md
+                LEFT JOIN patrimonio_data pd ON md.year = pd.year AND md.month = pd.month
+                LEFT JOIN savings_data sd ON md.year = sd.year AND md.month = sd.month
+                ORDER BY md.year DESC, md.month DESC
+                LIMIT 12
+            """, [user_id, user_id, user_id])
+            
+            rows = cursor.fetchall()
+            
+        if not rows:
+            # Retornar valores default se não há dados
+            return JsonResponse({
+                "patrimonio_atual": "0 €",
+                "receita_media": "0 €", 
+                "despesa_media": "0 €",
+                "poupanca_media": "0 €",
+                "crescimento_patrimonial": "0 €",
+                "num_meses": 0,
+                "status": "no_data"
+            })
+        
+        # Processar dados para cálculos
+        df = pd.DataFrame(rows, columns=['year', 'month', 'income', 'expenses', 'patrimonio', 'savings'])
+        df = df.fillna(0)
+        
+        # KPIs principais
+        patrimonio_atual = float(df['patrimonio'].iloc[0]) if len(df) > 0 else 0
+        receita_media = float(df['income'].mean())
+        despesa_media = float(df['expenses'].mean())
+        
+        # Cálculo de poupança média
+        df['poupanca_mensal'] = df['income'] - df['expenses']
+        poupanca_media = float(df['poupanca_mensal'].mean())
+        
+        # Crescimento patrimonial (diferença entre primeiro e último)
+        if len(df) > 1:
+            patrimonio_inicial = float(df['patrimonio'].iloc[-1])  # Mais antigo
+            crescimento = patrimonio_atual - patrimonio_inicial
+        else:
+            crescimento = 0
+            
+        # Formatação para display
+        return JsonResponse({
+            "patrimonio_atual": f"{patrimonio_atual:,.0f} €".replace(",", "."),
+            "receita_media": f"{receita_media:,.0f} €".replace(",", "."),
+            "despesa_media": f"{despesa_media:,.0f} €".replace(",", "."),
+            "poupanca_media": f"{poupanca_media:,.0f} €".replace(",", "."),
+            "crescimento_patrimonial": f"{crescimento:,.0f} €".replace(",", "."),
+            "num_meses": len(df),
+            "status": "success"
+        })
+        
+    except Exception as e:
+        # Log do erro e retorno de valores safe
+        return JsonResponse({
+            "error": str(e),
+            "patrimonio_atual": "0 €",
+            "receita_media": "0 €",
+            "despesa_media": "0 €", 
+            "poupanca_media": "0 €",
+            "crescimento_patrimonial": "0 €",
+            "status": "error"
+        }, status=500)
