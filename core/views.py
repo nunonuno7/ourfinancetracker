@@ -122,7 +122,6 @@ def account_balances_pivot_json(request):
 
 
 
-
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
 
@@ -144,43 +143,64 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             bal.values("period__year", "period__month", "reported_balance", "account__account_type__name")
         )
 
-        df_tx["period"] = (
-            df_tx["period__year"].astype(str)
-            + "-"
-            + df_tx["period__month"].astype(str).str.zfill(2)
-        )
-        df_bal["period"] = (
-            df_bal["period__year"].astype(str)
-            + "-"
-            + df_bal["period__month"].astype(str).str.zfill(2)
-        )
+        # Garantir que as colunas existem antes de manipular
+        for df, year_col, month_col in [
+            (df_tx, "period__year", "period__month"),
+            (df_bal, "period__year", "period__month"),
+        ]:
+            if not df.empty:
+                if year_col not in df.columns:
+                    df[year_col] = None
+                if month_col not in df.columns:
+                    df[month_col] = None
+
+        # Criar coluna "period" apenas se as colunas necessárias existirem
+        if not df_tx.empty and "period__year" in df_tx.columns and "period__month" in df_tx.columns:
+            df_tx["period"] = (
+                df_tx["period__year"].astype(str)
+                + "-"
+                + df_tx["period__month"].astype(str).str.zfill(2)
+            )
+        else:
+            df_tx["period"] = pd.Series([], dtype=str)
+
+        if not df_bal.empty and "period__year" in df_bal.columns and "period__month" in df_bal.columns:
+            df_bal["period"] = (
+                df_bal["period__year"].astype(str)
+                + "-"
+                + df_bal["period__month"].astype(str).str.zfill(2)
+            )
+        else:
+            df_bal["period"] = pd.Series([], dtype=str)
 
         if start_period and end_period:
-            df_tx = df_tx[(df_tx["period"] >= start_period) & (df_tx["period"] <= end_period)]
-            df_bal = df_bal[(df_bal["period"] >= start_period) & (df_bal["period"] <= end_period)]
+            if not df_tx.empty and "period" in df_tx.columns:
+                df_tx = df_tx[(df_tx["period"] >= start_period) & (df_tx["period"] <= end_period)]
+            if not df_bal.empty and "period" in df_bal.columns:
+                df_bal = df_bal[(df_bal["period"] >= start_period) & (df_bal["period"] <= end_period)]
 
-        df_invest = df_bal[df_bal["account__account_type__name"].str.lower() == "investment"]
-        patrimonio_mes = df_invest.groupby("period")["reported_balance"].sum()
+        df_invest = df_bal[df_bal.get("account__account_type__name", pd.Series([])).str.lower() == "investment"] if not df_bal.empty else pd.DataFrame()
+        patrimonio_mes = df_invest.groupby("period")["reported_balance"].sum() if not df_invest.empty else pd.Series(dtype=float)
 
         patrimonio_final = float(patrimonio_mes.iloc[-1]) if not patrimonio_mes.empty else 0
         patrimonio_inicial = float(patrimonio_mes.iloc[0]) if not patrimonio_mes.empty else 0
         aumento_patrimonio = patrimonio_final - patrimonio_inicial
         aumento_medio = patrimonio_mes.diff().dropna().mean() if len(patrimonio_mes) > 1 else 0
 
-        df_income = df_tx[df_tx["type"] == "IN"]
-        receita_mes = df_income.groupby("period")["amount"].sum().astype(float)
+        df_income = df_tx[df_tx.get("type", pd.Series([])) == "IN"] if not df_tx.empty else pd.DataFrame()
+        receita_mes = df_income.groupby("period")["amount"].sum().astype(float) if not df_income.empty else pd.Series(dtype=float)
         receita_media = receita_mes.mean() if not receita_mes.empty else 0
 
-        df_saving = df_bal[df_bal["account__account_type__name"].str.lower() == "savings"]
-        saving_mes = df_saving.groupby("period")["reported_balance"].sum().astype(float)
+        df_saving = df_bal[df_bal.get("account__account_type__name", pd.Series([])).str.lower() == "savings"] if not df_bal.empty else pd.DataFrame()
+        saving_mes = df_saving.groupby("period")["reported_balance"].sum().astype(float) if not df_saving.empty else pd.Series(dtype=float)
         periods = sorted(set(receita_mes.index) & set(saving_mes.index))
         despesas_estimadas: list[float] = []
         for i in range(len(periods) - 1):
             p, p1 = periods[i], periods[i + 1]
-            despesas_estimadas.append(saving_mes[p] - saving_mes[p1] + receita_mes.get(p, 0))
+            despesas_estimadas.append(saving_mes.get(p, 0) - saving_mes.get(p1, 0) + receita_mes.get(p, 0))
         despesa_media = pd.Series(despesas_estimadas).mean() if despesas_estimadas else 0
 
-        total_investido = float(df_tx[df_tx["type"] == "IV"]["amount"].sum())
+        total_investido = float(df_tx[df_tx.get("type", pd.Series([])) == "IV"]["amount"].sum()) if not df_tx.empty else 0
         n_meses = max(len(receita_mes), 1)
         poupanca_media = receita_media - despesa_media - total_investido / n_meses
 
@@ -193,9 +213,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "aumento_riqueza": f"{aumento_medio:,.0f} €",
             "poupanca_media": f"{poupanca_media:,.0f} €",
         }
+
+        # Enviar dados da tabela de saldos para o template
+        ctx["tabela_saldos"] = df_bal.to_dict(orient="records") if not df_bal.empty else []
+
         return ctx
-
-
 
 @login_required
 def menu_config(request):
