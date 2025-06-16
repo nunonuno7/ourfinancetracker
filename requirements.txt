@@ -57,3 +57,4 @@ django-structlog==8.1.0
 
 # Backup e utilitários
 django-dbbackup==4.2.0
+django-widget-tweaks==1.5.0
