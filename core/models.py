@@ -11,6 +11,9 @@ from django.db.models.signals import post_save
 from django.utils import timezone
 
 
+import logging
+logger = logging.getLogger(__name__)
+
 def get_default_currency_id() -> int:
     return get_default_currency().pk
 
@@ -143,7 +146,7 @@ class Account(models.Model):
 
 
 class AccountBalance(models.Model):
-    """Snapshot of an account's balance for a given month."""
+    """Snapshot of an account's balance for a specific month."""
 
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="balances")
     period = models.ForeignKey("DatePeriod", on_delete=models.CASCADE, related_name="account_balances")
@@ -158,22 +161,33 @@ class AccountBalance(models.Model):
     def __str__(self) -> str:
         return f"{self.account} @ {self.period}: {self.reported_balance}"
 
-    # CORRIGIDO: merge_into() corrigido para AccountBalance
     def merge_into(self, target: 'AccountBalance') -> None:
-        """Merge this balance into target balance for the same period."""
+        """
+        Merge this balance into the target balance for the same period.
+
+        This operation is only valid if both balances refer to the same period and account.
+        It adds the current balance to the target and deletes the current object.
+        """
         if self.pk == target.pk:
+            logger.warning(f"Attempted to merge balance {self.pk} into itself. Operation skipped.")
             return
-        
-        # Verificar se são do mesmo período
+
         if self.period != target.period:
-            raise ValueError("Cannot merge balances from different periods")
-        
-        # Somar os saldos
+            raise ValueError("Cannot merge balances from different periods.")
+
+        if self.account != target.account:
+            raise ValueError("Cannot merge balances from different accounts.")
+
+        original_value = target.reported_balance
         target.reported_balance += self.reported_balance
         target.save()
+        
+        logger.info(
+            f"Balance {self.pk} (amount {self.reported_balance}) merged into "
+            f"{target.pk} (was {original_value}, now {target.reported_balance})."
+        )
+
         self.delete()
-
-
 class Category(models.Model):
     """User-defined flat category (no hierarchy)."""
 
