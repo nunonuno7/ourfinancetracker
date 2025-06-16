@@ -29,8 +29,8 @@ from core.views_reporting import proxy_report_csv_token
 app_name = 'core'
 
 urlpatterns = [
-    # Home
-    path("", HomeView.as_view(), name="home"),  
+    # Home - ESTA LINHA ESTAVA EM FALTA!
+    path("", HomeView.as_view(), name="home"),
 
     # Autenticação
     path("signup/", signup, name="signup"),
@@ -84,7 +84,4 @@ urlpatterns = [
 
     # Reporting CSV Token
     path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),
-
-    # Debug Toolbar (namespace 'djdt')
-    path("__debug__/", include(debug_toolbar.urls)),  
 ]
