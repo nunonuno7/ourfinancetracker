@@ -1,7 +1,7 @@
+Django==5.1.4
 # Requirements corrigidos para ourfinancetracker – compatível com django-cachalot
 
 # Django e extensões essenciais
-Django==5.1.4
 django-extensions==3.2.3
 
 # Base de dados
@@ -51,8 +51,6 @@ pytest==8.3.2
 pytest-django==4.8.0
 pytest-cov==5.0.0
 
-# Performance
-django-cachalot==2.6.3  # Requer Django <5.2
 
 # Logs estruturados
 django-structlog==8.1.0

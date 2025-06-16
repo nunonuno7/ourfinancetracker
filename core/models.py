@@ -428,26 +428,31 @@ class ExchangeRate(models.Model):
 
 
 # CORRIGIDO: DatePeriod com validação de mês
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
+
 class DatePeriod(models.Model):
     year = models.PositiveIntegerField()
     month = models.PositiveIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(12)]
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(12)
+        ]
     )
-    label = models.CharField(max_length=20)  # Ex: "Junho 2025"
+    label = models.CharField(max_length=20)
 
     class Meta:
-        ordering = ("-year", "-month")
-        constraints = [
-            UniqueConstraint(fields=["year", "month"], name="unique_dateperiod_year_month")
-        ]
-
-    def __str__(self):
-        return f"{self.label} ({self.year}-{self.month:02})"
+        unique_together = ('year', 'month')
+        ordering = ['-year', '-month']
 
     def clean(self):
-        """Validação adicional para garantir que o mês está entre 1-12."""
-        if self.month < 1 or self.month > 12:
-            raise ValidationError("Month must be between 1 and 12")
+        super().clean()
+        if DatePeriod.objects.exclude(pk=self.pk).filter(year=self.year, month=self.month).exists():
+            raise ValidationError("The period with this year and month already exists.")
+
+    def __str__(self):
+        return self.label
 
 
 class Tag(models.Model):
