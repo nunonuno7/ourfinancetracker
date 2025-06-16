@@ -443,17 +443,11 @@ class DatePeriod(models.Model):
     label = models.CharField(max_length=20)
 
     class Meta:
-        unique_together = ('year', 'month')
         ordering = ['-year', '-month']
-
-    def clean(self):
-        super().clean()
-        if DatePeriod.objects.exclude(pk=self.pk).filter(year=self.year, month=self.month).exists():
-            raise ValidationError("The period with this year and month already exists.")
 
     def __str__(self):
         return self.label
-
+    
 
 class Tag(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tags")
