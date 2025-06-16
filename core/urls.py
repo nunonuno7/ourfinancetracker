@@ -23,16 +23,14 @@ from .views import (
     transaction_clear_cache,
     api_jwt_my_transactions, dashboard_data,
     account_balances_pivot_json, dashboard_kpis_json,
-    
 )
 from core.views_reporting import proxy_report_csv_token
-from django.contrib import admin
 
 app_name = 'core'
 
 urlpatterns = [
     # Home
-    path("", HomeView.as_view(), name="home"),
+    path("", HomeView.as_view(), name="home"),  
 
     # Autenticação
     path("signup/", signup, name="signup"),
@@ -87,17 +85,6 @@ urlpatterns = [
     # Reporting CSV Token
     path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),
 
-    # Debug Toolbar
- # Registrar Debug Toolbar namespace 'djdt'
-    path("__debug__/", include(debug_toolbar.urls)),
-
-    # Admin
-    path("admin/", admin.site.urls),
-
-    # Aplicação principal
-    path("", include("core.urls")),
-    
-    
-    
-    
-    ]
+    # Debug Toolbar (namespace 'djdt')
+    path("__debug__/", include(debug_toolbar.urls)),  
+]

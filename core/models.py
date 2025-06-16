@@ -435,10 +435,7 @@ from django.core.exceptions import ValidationError
 class DatePeriod(models.Model):
     year = models.PositiveIntegerField()
     month = models.PositiveIntegerField(
-        validators=[
-            MinValueValidator(1),
-            MaxValueValidator(12)
-        ]
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
     )
     label = models.CharField(max_length=20)
 
