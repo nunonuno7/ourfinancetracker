@@ -190,6 +190,10 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
         return instance
 
 
+
+
+
+
 class CategoryForm(UserAwareMixin, forms.ModelForm):
     class Meta:
         model = Category

@@ -1,6 +1,5 @@
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
-import debug_toolbar
 
 from .views import (
     HomeView, signup, LogoutView,
@@ -26,16 +25,17 @@ from .views import (
 )
 from core.views_reporting import proxy_report_csv_token
 
-app_name = 'core'
-
 urlpatterns = [
-    # Home - ESTA LINHA ESTAVA EM FALTA!
+    # ROTA PRINCIPAL - Esta linha estava em falta!
     path("", HomeView.as_view(), name="home"),
 
     # Autenticação
     path("signup/", signup, name="signup"),
     path("login/", auth_views.LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
+
+    # Dashboard
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
 
     # Transações
     path("transactions/", TransactionListView.as_view(), name="transaction_list"),
@@ -74,14 +74,13 @@ urlpatterns = [
     path("account-balance/import/", account_balance_import_xlsx, name="account_balance_import_xlsx"),
     path("account-balance/template/", account_balance_template_xlsx, name="account_balance_template_xlsx"),
 
-    # Dashboard & APIs
-    path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    # APIs
     path("periods/autocomplete/", period_autocomplete, name="period_autocomplete"),
     path("api/jwt/my-transactions/", api_jwt_my_transactions, name="api_jwt_my_transactions"),
     path("api/dashboard-data/", dashboard_data, name="dashboard_data"),
     path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
     path("api/dashboard-kpis/", dashboard_kpis_json, name="dashboard_kpis"),
 
-    # Reporting CSV Token
+    # Reporting
     path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),
 ]

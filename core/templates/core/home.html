@@ -1,23 +1,49 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block title %}{{ title }}{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-  <div class="row justify-content-center">
-    <div class="col-md-8 text-center">
-      <h1 class="display-5 mb-3">📊 Welcome to <strong>Our Finance Tracker</strong></h1>
-      <p class="lead">Use the sidebar or the house icon above to navigate through your personal finance dashboard.</p>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="jumbotron bg-light p-5 rounded">
+                <h1 class="display-4 text-center">
+                    <span role="img" aria-label="money bag">💰</span>
+                    OurFinanceTracker
+                </h1>
+                <p class="lead text-center">A sua solução completa para gestão financeira pessoal.</p>
+                <hr class="my-4">
+                <p class="text-center">Registe-se para começar a controlar receitas, despesas e saldos de contas.</p>
+                <div class="text-center">
+                    <a class="btn btn-primary btn-lg me-2" href="{% url 'login' %}" role="button">
+                        <i class="bi bi-box-arrow-in-right"></i> Fazer Login
+                    </a>
+                    <a class="btn btn-outline-primary btn-lg" href="{% url 'signup' %}" role="button">
+                        <i class="bi bi-person-plus"></i> Registar-se
+                    </a>
+                </div>
+            </div>
 
-      <hr class="my-4">
-
-      <div class="d-flex justify-content-center gap-3">
-        <a href="{% url 'transaction_list' %}" class="btn btn-primary btn-lg">💸 View Transactions</a>
-        <a href="{% url 'account_balance' %}" class="btn btn-outline-success btn-lg">📅 Monthly Balances</a>
-      </div>
+            <!-- Funcionalidades -->
+            <div class="row mt-5">
+                <div class="col-md-4 text-center mb-4">
+                    <i class="bi bi-graph-up display-4 text-primary"></i>
+                    <h4 class="mt-3">Dashboard Intuitivo</h4>
+                    <p>Visualize os seus dados financeiros com gráficos e métricas claras.</p>
+                </div>
+                <div class="col-md-4 text-center mb-4">
+                    <i class="bi bi-shield-check display-4 text-success"></i>
+                    <h4 class="mt-3">Seguro e Privado</h4>
+                    <p>Os seus dados estão protegidos com as melhores práticas de segurança.</p>
+                </div>
+                <div class="col-md-4 text-center mb-4">
+                    <i class="bi bi-cloud-arrow-up display-4 text-info"></i>
+                    <h4 class="mt-3">Import/Export</h4>
+                    <p>Importe dados de Excel ou exporte os seus relatórios facilmente.</p>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
-
-<!-- JS externo para a página inicial -->
-<script src="{% static 'js/home.js' %}"></script>
 {% endblock %}

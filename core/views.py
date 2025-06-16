@@ -934,7 +934,22 @@ class LogoutView(RedirectView):
 
 
 class HomeView(TemplateView):
-    template_name = "base.html"  # ou seu template específico
+    """
+    Página inicial da aplicação OurFinanceTracker.
+    Redireciona utilizadores autenticados para o dashboard.
+    """
+    template_name = "core/home.html"
+    
+    def get(self, request, *args, **kwargs):
+        # Se utilizador autenticado, redirecionar para dashboard
+        if request.user.is_authenticated:
+            return redirect('dashboard')
+        return super().get(request, *args, **kwargs)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'OurFinanceTracker - Gestão Financeira Pessoal'
+        return context
 
 @require_POST
 @login_required
