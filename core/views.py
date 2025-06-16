@@ -59,6 +59,7 @@ from .forms import (
 )
 from .utils.cache_helpers import clear_tx_cache
 
+from django.views.generic import TemplateView
 
 # ==============================================================================
 # UTILITÁRIOS DE CACHE SEGUROS
@@ -933,9 +934,7 @@ class LogoutView(RedirectView):
 
 
 class HomeView(TemplateView):
-    """Página inicial."""
-    template_name = "core/home.html"
-
+    template_name = "base.html"  # ou seu template específico
 
 @require_POST
 @login_required
