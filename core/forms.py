@@ -159,6 +159,12 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                 dt = datetime.strptime(period_str, "%Y-%m")
                 if dt.month < 1 or dt.month > 12:
                     raise ValueError("Invalid month")
+                
+                # Add year validation to prevent unreasonable dates
+                current_year = datetime.now().year
+                if dt.year < 1900 or dt.year > current_year + 10:
+                    raise ValueError(f"Year must be between 1900 and {current_year + 10}")
+                    
                 period, _ = DatePeriod.objects.get_or_create(
                     year=dt.year,
                     month=dt.month,
@@ -166,8 +172,13 @@ class TransactionForm(UserAwareMixin, forms.ModelForm):
                 )
                 cleaned["period"] = period
             except ValueError as e:
-                raise ValidationError(f"Invalid period format: {str(e)}")
-
+                self.add_error("period", f"Invalid period format: {str(e)}")
+            except Exception as e:
+                self.add_error("period", f"Error processing period: {str(e)}")
+        elif not cleaned.get("date"):
+            # If neither date nor period is provided, add an error
+            self.add_error(None, "Either date or period must be provided")
+        
         return cleaned
 
     def save(self, commit=True) -> Transaction:
@@ -424,12 +435,14 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
                 ).first()
 
                 if existing_balance:
-                    existing_balance.amount += balance.amount
+                    # Fix: use reported_balance instead of amount
+                    existing_balance.reported_balance += balance.reported_balance
                     existing_balance.save()
                     balance.delete()
                 else:
                     balance.account = existing
                     balance.save()
+            
 
             if self.instance.pk:
                 self.instance.delete()

@@ -8,6 +8,7 @@ from django.db.models import UniqueConstraint
 from datetime import date
 from django.dispatch import receiver
 from django.db.models.signals import post_save
+from django.utils import timezone
 
 
 def get_default_currency_id() -> int:
@@ -109,17 +110,32 @@ class Account(models.Model):
     def save(self, *args, **kwargs):
         """Ensure `account_type` and `currency` are not null when saving."""
         if not self.account_type_id:
-            self.account_type = get_default_account_type() or AccountType.objects.first()
+            self.account_type = get_default_account_type() 
+            if not self.account_type:
+                # Fallback to first account type or create a default one
+                self.account_type = AccountType.objects.first() or AccountType.objects.create(name="Savings")
         
         if not self.currency_id:
             try:
+                # Try to get user's default currency
                 user_settings = getattr(self.user, "settings", None)
-                default_curr = getattr(user_settings, "default_currency", None)
-                self.currency = default_curr or get_default_currency()
-            except AttributeError:
-                self.currency = get_default_currency()
+                if user_settings and hasattr(user_settings, "default_currency"):
+                    self.currency = user_settings.default_currency
+                else:
+                    self.currency = get_default_currency()
+                    
+                # Final fallback if all else fails
+                if not self.currency:
+                    self.currency = Currency.objects.filter(code="EUR").first() or Currency.objects.create(
+                        code="EUR", symbol="€", decimals=2
+                    )
+            except (AttributeError, ValueError):
+                self.currency = get_default_currency() or Currency.objects.first() or Currency.objects.create(
+                    code="EUR", symbol="€", decimals=2
+                )
         
         super().save(*args, **kwargs)
+
 
     def is_default(self) -> bool:
         """Returns True if this account is the default 'Cash' account."""
@@ -433,7 +449,12 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 
 class DatePeriod(models.Model):
-    year = models.PositiveIntegerField()
+    year = models.PositiveIntegerField(
+        validators=[
+            MinValueValidator(1900),
+            MaxValueValidator(timezone.now().year + 20)  # Allow future planning
+        ]
+    )
     month = models.PositiveIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(12)]
     )
@@ -441,9 +462,22 @@ class DatePeriod(models.Model):
 
     class Meta:
         ordering = ['-year', '-month']
+        constraints = [
+            models.UniqueConstraint(fields=['year', 'month'], name='unique_year_month')
+        ]
 
     def __str__(self):
         return self.label
+        
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        
+        if self.month < 1 or self.month > 12:
+            raise ValidationError({'month': 'Month must be between 1 and 12'})
+            
+        current_year = timezone.now().year
+        if self.year < 1900 or self.year > current_year + 20:
+            raise ValidationError({'year': f'Year must be between 1900 and {current_year + 20}'})
     
 
 class Tag(models.Model):
