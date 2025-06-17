@@ -1,5 +1,5 @@
-# VERSÃO FINAL CORRIGIDA: core/views.py
-# SUBSTITUIR TODO O CONTEÚDO DO FICHEIRO core/views.py POR ESTE
+#  core/views.py
+
 
 """
 Core application views for ourfinancetracker

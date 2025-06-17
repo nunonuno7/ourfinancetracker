@@ -1,35 +1,60 @@
+# ──────────────────────────────
+# Ambiente Python / Django
+# ──────────────────────────────
+# Virtual env (caso exista dentro do repositório)
+venv/
+.venv/
 
-# ✅ Ambiente virtual (se estiver dentro do projeto)
-ourfinancetracker/
-
-# ✅ Variáveis de ambiente (segurança)
-.env
-
-# ✅ Base de dados SQLite local
-db.sqlite3
-
-# ✅ Cache e ficheiros compilados do Python
+# Dependências geradas pelo Python
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 
-# ✅ Ficheiros temporários e logs
+# Base de dados local
+db.sqlite3
+
+# Ficheiros de migrações incompletas
+*.py,cover
+*.py,orig
+
+# Variáveis de ambiente
+.env
+
+# Log & runtime files
 *.log
 *.pot
+*.pid
 
-# ✅ VSCode configs (individuais)
+# ──────────────────────────────
+# Ferramentas / IDEs
+# ──────────────────────────────
 .vscode/
+.idea/
+*.code-workspace
 
-# ✅ Outras exclusões comuns (ex: backups ou sistema operativo)
-*.bak
-*.swp
+# ──────────────────────────────
+# Sistemas operativos & backups
+# ──────────────────────────────
 .DS_Store
 Thumbs.db
+*.swp
+*.bak
+*.tmp
 
-
+# ──────────────────────────────
+# Conteúdos opcionais do projeto
+# (notebooks, docs, roadmaps, etc.)
+# ──────────────────────────────
 notebook.py
 roadmap_detalhado.ipynb
 roadmap_notebook.py
 notas.txt
-venv/
+
+# ──────────────────────────────
+# Ficheiros de build / static
+#  (mantém se usares collectstatic
+#   no próprio repositório; caso
+#   contrário, ignora-os)
+# ──────────────────────────────
+staticfiles/
