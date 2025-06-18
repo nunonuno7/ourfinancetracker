@@ -106,8 +106,8 @@ class Account(models.Model):
             UniqueConstraint(fields=["user", "name"], name="unique_account_user_name")
         ]
 
-    def __str__(self) -> str:
-        return f"{self.name} – {self.user}"
+    def __str__(self):
+        return self.name
 
     # CORRIGIDO: Account.save() com tratamento de exceções
     def save(self, *args, **kwargs):

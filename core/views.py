@@ -365,16 +365,14 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
         return response
 
 
+
 @login_required
 @require_GET
 def transactions_json(request):
-    """
-    API JSON para DataTables com cache segura e CSRF adequado.
-    CORREÇÃO PRINCIPAL: Cache keys seguros e CSRF tokens adequados.
-    """
+    """API JSON para DataTables com cache e filtros dinâmicos."""
     user_id = request.user.id
 
-    # Parse de datas com tratamento de exceções
+    # Datas
     raw_start = request.GET.get("date_start")
     raw_end = request.GET.get("date_end")
     start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
@@ -383,14 +381,12 @@ def transactions_json(request):
     if not start_date or not end_date:
         return JsonResponse({"error": "Invalid date format"}, status=400)
 
-    # Cache key segura com hash da SECRET_KEY
     cache_key = _cache_key(user_id, start_date, end_date)
     cached_df = cache.get(cache_key)
 
     if cached_df is not None:
         df = cached_df.copy()
     else:
-        # Query SQL otimizada
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
@@ -418,20 +414,19 @@ def transactions_json(request):
         ])
         cache.set(cache_key, df.copy(), timeout=300)
 
-    # Processamento dos dados
+    # Transformações e formatação
     df["date"] = df["date"].astype(str)
     df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
     df["amount_float"] = df["amount"].astype(float)
 
-    # Aplicar filtros
+    # Filtros GET
     tx_type = request.GET.get("type", "").strip()
     category = request.GET.get("category", "").strip()
     account = request.GET.get("account", "").strip()
     period = request.GET.get("period", "").strip()
     search = request.GET.get("search[value]", "").strip()
 
-    # Cópias para filtros independentes
     df_for_type = df.copy()
     df_for_category = df.copy()
     df_for_account = df.copy()
@@ -463,7 +458,7 @@ def transactions_json(request):
             df_for_category = df_for_category[(df_for_category["year"] == y) & (df_for_category["month"] == m)]
             df_for_account = df_for_account[(df_for_account["year"] == y) & (df_for_account["month"] == m)]
         except Exception:
-            pass  # Ignorar erro de parsing
+            pass
 
     if search:
         df = df[
@@ -473,10 +468,10 @@ def transactions_json(request):
             df["tags"].str.contains(search, case=False, na=False)
         ]
 
-    # Valores únicos para filtros
-    unique_types = sorted(df_for_type["type"].dropna().unique())
-    unique_categories = sorted(df_for_category["category"].dropna().unique())
-    unique_accounts = sorted(df_for_account["account"].dropna().unique())
+    # Filtros únicos dinâmicos
+    available_types = sorted(df_for_type["type"].dropna().unique())
+    available_categories = sorted(df_for_category["category"].dropna().unique())
+    available_accounts = sorted(df_for_account["account"].dropna().unique())
     available_periods = sorted(df_for_period["period"].dropna().unique(), reverse=True)
 
     # Ordenação
@@ -492,25 +487,24 @@ def transactions_json(request):
         try:
             df.sort_values(by=sort_col, ascending=ascending, inplace=True)
         except Exception:
-            pass  # Ignorar erro de ordenação
+            pass
 
-    # Formatação de valores
+    # Formatar montantes
     df["amount"] = df.apply(
-        lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + 
-        f" {r['currency']}", 
+        lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" {r['currency']}",
         axis=1
     )
 
-    # Formatação de tags
+    # Formatar tags com badges
     def format_tags(raw):
-        if not raw or not isinstance(raw, str): 
+        if not raw or not isinstance(raw, str):
             return "–"
         tags = [t.strip() for t in raw.split(",") if t.strip()]
         return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags) if tags else "–"
-    
+
     df["tags"] = df["tags"].astype(str).apply(format_tags)
 
-    # CORREÇÃO CRÍTICA: CSRF token seguro para ações
+    # Ações com CSRF
     csrf_token = get_token(request)
     df["actions"] = df.apply(lambda r: f"""
         <div class="btn-group btn-group-sm" role="group">
@@ -537,24 +531,18 @@ def transactions_json(request):
         "recordsTotal": total,
         "recordsFiltered": total,
         "data": df_page[["period", "date", "type", "amount", "category", "tags", "account", "actions"]].to_dict(orient="records"),
-        "unique_types": unique_types,
-        "unique_categories": unique_categories,
-        "unique_accounts": unique_accounts,
+        "available_types": available_types,
+        "available_categories": available_categories,
+        "available_accounts": available_accounts,
         "available_periods": available_periods,
     })
 
 
+
 @login_required
 def transaction_clear_cache(request):
-    """Limpar cache de transações do utilizador."""
     clear_tx_cache(request.user.id)
-
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JsonResponse({"success": True})
-
-    messages.success(request, "✅ Cache limpa.")
-    return redirect("transaction_list")
-
+    return JsonResponse({"status": "ok"})
 
 @require_GET
 @login_required
@@ -1709,3 +1697,29 @@ def dashboard_kpis_json(request):
             "crescimento_patrimonial": "0 €",
             "status": "error"
         }, status=500)
+
+def account_balance_template_xlsx(request):
+    """Download de template de Excel com colunas Year, Month, Account, Balance."""
+
+    output = BytesIO()
+
+    # Exemplo com o mês atual
+    today = date.today()
+    df = pd.DataFrame([{
+        "Year": today.year,
+        "Month": today.month,
+        "Account": "Bpi",
+        "Balance": 1234.56,
+    }])
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+
+    output.seek(0)
+    filename = "account_balance_template.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

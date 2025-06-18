@@ -52,7 +52,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware"
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'core.middleware.log_filter.SuppressJsonLogMiddleware',
 ]
 if DEBUG:
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
@@ -131,10 +132,25 @@ CACHES = {
     }
 }
 
+
+
 # Logging estruturado
+
+import logging
+
+class SuppressTransactionJsonFilter(logging.Filter):
+    def filter(self, record):
+        return "/transactions/json" not in record.getMessage()
+
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "suppress_transaction_json": {
+            "()": SuppressTransactionJsonFilter,
+        },
+    },
     "formatters": {
         "verbose": {
             "format": "[{levelname}] {asctime} {name} {process:d} {thread:d} {message}",
@@ -145,7 +161,8 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "simple" if DEBUG else "verbose"
+            "formatter": "simple" if DEBUG else "verbose",
+            "filters": ["suppress_transaction_json"]
         },
         "file": (
             {
@@ -164,6 +181,11 @@ LOGGING = {
             "handlers": ["console", "file"] if not DEBUG else ["console"],
             "level": "INFO", "propagate": False
         },
+        "django.server": {  # <--- logger responsável pelos logs HTTP
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False
+        },
         "core": {
             "handlers": ["console", "file"] if not DEBUG else ["console"],
             "level": "DEBUG" if DEBUG else "INFO",
@@ -171,6 +193,7 @@ LOGGING = {
         }
     }
 }
+
 
 # Segurança extra em produção
 if not DEBUG:

@@ -61,14 +61,17 @@
       </select>
     </div>
 
-    <div class="col-md-3">
-      <label for="filter-period" class="form-label">Period</label>
-      <select id="filter-period" name="filter-period" class="form-select">
-        <option value="">All Periods</option>
-      </select>
-    </div>
-  </div>
-
+<div class="col-md-3">
+  <label for="filter-period" class="form-label">Period</label>
+  <select id="filter-period" name="filter-period" class="form-select">
+    <option value="">All Periods</option>
+    {% for p in period_options %}
+      <option value="{{ p }}" {% if p == current_period %}selected{% endif %}>
+        {{ p }}
+      </option>
+    {% endfor %}
+  </select>
+</div>
   <!-- Botões de ação -->
   <div class="d-flex align-items-center gap-2 mb-3">
     <button id="clear-filters" class="btn btn-outline-danger">

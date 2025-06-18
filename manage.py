@@ -2,7 +2,7 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
-
+import logging
 
 def main():
     """Run administrative tasks."""
@@ -20,3 +20,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+class CustomFilter(logging.Filter):
+    def filter(self, record):
+        return "/transactions/json" not in record.getMessage()
+
+logging.getLogger("django.server").addFilter(CustomFilter())

@@ -1,11 +1,12 @@
-from django.urls import path, include
+from django.urls import path
 from django.contrib.auth import views as auth_views
 
 from .views import (
     HomeView, signup, LogoutView,
     TransactionListView, TransactionCreateView,
     TransactionUpdateView, TransactionDeleteView,
-    transactions_json,
+    transactions_json, import_transactions_xlsx,
+    import_transactions_template, transaction_clear_cache,
     CategoryListView, CategoryCreateView,
     CategoryUpdateView, CategoryDeleteView,
     category_autocomplete, tag_autocomplete,
@@ -14,19 +15,17 @@ from .views import (
     AccountMergeView, move_account_up,
     move_account_down, account_reorder,
     account_balance_view, delete_account_balance,
-    copy_previous_balances_view,
-    account_balance_export_xlsx,
-    account_balance_import_xlsx,
-    account_balance_template_xlsx,
+    copy_previous_balances_view, account_balance_export_xlsx,
+    account_balance_import_xlsx, account_balance_template_xlsx,
     DashboardView, period_autocomplete,
-    transaction_clear_cache,
     api_jwt_my_transactions, dashboard_data,
     account_balances_pivot_json, dashboard_kpis_json,
 )
+
 from core.views_reporting import proxy_report_csv_token
 
 urlpatterns = [
-    # ROTA PRINCIPAL - Esta linha estava em falta!
+    # Página principal
     path("", HomeView.as_view(), name="home"),
 
     # Autenticação
@@ -44,11 +43,11 @@ urlpatterns = [
     path("transactions/<int:pk>/delete/", TransactionDeleteView.as_view(), name="transaction_delete"),
     path("transactions/json/", transactions_json, name="transactions_json"),
     path("transactions/export-excel/", proxy_report_csv_token, name="transaction_export_xlsx"),
-    path("transactions/import-excel/", TransactionCreateView.as_view(), name="transaction_import_xlsx"),
-    path("transactions/template-excel/", TransactionCreateView.as_view(), name="transaction_import_template"),
+    path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
+    path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
 
-    # Categorias
+    # Categorias e Tags
     path("categories/", CategoryListView.as_view(), name="category_list"),
     path("categories/new/", CategoryCreateView.as_view(), name="category_create"),
     path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_update"),
@@ -74,7 +73,7 @@ urlpatterns = [
     path("account-balance/import/", account_balance_import_xlsx, name="account_balance_import_xlsx"),
     path("account-balance/template/", account_balance_template_xlsx, name="account_balance_template_xlsx"),
 
-    # APIs
+    # APIs auxiliares
     path("periods/autocomplete/", period_autocomplete, name="period_autocomplete"),
     path("api/jwt/my-transactions/", api_jwt_my_transactions, name="api_jwt_my_transactions"),
     path("api/dashboard-data/", dashboard_data, name="dashboard_data"),

@@ -1,4 +1,3 @@
-// 📁 static/js/transaction_list_ajax.js
 
 $(document).ready(function () {
   console.log('JavaScript carregado e $(document).ready() executado');
@@ -7,9 +6,22 @@ $(document).ready(function () {
   const savedPeriod = sessionStorage.getItem("tx_filter_period");
   if (savedPeriod) {
     $('#filter-period').val(savedPeriod);
+  } else {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const currentPeriod = `${yyyy}-${mm}`;
+    const filter = document.getElementById("filter-period");
+    const exists = Array.from(filter.options).some(opt => opt.value === currentPeriod);
+    if (!exists) {
+      const opt = new Option(currentPeriod, currentPeriod, true, true);
+      filter.add(opt);
+    } else {
+      filter.value = currentPeriod;
+    }
+    sessionStorage.setItem("tx_filter_period", currentPeriod);
   }
 
-  // 💾 Guardar no sessionStorage quando o utilizador mudar o período
   $('#filter-period').on('change', function () {
     sessionStorage.setItem("tx_filter_period", this.value);
   });
@@ -39,7 +51,6 @@ $(document).ready(function () {
       url: '/transactions/json/',
       dataSrc: 'data',
       data: function (d) {
-        // ✅ Remove símbolo ⭘ dos filtros ativos
         const clean = val => val?.replace('⭘', '').trim() || '';
         d.date_start = $('#start-date').val();
         d.date_end = $('#end-date').val();
@@ -61,9 +72,9 @@ $(document).ready(function () {
       { data: 'account', orderable: true },
       { data: 'actions', orderable: false }
     ]
-  })
-  
-  window.transactionTable = table; 
+  });
+
+  window.transactionTable = table;
 
   // 🔄 Recarregar tabela ao mudar datas
   startFlatpickr.config.onChange.push(() => table.ajax.reload());
@@ -77,7 +88,40 @@ $(document).ready(function () {
     table.ajax.reload();
   });
 
-  // 🧹 Atualizar dropdowns com valores visíveis (estilo Excel)
+  // 🧼 Clear Filters
+$('#clear-filters').on('click', function () {
+  $('#filter-type').val('');
+  $('#filter-account').val('');
+  $('#filter-category').val('');
+  $('#filter-period').val('');
+
+  sessionStorage.removeItem("tx_filter_period");
+
+  table.ajax.reload();
+});
+
+  // 🧹 Botão para limpar cache
+  $('#clear-cache-btn').on('click', function (e) {
+    e.preventDefault();
+    fetch('/transactions/clear-cache/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+      },
+    })
+      .then(response => {
+        if (response.ok) {
+          table.ajax.reload();
+        } else {
+          alert('Erro ao limpar cache.');
+        }
+      })
+      .catch(err => {
+        alert('Erro inesperado.');
+      });
+  });
+
+  // 🔄 Atualizar filtros com valores recebidos do backend
   table.on('xhr.dt', function (e, settings, json) {
     if (!json) return;
 
@@ -85,113 +129,15 @@ $(document).ready(function () {
       const select = $(selector);
       const set = new Set(values || []);
       select.empty().append(`<option value="">All</option>`);
-      if (current && !set.has(current)) {
-        select.append(`<option value="${current}" selected>${current} ⭘</option>`);
-      }
-      Array.from(set).sort().forEach(val => {
-        const selected = (val === current) ? 'selected' : '';
-        select.append(`<option value="${val}" ${selected}>${val}</option>`);
+      set.forEach(v => {
+        const selected = current === v ? ' selected' : '';
+        select.append(`<option value="${v}"${selected}>${v}</option>`);
       });
     };
 
-    updateDropdown('#filter-type', json.unique_types, $('#filter-type').val());
-    updateDropdown('#filter-category', json.unique_categories, $('#filter-category').val());
-    updateDropdown('#filter-account', json.unique_accounts, $('#filter-account').val());
+    updateDropdown('#filter-type', json.available_types, $('#filter-type').val());
+    updateDropdown('#filter-account', json.available_accounts, $('#filter-account').val());
+    updateDropdown('#filter-category', json.available_categories, $('#filter-category').val());
     updateDropdown('#filter-period', json.available_periods, $('#filter-period').val());
   });
-
-  // 🗑️ Confirmação ao apagar transações
-  $(document).on('submit', 'form.delete-form', function (e) {
-    e.preventDefault();
-    const form = this;
-    const name = $(form).data('name') || 'this transaction';
-    if (!confirm(`⚠ Confirm delete ${name}?`)) return;
-
-    fetch(form.action, {
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': window.CSRF_TOKEN,
-        'X-Requested-With': 'XMLHttpRequest',
-      }
-    })
-    .then(response => {
-      if (response.ok) {
-        table.ajax.reload(null, false);
-      } else {
-        alert('❌ Erro ao eliminar.');
-      }
-    })
-    .catch(() => alert('❌ Erro ao contactar o servidor.'));
-  });
-
-  // ✨ Botão "Clear Filters"
-  $('#clear-filters').on('click', function () {
-    $('#filter-type').val('');
-    $('#filter-account').val('');
-    $('#filter-category').val('');
-    $('#filter-period').val('');
-    table.ajax.reload();
-  });
-
-  // 🔍 Debug ordenação
-  table.off('order.dt').on('order.dt', function () {
-    const order = table.order();
-    if (order.length > 0) {
-      console.log('Coluna ordenada:', order[0][0], 'Direção:', order[0][1]);
-    }
-  });
-
-  // 🔄 Navegação entre meses
-  $('#prev-month').on('click', function () {
-    const currentDate = startFlatpickr.selectedDates[0];
-    if (currentDate) {
-      const prev = new Date(currentDate);
-      prev.setMonth(prev.getMonth() - 1);
-      startFlatpickr.setDate(prev);
-      endFlatpickr.setDate(prev);
-      table.ajax.reload();
-    }
-  });
-
-  $('#next-month').on('click', function () {
-    const currentDate = startFlatpickr.selectedDates[0];
-    if (currentDate) {
-      const next = new Date(currentDate);
-      next.setMonth(next.getMonth() + 1);
-      startFlatpickr.setDate(next);
-      endFlatpickr.setDate(next);
-      table.ajax.reload();
-    }
-  });
-
-  // 🔄 Limpar cache e recarregar tabela com os filtros atuais
-  $('#clear-cache-btn').on('click', function (e) {
-    e.preventDefault();
-
-    console.log("🧪 Clique detectado no botão #clear-cache-btn");
-
-fetch("/transactions/clear-cache/", {
-  method: "GET",
-  credentials: "same-origin",
-  headers: {
-    "X-Requested-With": "XMLHttpRequest",
-  },
-})
-  .then(response => response.json())
-  .then(data => {
-    if (data.success) {
-      console.log("✅ Cache limpa com sucesso");
-      setTimeout(() => {
-        table.ajax.reload(null, false);
-      }, 100);
-    } else {
-      alert("❌ Erro ao limpar cache.");
-    }
-  })
-      .catch(error => {
-        console.error("Erro ao contactar o servidor:", error);
-        alert("❌ Erro ao contactar o servidor.");
-      });
-  });
-
 });

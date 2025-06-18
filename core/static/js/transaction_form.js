@@ -1,4 +1,4 @@
-// transaction_form.js (versão final com tags com lista visível)
+// transaction_form.js (versão corrigida)
 
 function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
@@ -9,15 +9,14 @@ function initTransactionForm() {
 
   if (!dateInput || !periodInput || !monthSelector) return;
 
-  // Inicializar data com hoje se estiver vazia
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
-const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
+  const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
 
-if (isNewTransaction) {
-  console.log("📅 Forçar data de hoje via JS:", todayStr);
-  dateInput.value = todayStr;
-}
+  if (isNewTransaction && !dateInput.value) {
+    console.log("📅 Forçar data de hoje via JS:", todayStr);
+    dateInput.value = todayStr;
+  }
 
   // Flatpickr com sincronização
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
@@ -83,7 +82,7 @@ if (isNewTransaction) {
     });
   }
 
-  // Tom Select Tags (agora com lista visível)
+  // Tom Select Tags
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
     if (tagsInput.tomselect) tagsInput.tomselect.destroy();
@@ -116,14 +115,15 @@ if (isNewTransaction) {
       });
   }
 
-  // Format amount
+  // Amount format (corrigido para não apagar valor inválido)
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {
-      if (value.endsWith(",") || value.endsWith(".")) return value;
-      const clean = value.replace(/[^\d,.-]/g, "").replace(",", ".");
-      const num = parseFloat(clean);
-      if (isNaN(num)) return value;
+      if (!value) return "";
+      const raw = value.trim();
+      const temp = raw.replace(/\./g, "").replace(",", ".");
+      const num = parseFloat(temp);
+      if (isNaN(num)) return raw;
       return num.toLocaleString("pt-PT", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -131,11 +131,14 @@ if (isNewTransaction) {
     };
 
     amountInput.addEventListener("blur", () => {
-      amountInput.value = formatNumber(amountInput.value);
+      const formatted = formatNumber(amountInput.value);
+      if (formatted !== "") {
+        amountInput.value = formatted;
+      }
     });
 
     const form = document.getElementById("transaction-form");
-    form.addEventListener("submit", () => {
+    form?.addEventListener("submit", () => {
       amountInput.value = amountInput.value
         .replace(/\s/g, "")
         .replace(/\./g, "")
@@ -144,18 +147,15 @@ if (isNewTransaction) {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  initTransactionForm();
-});
+document.addEventListener("DOMContentLoaded", initTransactionForm);
 
-// ⚡ Atualiza tabela após o formulário ser trocado por HTMX (criação bem-sucedida)
 document.body.addEventListener("htmx:afterSwap", function (event) {
-  initTransactionForm();
-
   const targetId = event.detail?.target?.id;
-  if (targetId === "transaction-form" && window.transactionTable) {
-    console.log("🔄 Reload da DataTable após HTMX swap do formulário de transação");
-    window.transactionTable.ajax.reload(null, false);
+  if (targetId === "transaction-form") {
+    initTransactionForm();
+    if (window.transactionTable) {
+      console.log("🔄 Reload da DataTable após HTMX swap do formulário de transação");
+      window.transactionTable.ajax.reload(null, false);
+    }
   }
 });
-

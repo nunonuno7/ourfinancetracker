@@ -1,120 +1,161 @@
-document.addEventListener("DOMContentLoaded", () => {
+// transaction_form.js (versão final com tags com lista visível)
+
+function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
   const periodInput = document.getElementById("id_period");
   const monthSelector = document.getElementById("period-selector");
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
 
-  if (dateInput && monthSelector && periodInput) {
-    // Inicializar seletor com base na data
-    const initialDate = new Date(dateInput.value || new Date());
-    const initYear = initialDate.getFullYear();
-    const initMonth = String(initialDate.getMonth() + 1).padStart(2, "0");
-    monthSelector.value = `${initYear}-${initMonth}`;
-    periodInput.value = `${initYear}-${initMonth}`;
+  if (!dateInput || !periodInput || !monthSelector) return;
 
-    // Atualizar campo oculto "period"
-    function updatePeriodField() {
-      const [year, month] = monthSelector.value.split("-");
+  // Inicializar data com hoje se estiver vazia
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
+
+if (isNewTransaction) {
+  console.log("📅 Forçar data de hoje via JS:", todayStr);
+  dateInput.value = todayStr;
+}
+
+  // Flatpickr com sincronização
+  if (dateInput._flatpickr) dateInput._flatpickr.destroy();
+  flatpickr(dateInput, {
+    dateFormat: "Y-m-d",
+    defaultDate: dateInput.value,
+    altInput: true,
+    altFormat: "d/m/Y",
+    allowInput: true,
+    onChange: function (selectedDates) {
+      const selected = selectedDates[0];
+      if (!selected) return;
+      const year = selected.getFullYear();
+      const month = String(selected.getMonth() + 1).padStart(2, "0");
+      monthSelector.value = `${year}-${month}`;
       periodInput.value = `${year}-${month}`;
+    },
+  });
+
+  monthSelector.addEventListener("change", () => {
+    const [year, month] = monthSelector.value.split("-");
+    const newDate = `${year}-${month}-01`;
+    dateInput.value = newDate;
+    periodInput.value = `${year}-${month}`;
+    if (dateInput._flatpickr) {
+      dateInput._flatpickr.setDate(newDate, true);
     }
+  });
 
-    // Quando a data muda → atualiza o período
-    dateInput.addEventListener("change", () => {
-      const d = new Date(dateInput.value);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      monthSelector.value = `${y}-${m}`;
-      updatePeriodField();
-    });
+  prevBtn?.addEventListener("click", () => changeMonth(-1));
+  nextBtn?.addEventListener("click", () => changeMonth(1));
 
-    // Quando o período muda → ajusta a data se necessário
-    monthSelector.addEventListener("change", () => {
-      const [year, month] = monthSelector.value.split("-");
-      updatePeriodField();
-
-      const selectedMonth = parseInt(month);
-      const selectedYear = parseInt(year);
-
-      const currentDate = new Date(dateInput.value);
-      if (
-        currentDate.getFullYear() !== selectedYear ||
-        currentDate.getMonth() + 1 !== selectedMonth
-      ) {
-        dateInput.value = `${year}-${month}-01`;
-      }
-    });
-
-    // Botões de navegação
-    function shiftMonth(delta) {
-      let [year, month] = monthSelector.value.split("-").map(Number);
-      month += delta;
-
-      if (month > 12) {
-        month = 1;
-        year += 1;
-      } else if (month < 1) {
-        month = 12;
-        year -= 1;
-      }
-
-      const newVal = `${year}-${String(month).padStart(2, "0")}`;
-      monthSelector.value = newVal;
-      monthSelector.dispatchEvent(new Event("change"));
+  function changeMonth(delta) {
+    const [year, month] = monthSelector.value.split("-").map(Number);
+    const newDate = new Date(year, month - 1 + delta, 1);
+    const newYear = newDate.getFullYear();
+    const newMonth = String(newDate.getMonth() + 1).padStart(2, "0");
+    const newMonthValue = `${newYear}-${newMonth}`;
+    const newDateStr = `${newYear}-${newMonth}-01`;
+    monthSelector.value = newMonthValue;
+    periodInput.value = newMonthValue;
+    dateInput.value = newDateStr;
+    if (dateInput._flatpickr) {
+      dateInput._flatpickr.setDate(newDateStr, true);
     }
-
-    prevBtn?.addEventListener("click", () => shiftMonth(-1));
-    nextBtn?.addEventListener("click", () => shiftMonth(1));
   }
 
-  // Tom Select para o campo de categoria (apenas uma)
+  // Tom Select Categoria
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
-    const currentValue = categoryInput.value.trim();  // valor já existente no input (ex: "Groceries")
+    if (categoryInput.tomselect) categoryInput.tomselect.destroy();
 
-    const select = new TomSelect(categoryInput, {
+    const rawList = categoryInput.dataset.categoryList || "";
+    const options = rawList.split(",").map(name => ({ value: name.trim(), text: name.trim() }));
+
+    new TomSelect(categoryInput, {
       create: true,
+      persist: false,
       maxItems: 1,
-      valueField: "name",
-      labelField: "name",
-      searchField: "name",
-      preload: true,
-      load: function (query, callback) {
-        if (!query.length) return callback();
-        fetch(`/categories/autocomplete/?q=${encodeURIComponent(query)}`)
-          .then((res) => res.json())
-          .then((data) => callback(data))
-          .catch(() => callback());
-      },
+      options,
+      items: categoryInput.value ? [categoryInput.value] : [],
+      sortField: { field: "text", direction: "asc" },
     });
-
-    // Adiciona a opção inicial manualmente se for necessário
-    if (currentValue && !select.options[currentValue]) {
-      select.addOption({ name: currentValue });  // ⚠️ só funciona se o campo for do tipo "name"
-      select.setValue(currentValue);
-    }
   }
 
-
-  // Tom Select para o campo de tags (múltiplas)
+  // Tom Select Tags (agora com lista visível)
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
-    new TomSelect(tagsInput, {
-      plugins: ["remove_button"],
-      delimiter: ",",
-      persist: false,
-      create: true,
-      placeholder: "Add tags...",
-      valueField: "name",
-      labelField: "name",
-      searchField: "name",
-      load: function (query, callback) {
-        if (!query.length) return callback();
-        fetch(`/tags/autocomplete/?q=${encodeURIComponent(query)}`)
-          .then((res) => res.json())
-          .then((data) => callback(data))
-          .catch(() => callback());
-      },
+    if (tagsInput.tomselect) tagsInput.tomselect.destroy();
+
+    const initialTags = tagsInput.value
+      .split(",")
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    const allTags = initialTags.map(name => ({ name }));
+
+    fetch("/tags/autocomplete/?q=")
+      .then(res => res.json())
+      .then(data => {
+        const tagOptions = [...new Set([...allTags, ...data])];
+
+        new TomSelect(tagsInput, {
+          plugins: ["remove_button"],
+          delimiter: ",",
+          persist: false,
+          create: true,
+          placeholder: "Add tags...",
+          valueField: "name",
+          labelField: "name",
+          searchField: "name",
+          preload: true,
+          options: tagOptions,
+          items: initialTags,
+        });
+      });
+  }
+
+  // Format amount
+  const amountInput = document.getElementById("id_amount");
+  if (amountInput) {
+    const formatNumber = (value) => {
+      if (value.endsWith(",") || value.endsWith(".")) return value;
+      const clean = value.replace(/[^\d,.-]/g, "").replace(",", ".");
+      const num = parseFloat(clean);
+      if (isNaN(num)) return value;
+      return num.toLocaleString("pt-PT", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    };
+
+    amountInput.addEventListener("blur", () => {
+      amountInput.value = formatNumber(amountInput.value);
+    });
+
+    const form = document.getElementById("transaction-form");
+    form.addEventListener("submit", () => {
+      amountInput.value = amountInput.value
+        .replace(/\s/g, "")
+        .replace(/\./g, "")
+        .replace(",", ".");
     });
   }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initTransactionForm();
 });
+
+// ⚡ Atualiza tabela após o formulário ser trocado por HTMX (criação bem-sucedida)
+document.body.addEventListener("htmx:afterSwap", function (event) {
+  initTransactionForm();
+
+  const targetId = event.detail?.target?.id;
+  if (targetId === "transaction-form" && window.transactionTable) {
+    console.log("🔄 Reload da DataTable após HTMX swap do formulário de transação");
+    window.transactionTable.ajax.reload(null, false);
+  }
+});
+
