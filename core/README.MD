@@ -1,256 +1,136 @@
+
 # ourfinancetracker
 
-> **Aplicação web de controlo financeiro pessoal**
+A lightweight, self-hostable personal-finance tracker built with **Django 5.2** and a modern JS front‑end (HTMX + Bootstrap 5 + noUiSlider).  
+It supports bank‑statement imports, smart filtering, monthly dashboards and (coming soon) scheduling of recurring transactions & automatic FX conversion.
 
-Este repositório contém o código‑fonte do **ourfinancetracker**, uma aplicação em Django que permite aos utilizadores registar saldos mensais, rendimentos e despesas, obtendo assim uma visão consolidada da sua saúde financeira sem dependências de APIs bancárias externas.
+---
 
-## ✨ Principais Funcionalidades
+## Table of Contents
+1. [Quick start](#quick-start)
+2. [Core features](#core-features)
+3. [Financial‑metric calculations](#financial-metric-calculations)
+4. [Data model & taxonomy](#data-model--taxonomy)
+5. [CLI / management commands](#cli--management-commands)
+6. [Roadmap](#roadmap)
+7. [Contributing](#contributing)
+8. [Licence](#licence)
 
-* **Dashboard resumido** de receitas, despesas estimadas e saldos por mês
-* **Contas** bancárias e de investimento ilimitadas
-* **Categorias & Subcategorias** personalizáveis para rendimentos e despesas
-* **Estimativa automática de despesas** (quando não inseridas manualmente)
-* **Orçamentos** e **transações recorrentes**
-* Importação de ficheiros (CSV, OFX, etc.)
-* Multi‑moeda com **taxas de câmbio** históricas
+---
 
-## 🏗️ Tech Stack
-
-| Camada        | Tecnologia                                  |
-| ------------- | ------------------------------------------- |
-| Backend       | Django 5.2.1 · Python 3.12                  |
-| Base de dados | PostgreSQL (via Supabase)                   |
-| Frontend      | Django Templates (fase inicial)             |
-| Deploy        | Render.com (configuração via `render.yaml`) |
-| Dev Tools     | Poetry · pre‑commit · GitHub Actions        |
-
-## 📐 Modelo de Dados
-
-### Diagrama Entidade‑Relacionamento
-
-```mermaid
-%% Copiado de mermaidchart.md
-" + open('/mnt/data/mermaidchart.md').read() + "
-```
-
-### Dicionário de Dados
-
-<details>
-<summary><strong>USER</strong></summary>
-
-| Campo           | Tipo         | Descrição                         |
-| --------------- | ------------ | --------------------------------- |
-| `id`            | int PK       | Identificador único do utilizador |
-| `username`      | varchar(150) | Nome de utilizador **único**      |
-| `email`         | varchar(254) | Endereço de e‑mail **único**      |
-| `password_hash` | varchar(255) | Hash da palavra‑passe             |
-| `is_active`     | boolean      | Se a conta está ativa             |
-| `created_at`    | datetime     | Data/hora de criação              |
-| `updated_at`    | datetime     | Data/hora da última atualização   |
-
-</details>
-
-<details>
-<summary><strong>USER_SETTINGS</strong></summary>
-
-| Campo                 | Tipo        | Descrição                                 |
-| --------------------- | ----------- | ----------------------------------------- |
-| `id`                  | int PK      | Identificador único                       |
-| `user_id`             | int FK      | Referência ao **USER**                    |
-| `default_currency_id` | varchar(3)  | Moeda padrão (FK → **CURRENCY**)          |
-| `timezone`            | varchar(50) | Fuso horário (e.g. `Europe/Lisbon`)       |
-| `start_of_month`      | tinyint     | Dia em que considera iniciar o mês (1‑31) |
-| `created_at`          | datetime    | Data/hora de criação                      |
-| `updated_at`          | datetime    | Data/hora da última atualização           |
-
-</details>
-
-<details>
-<summary><strong>ACCOUNT</strong></summary>
-
-| Campo             | Tipo        | Descrição                              |
-| ----------------- | ----------- | -------------------------------------- |
-| `id`              | int PK      | Identificador único da conta           |
-| `user_id`         | int FK      | Referência ao **USER**                 |
-| `name`            | varchar(80) | Nome atribuído pelo utilizador         |
-| `account_type_id` | int FK      | Tipo de conta (FK → **ACCOUNT\_TYPE**) |
-| `currency_id`     | varchar(3)  | Moeda da conta (FK → **CURRENCY**)     |
-| `created_at`      | datetime    | Data/hora de criação                   |
-| `updated_at`      | datetime    | Data/hora da última atualização        |
-
-</details>
-
-<details>
-<summary><strong>ACCOUNT_TYPE</strong></summary>
-
-| Campo  | Tipo        | Descrição                                     |
-| ------ | ----------- | --------------------------------------------- |
-| `id`   | int PK      | Identificador único                           |
-| `name` | varchar(40) | Descritivo (ex.: "Conta à ordem", "Poupança") |
-
-</details>
-
-<details>
-<summary><strong>CURRENCY</strong></summary>
-
-| Campo      | Tipo          | Descrição                           |
-| ---------- | ------------- | ----------------------------------- |
-| `code`     | varchar(3) PK | Código ISO‑4217 (ex.: EUR, USD)     |
-| `symbol`   | varchar(4)    | Símbolo monetário (€, \$)           |
-| `decimals` | tinyint       | Número de casas decimais suportadas |
-
-</details>
-
-<details>
-<summary><strong>ACCOUNT_BALANCE</strong></summary>
-
-| Campo              | Tipo     | Descrição                             |
-| ------------------ | -------- | ------------------------------------- |
-| `id`               | int PK   | Identificador único                   |
-| `account_id`       | int FK   | Referência à **ACCOUNT**              |
-| `balance_date`     | date     | Data do saldo reportado               |
-| `reported_balance` | decimal  | Valor do saldo                        |
-| `is_manual_entry`  | boolean  | Indica se foi introduzido manualmente |
-| `created_at`       | datetime | Data/hora de criação                  |
-| `updated_at`       | datetime | Data/hora da última atualização       |
-
-</details>
-
-<details>
-<summary><strong>CATEGORY</strong></summary>
-
-| Campo        | Tipo        | Descrição                           |
-| ------------ | ----------- | ----------------------------------- |
-| `id`         | int PK      | Identificador único                 |
-| `user_id`    | int FK      | Referência ao **USER**              |
-| `name`       | varchar(80) | Nome da categoria                   |
-| `parent_id`  | int FK      | Categoria pai (auto‑relacionamento) |
-| `created_at` | datetime    | Data/hora de criação                |
-| `updated_at` | datetime    | Data/hora da última atualização     |
-
-</details>
-
-<details>
-<summary><strong>TRANSACTION</strong></summary>
-
-| Campo          | Tipo     | Descrição                                  |
-| -------------- | -------- | ------------------------------------------ |
-| `id`           | int PK   | Identificador único                        |
-| `user_id`      | int FK   | Referência ao **USER**                     |
-| `amount`       | decimal  | Valor da transação (+ receita / − despesa) |
-| `date`         | date     | Data da transação                          |
-| `type`         | enum     | `income`, `expense`, `investment`          |
-| `category_id`  | int FK   | Categoria associada                        |
-| `account_id`   | int FK   | Conta reconciliada (opcional)              |
-| `is_estimated` | boolean  | Se o valor é estimado (default: `false`)   |
-| `notes`        | text     | Observações livres                         |
-| `is_cleared`   | boolean  | Se a transação foi reconciliada            |
-| `created_at`   | datetime | Data/hora de criação                       |
-| `updated_at`   | datetime | Data/hora da última atualização            |
-
-</details>
-
-<details>
-<summary><strong>TRANSACTION_ATTACHMENT</strong></summary>
-
-| Campo            | Tipo         | Descrição                                         |
-| ---------------- | ------------ | ------------------------------------------------- |
-| `id`             | int PK       | Identificador único                               |
-| `transaction_id` | int FK       | Referência à **TRANSACTION**                      |
-| `file_path`      | varchar(255) | Localização do ficheiro (no sistema de ficheiros) |
-| `created_at`     | datetime     | Data/hora de criação                              |
-| `updated_at`     | datetime     | Data/hora da última atualização                   |
-
-</details>
-
-<details>
-<summary><strong>BUDGET</strong></summary>
-
-| Campo         | Tipo     | Descrição                                             |
-| ------------- | -------- | ----------------------------------------------------- |
-| `id`          | int PK   | Identificador único                                   |
-| `user_id`     | int FK   | Referência ao **USER**                                |
-| `category_id` | int FK   | Categoria orçamentada                                 |
-| `start_date`  | date     | Início do período                                     |
-| `end_date`    | date     | Fim do período                                        |
-| `amount`      | decimal  | Montante orçamentado                                  |
-| `rollover`    | boolean  | Se o saldo não gasto transita para o período seguinte |
-| `created_at`  | datetime | Data/hora de criação                                  |
-| `updated_at`  | datetime | Data/hora da última atualização                       |
-
-</details>
-
-<details>
-<summary><strong>RECURRING_TRANSACTION</strong></summary>
-
-| Campo                     | Tipo     | Descrição                               |
-| ------------------------- | -------- | --------------------------------------- |
-| `id`                      | int PK   | Identificador único                     |
-| `user_id`                 | int FK   | Referência ao **USER**                  |
-| `amount`                  | decimal  | Valor da transação recorrente           |
-| `frequency`               | enum     | `daily`, `weekly`, `monthly`, `yearly`  |
-| `next_occurrence`         | date     | Próxima ocorrência prevista             |
-| `end_date`                | date     | Data de término (opcional)              |
-| `is_active`               | boolean  | Se o agendamento está ativo             |
-| `template_transaction_id` | int FK   | Transação modelo (FK → **TRANSACTION**) |
-| `created_at`              | datetime | Data/hora de criação                    |
-| `updated_at`              | datetime | Data/hora da última atualização         |
-
-</details>
-
-<details>
-<summary><strong>IMPORT_LOG</strong></summary>
-
-| Campo           | Tipo        | Descrição                                  |
-| --------------- | ----------- | ------------------------------------------ |
-| `id`            | int PK      | Identificador único                        |
-| `user_id`       | int FK      | Referência ao **USER**                     |
-| `source`        | varchar(80) | Origem do ficheiro (ex.: "n26.csv")        |
-| `imported_at`   | datetime    | Data/hora da importação                    |
-| `num_records`   | int         | Número de registos processados             |
-| `status`        | enum        | `success`, `partial`, `error`              |
-| `error_message` | text        | Mensagem de erro (quando `status = error`) |
-| `created_at`    | datetime    | Data/hora de criação                       |
-| `updated_at`    | datetime    | Data/hora da última atualização            |
-
-</details>
-
-<details>
-<summary><strong>EXCHANGE_RATE</strong></summary>
-
-| Campo                | Tipo       | Descrição                            |
-| -------------------- | ---------- | ------------------------------------ |
-| `id`                 | int PK     | Identificador único                  |
-| `from_currency_code` | varchar(3) | Moeda de origem (FK → **CURRENCY**)  |
-| `to_currency_code`   | varchar(3) | Moeda de destino (FK → **CURRENCY**) |
-| `rate`               | decimal    | Taxa de câmbio                       |
-| `rate_date`          | date       | Data de referência da taxa           |
-| `created_at`         | datetime   | Data/hora de criação                 |
-| `updated_at`         | datetime   | Data/hora da última atualização      |
-
-</details>
-
-## 🚀 Como Começar
+## Quick start
 
 ```bash
-# Clonar o repositório
-$ git clone https://github.com/nunonuno7/ourfinancetracker.git
-$ cd ourfinancetracker
-
-# Instalar dependências
-$ poetry install
-
-# Configurar variáveis de ambiente
-$ cp .env.example .env
-# editar as variáveis necessárias
-
-# Criar e aplicar migrações
-$ poetry run python manage.py migrate
-
-# Iniciar servidor de desenvolvimento
-$ poetry run python manage.py runserver
+git clone https://github.com/nunonuno7/ourfinancetracker.git
+cd ourfinancetracker
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
 ```
 
-## 📄 Licença
+Browse to `http://127.0.0.1:8000/`, log in and start importing statements (`Transactions → Import Excel`) or monthly balances (`Account Balances → Import Excel`).
 
-Distribuído sob a licença MIT. Consulte o ficheiro `LICENSE` para mais detalhes.
+---
+
+## Core features
+
+| Area                       | Status | Notes |
+| -------------------------- | :----: | ----- |
+| Transaction CRUD           | ✅     | Inline form with HTMX; autocomplete for tags & categories |
+| Excel import / export      | ✅     | `transactions` and `account_balances` both support `.xlsx` |
+| Dashboard (`/dashboard/`)  | ✅     | Auto-selects **last 12 months**, dynamic filters, correct totals |
+| Caching                    | ✅     | LocMem + per-user keys; manual “Clear cache” button |
+| Recurring transactions     | 🚧     | Model done; scheduling via Celery next |
+| Multi-currency + FX        | 🚧     | Currency table ready; rates & conversions in backlog |
+| Supabase / Looker reports  | ✅     | JWT + PostgREST proxy ready for embed dashboards |
+
+---
+
+## Financial‑metric calculations
+
+> **Goal:** separate real cash‑flow *expenses* from investment market swings while keeping investment returns measurable.
+
+| Term | Definition |
+| ---- | ---------- |
+| **Saving opening balance (month n)** | Sum of all **saving**‑type account balances at `00:00` on day 1 of month *n*. |
+| **Saving opening balance (month n + 1)** | Same accounts, `00:00` on day 1 of month *n + 1*. |
+| **Income (month n)** | Sum of transactions with `type = "income"` during month *n*. |
+| **Invested amount (flow)** | Sum of all transactions with `type = "investimento"`. |
+| **Portfolio value (stock)** | Closing/monthly balance of **investment**‑type accounts (market value of held assets). |
+
+### 1 – Monthly Expenses  
+
+To ignore unrealised P/L on investments and focus purely on cash outflow:
+
+```
+Expenses(n) = Saving_open(n)  –  Saving_open(n+1)  +  Income(n)
+```
+
+### 2 – Investments  
+
+```
+Invested (flow) = Σ transactions(type = "investimento")
+Portfolio value (stock) = balance of investment accounts at month end
+```
+
+### 3 – Profitability  
+
+Use **TWR** (time‑weighted return) or **IRR**:
+
+* Cash flows  → Invested amounts  
+* Start / end → Portfolio value for each month  
+
+### 4 – Key points  
+
+* Separating **saving** vs **investment** avoids market noise in expense tracking.  
+* Only **real flows** (deposits, withdrawals, asset purchases) impact *Expenses* or *Invested amount*.  
+* Unrealised gains/losses influence **Profitability**, not **Expenses**.
+
+---
+
+## Data model & taxonomy
+
+* `AccountType` – `"saving"` | `"investment"` | `"credit"` | ...  
+* `Transaction` – `type`, `currency`, `amount`, `date`, `tags` (m2m)  
+* `AccountBalance` – monthly snapshot linked to `DatePeriod`  
+* `DatePeriod` – unique `(year, month)` rows created on demand  
+
+Full schema diagram lives in [`core/mermaidchart.md`](./mermaidchart.md).
+
+---
+
+## CLI / management commands
+
+| Command | Description |
+| ------- | ----------- |
+| `import_transactions_xlsx <file>` | Import XLSX with Date · Type · Amount · Category · Tags · Account |
+| `account_balance_import_xlsx <file>` | Fast chunked import of monthly balances |
+| `clear_tx_cache` | Remove cached DataFrames |
+| `recalc_dashboard_kpis` (coming) | Pre-compute KPIs overnight |
+
+---
+
+## Roadmap
+* Recurring-transaction scheduler  
+* Automatic FX conversion  
+* Celery + Flower for background jobs  
+* Docker compose for production
+
+---
+
+## Contributing
+
+PRs & issues welcome—follow [Conventional Commits](https://www.conventionalcommits.org/) and run:
+
+```bash
+pre-commit run --all-files
+pytest
+```
+
+---
+
+## Licence
+
+MIT © Nuno Veiga, 2025

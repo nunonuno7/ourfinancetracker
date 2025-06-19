@@ -1,41 +1,38 @@
 erDiagram
-    %% ---------- RELAÇÕES ----------
-    USER ||--|| USER_SETTINGS : has
-    USER ||--o{ ACCOUNT : owns
-    ACCOUNT ||--o{ ACCOUNT_BALANCE : keeps
-    USER ||--o{ CATEGORY : defines
-    CATEGORY ||--o{ CATEGORY : parent_of
-    USER ||--o{ TRANSACTION : records
-    TRANSACTION }o--|| ACCOUNT : reconciled_with
-    TRANSACTION }o--|| CATEGORY : is_in
-    TRANSACTION ||--o{ TRANSACTION_ATTACHMENT : has
-    USER ||--o{ BUDGET : sets
-    USER ||--o{ RECURRING_TRANSACTION : schedules
-    RECURRING_TRANSACTION }o--|| TRANSACTION : template_of
-    USER ||--o{ IMPORT_LOG : imports
-    ACCOUNT }o--|| ACCOUNT_TYPE : typed_as
-    ACCOUNT }o--|| CURRENCY : denominated_in
-    CURRENCY ||--o{ EXCHANGE_RATE : source_of
-    CURRENCY ||--o{ EXCHANGE_RATE : target_of
+    %% ---------- RELATIONSHIPS ----------
+    USER        ||--|| USER_SETTINGS        : has
+    USER        ||--o{ ACCOUNT              : owns
+    USER        ||--o{ CATEGORY             : defines
+    CATEGORY    ||--o{ CATEGORY             : parent_of
+    USER        ||--o{ TRANSACTION          : records
+    USER        ||--o{ TAG                  : creates
+    TRANSACTION ||--o{ TRANSACTION_TAG      : has
+    TAG         ||--o{ TRANSACTION_TAG      : labels
+    ACCOUNT     ||--o{ ACCOUNT_BALANCE      : snapshots
+    ACCOUNT     }o--|| ACCOUNT_TYPE         : typed_as
+    ACCOUNT     }o--|| CURRENCY             : denominated_in
+    ACCOUNT_BALANCE }o--|| DATE_PERIOD      : for
+    CURRENCY    ||--o{ EXCHANGE_RATE        : source_of_rate
+    CURRENCY    ||--o{ EXCHANGE_RATE        : target_of_rate
+    USER        ||--o{ RECURRING_TRANSACTION: schedules
+    RECURRING_TRANSACTION }o--|| TRANSACTION: template_of
+    USER        ||--o{ IMPORT_LOG           : imports
 
-    %% ---------- ENTIDADES ----------
+    %% ---------- ENTITIES ----------
     USER {
         int          id PK
-        varchar(150) username  "único"
-        varchar(254) email     "único"
+        varchar(150) username  "unique"
+        varchar(254) email     "unique"
         varchar(255) password_hash
-        boolean      is_active
+        bool         is_active
         datetime     created_at
-        datetime     updated_at
     }
     USER_SETTINGS {
         int          id PK
         int          user_id FK
         varchar(3)   default_currency_id FK
         varchar(50)  timezone
-        tinyint      start_of_month
-        datetime     created_at
-        datetime     updated_at
+        tinyint      start_of_month       "1‑31"
     }
     ACCOUNT {
         int          id PK
@@ -43,102 +40,75 @@ erDiagram
         varchar(80)  name
         int          account_type_id FK
         varchar(3)   currency_id FK
-        datetime     created_at
-        datetime     updated_at
+        bool         is_active
     }
     ACCOUNT_TYPE {
         int          id PK
-        varchar(40)  name
+        varchar(20)  name  "saving | investment | credit"
     }
     CURRENCY {
-        varchar(3)   code PK
-        varchar(4)   symbol
-        tinyint      decimals
+        varchar(3)   id PK  "ISO code"
+        varchar(40)  name
+        varchar(5)   symbol
+    }
+    EXCHANGE_RATE {
+        int          id PK
+        varchar(3)   source_currency_id FK
+        varchar(3)   target_currency_id FK
+        decimal(16,6) rate
+        date         rate_date
+    }
+    DATE_PERIOD {
+        int          id PK
+        smallint     year
+        tinyint      month  "1‑12"
     }
     ACCOUNT_BALANCE {
         int          id PK
         int          account_id FK
-        date         balance_date
-        decimal      reported_balance
-        boolean      is_manual_entry
-        datetime     created_at
-        datetime     updated_at
+        int          period_id FK
+        decimal(18,2) reported_balance
     }
     CATEGORY {
         int          id PK
         int          user_id FK
         varchar(80)  name
-        int          parent_id FK
-        datetime     created_at
-        datetime     updated_at
+        int          parent_id FK nullable
+    }
+    TAG {
+        int          id PK
+        int          user_id FK
+        varchar(60)  name
     }
     TRANSACTION {
         int          id PK
         int          user_id FK
-        decimal      amount
+        int          account_id FK
+        int          category_id FK nullable
         date         date
-        enum         type        "income|expense|investment"
-        int          category_id FK
-        int          account_id FK   "opcional"
-        boolean      is_estimated    "default:false"
-        text         notes
-        boolean      is_cleared      "default:false"
-        datetime     created_at
-        datetime     updated_at
+        enum         type  "income | expense | investimento"
+        decimal(18,2) amount
+        text         description nullable
     }
-    TRANSACTION_ATTACHMENT {
+    TRANSACTION_TAG {
         int          id PK
         int          transaction_id FK
-        varchar(255) file_path
-        datetime     created_at
-        datetime     updated_at
-    }
-    BUDGET {
-        int          id PK
-        int          user_id FK
-        int          category_id FK
-        date         start_date
-        date         end_date
-        decimal      amount
-        boolean      rollover
-        datetime     created_at
-        datetime     updated_at
+        int          tag_id FK
     }
     RECURRING_TRANSACTION {
         int          id PK
         int          user_id FK
-        decimal      amount
-        enum         frequency  "daily|weekly|monthly|yearly"
-        date         next_occurrence
-        date         end_date
-        boolean      is_active
-        int          template_transaction_id FK
-        datetime     created_at
-        datetime     updated_at
+        int          account_id FK
+        enum         type          "income | expense | investimento"
+        decimal(18,2) amount
+        varchar(50)  cron_expression
+        date         next_run
+        int          category_id FK nullable
     }
     IMPORT_LOG {
         int          id PK
         int          user_id FK
-        varchar(80)  source
-        datetime     imported_at
-        int          num_records
-        enum         status     "success|partial|error"
-        text         error_message
+        varchar(120) filename
+        smallint     rows_processed
         datetime     created_at
-        datetime     updated_at
     }
-    EXCHANGE_RATE {
-        int          id PK
-        varchar(3)   from_currency_code FK
-        varchar(3)   to_currency_code   FK
-        decimal      rate
-        date         rate_date
-        datetime     created_at
-        datetime     updated_at
-    }
-
-    %% ---------- ÍNDICES / CONSTRAINTS SUGERIDOS ----------
-    %% EXCHANGE_RATE : UNIQUE (from_currency_code, to_currency_code, rate_date)
-    %% ACCOUNT_BALANCE : UNIQUE (account_id, balance_date)
-    %% CATEGORY        : UNIQUE (user_id, name, parent_id)
-    %% TRANSACTION     : INDEX (user_id, date)
