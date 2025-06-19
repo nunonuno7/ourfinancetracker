@@ -249,9 +249,11 @@ def account_balances_pivot_json(request):
     if not rows:
         return JsonResponse({"columns": [], "rows": []})
 
+    # Criar DataFrame
     df = pd.DataFrame(rows, columns=["type", "currency", "year", "month", "balance"])
     df["period"] = pd.to_datetime(dict(year=df.year, month=df.month, day=1)).dt.strftime("%b/%y")
 
+    # Pivot com fill_value=0 para garantir que todos os períodos aparecem
     pivot = (
         df.pivot_table(
             index=["type", "currency"],
@@ -265,10 +267,9 @@ def account_balances_pivot_json(request):
     )
 
     return JsonResponse({
-        "columns": list(pivot.columns), 
+        "columns": list(pivot.columns),
         "rows": pivot.to_dict("records")
     })
-
 
 # ==============================================================================
 # VIEWS DE TRANSAÇÕES
@@ -294,6 +295,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     def form_valid(self, form):
         """Processar formulário válido e limpar cache."""
         self.object = form.save()
+        print('📝 Criado:', self.object)  # ✅ DEBUG no terminal
         clear_tx_cache(self.request.user.id)
 
         if self.request.headers.get("HX-Request") == "true":
@@ -304,10 +306,11 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 
     def form_invalid(self, form):
         """Processar formulário inválido."""
+        print("❌ Formulário inválido:", form.errors)  # DEBUG
         if self.request.headers.get("HX-Request") == "true":
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
         return super().form_invalid(form)
-
+    
     def get_context_data(self, **kwargs):
         """Adicionar contexto seguro."""
         context = super().get_context_data(**kwargs)
@@ -318,7 +321,6 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
             Category.objects.filter(user=user).values_list("name", flat=True)
         )
         return context
-
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     """Atualizar transação existente com validação de proprietário."""
@@ -367,7 +369,6 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
 
 
 @login_required
-@require_GET
 def transactions_json(request):
     """API JSON para DataTables com cache e filtros dinâmicos."""
     user_id = request.user.id
@@ -391,7 +392,7 @@ def transactions_json(request):
             cursor.execute("""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
                        COALESCE(cat.name, '') AS category,
-                       COALESCE(acc.name, '') AS account,
+                       COALESCE(acc.name, 'No account') AS account,
                        COALESCE(curr.symbol, '') AS currency,
                        COALESCE(STRING_AGG(tag.name, ', '), '') AS tags
                 FROM core_transaction tx
@@ -495,47 +496,35 @@ def transactions_json(request):
         axis=1
     )
 
-    # Formatar tags com badges
-    def format_tags(raw):
-        if not raw or not isinstance(raw, str):
-            return "–"
-        tags = [t.strip() for t in raw.split(",") if t.strip()]
-        return " ".join(f"<span class='badge bg-secondary'>{t}</span>" for t in tags) if tags else "–"
-
-    df["tags"] = df["tags"].astype(str).apply(format_tags)
-
-    # Ações com CSRF
-    csrf_token = get_token(request)
-    df["actions"] = df.apply(lambda r: f"""
-        <div class="btn-group btn-group-sm" role="group">
-            <a href="{reverse('transaction_update', args=[r['id']])}" 
-               class="btn btn-outline-primary" title="Edit">✏️</a>
-            <form action="{reverse('transaction_delete', args=[r['id']])}" 
-                  method="post" class="d-inline">
-                <input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}">
-                <button type="submit" class="btn btn-outline-danger"
-                        onclick="return confirm('Are you sure?')" title="Delete">🗑️</button>
-            </form>
+    # ✅ CORREÇÃO: criar ações como string HTML
+    df["actions"] = df.apply(
+        lambda r: f"""
+        <div class='btn-group'>
+          <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary'>✏️</a>
+          <a href='/transactions/{r["id"]}/delete/' class='btn btn-sm btn-outline-danger'>🗑️</a>
         </div>
-    """, axis=1)
+        """, axis=1
+    )
 
-    # Paginação
-    draw = int(request.GET.get("draw", "1"))
-    start = int(request.GET.get("start", "0"))
-    length = int(request.GET.get("length", "10"))
-    total = len(df)
-    df_page = df.iloc[start:start + length]
+    # Paginação (DataTables)
+    draw = int(request.GET.get("draw", 1))
+    start = int(request.GET.get("start", 0))
+    length = int(request.GET.get("length", 10))
+    page_df = df.iloc[start : start + length]
 
     return JsonResponse({
         "draw": draw,
-        "recordsTotal": total,
-        "recordsFiltered": total,
-        "data": df_page[["period", "date", "type", "amount", "category", "tags", "account", "actions"]].to_dict(orient="records"),
-        "available_types": available_types,
-        "available_categories": available_categories,
-        "available_accounts": available_accounts,
-        "available_periods": available_periods,
+        "recordsTotal": len(df),
+        "recordsFiltered": len(df),
+        "data": page_df.to_dict(orient="records"),
+        "filters": {
+            "types": available_types,
+            "categories": available_categories,
+            "accounts": available_accounts,
+            "periods": available_periods,
+        },
     })
+
 
 
 

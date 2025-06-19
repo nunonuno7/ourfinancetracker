@@ -60,10 +60,23 @@ class UserInFormKwargsMixin:
 
 
 
-class TransactionForm(forms.ModelForm):
-    """Formulário de criação/edição de transações."""
+# core/forms.py
 
-    # Campo de tags “livre”, preenchido pelo Tom Select
+class TransactionForm(forms.ModelForm):
+    """Form for creating or editing transactions."""
+
+    period = forms.CharField(
+        label=_("Period"),
+        required=True,
+        widget=forms.TextInput(
+            attrs={
+                "type": "month",
+                "class": "form-control",
+                "id": "id_period",
+            }
+        ),
+    )
+
     tags_input = forms.CharField(
         label=_("Tags"),
         required=False,
@@ -71,7 +84,20 @@ class TransactionForm(forms.ModelForm):
             attrs={
                 "class": "form-control",
                 "id": "id_tags_input",
-                "placeholder": _("Add tags…"),
+                "placeholder": _("Optional tags…"),
+            }
+        ),
+    )
+
+    category = forms.CharField(
+        label=_("Category"),
+        required=True,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "id_category",
+                "placeholder": _("Enter category…"),
+                "data-category-list": "",
             }
         ),
     )
@@ -80,7 +106,6 @@ class TransactionForm(forms.ModelForm):
         model = Transaction
         fields = [
             "date",
-            "period",
             "type",
             "amount",
             "account",
@@ -91,30 +116,13 @@ class TransactionForm(forms.ModelForm):
         ]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "period": forms.TextInput(
-                attrs={
-                    "type": "month",
-                    "class": "form-control",
-                    "id": "id_period",
-                }
-            ),
             "type": forms.Select(attrs={"class": "form-select"}),
-            # 👉 TextInput evita limpeza automática do browser
             "amount": forms.TextInput(
                 attrs={
                     "class": "form-control text-end",
                     "inputmode": "decimal",
-                    "placeholder": "0,00",
+                    "placeholder": "0.00",
                     "id": "id_amount",
-                }
-            ),
-            "account": forms.Select(attrs={"class": "form-select"}),
-            # “category” renderiza-se como texto simples
-            "category": forms.TextInput(
-                attrs={
-                    "class": "form-control",
-                    "id": "id_category",
-                    "data-category-list": "",  # populado no JS
                 }
             ),
             "notes": forms.Textarea(
@@ -123,82 +131,51 @@ class TransactionForm(forms.ModelForm):
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    # --------------------------------------------------------------------- #
-    #  INIT
-    # --------------------------------------------------------------------- #
-    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
-        """
-        Recebe `user` via view para filtrar contas e criar categorias.
-        """
-        logger.debug("🚀 Init TransactionForm (args=%s, kwargs=%s)", args, kwargs)
-
-        self._user: User | None = user
+    def __init__(self, *args, user: User = None, **kwargs):
+        self._user = user
         super().__init__(*args, **kwargs)
 
-        # Choices fixos para type
+        self.fields["account"].required = False
+        self.fields["account"].empty_label = "— No account —"
+        if self._user:
+            self.fields["account"].queryset = Account.objects.filter(user=self._user).only("name")
+        else:
+            self.fields["account"].queryset = Account.objects.none()
+
         self.fields["type"].choices = Transaction.Type.choices
         self.fields["type"].required = True
 
-        # Filtrar contas pelo utilizador (otimizado com .only)
-        if self._user:
-            self.fields["account"].queryset = (
-                Account.objects.filter(user=self._user).only("name")
-            )
-
-        # ------------------- Instância existente ------------------- #
         if self.instance and self.instance.pk:
-            logger.debug("📝 Edit mode para Transaction id=%s", self.instance.pk)
-
-            # Categoria inicial
+            logger.debug("📝 Edit mode for Transaction id=%s", self.instance.pk)
             if self.instance.category:
                 self.initial["category"] = self.instance.category.name
-
-            # Tags iniciais
             if self.instance.tags.exists():
                 self.initial["tags_input"] = ", ".join(
                     self.instance.tags.values_list("name", flat=True)
                 )
-
-            # Período inicial
             if self.instance.period:
-                self.initial["period"] = (
-                    f"{self.instance.period.year}-{self.instance.period.month:02d}"
-                )
-
-            # Amount (ou valor submetido após erro)
+                self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
             if self.instance.amount is not None:
                 self.initial["amount"] = self.instance.amount
             elif self.data.get("amount"):
                 self.initial["amount"] = self.data["amount"]
-
-        # ------------------- Nova transação ------------------- #
         else:
-            # Período por defeito (mês corrente)
             if not self.initial.get("period"):
                 today = date.today()
                 self.initial["period"] = f"{today.year}-{today.month:02d}"
-
-            # Evitar sobrescrever amount em POST inválido
             if "amount" not in self.initial and not self.data:
                 self.initial["amount"] = ""
 
-        logger.debug("📋 Initial dict final: %s", self.initial)
+        logger.debug("📋 Final initial dict: %s", self.initial)
 
-    # --------------------------------------------------------------------- #
-    #  CLEANERS
-    # --------------------------------------------------------------------- #
     def clean_amount(self) -> Decimal:
-        """
-        Converte strings PT “1 234,56” → Decimal('1234.56').
-        Usa sempre self.data para obter o valor original.
-        """
         raw = (self.data.get("amount") or "").strip()
         if raw == "":
-            raise forms.ValidationError(_("Este campo é obrigatório."))
+            raise forms.ValidationError(_("This field is required."))
 
         normalized = (
             raw.replace(" ", "")
-            .replace("\u00A0", "")  # NBSP
+            .replace("\u00A0", "")
             .replace(".", "")
             .replace(",", ".")
         )
@@ -206,17 +183,14 @@ class TransactionForm(forms.ModelForm):
         try:
             value = Decimal(normalized)
         except (InvalidOperation, ValueError):
-            raise forms.ValidationError(_("Número inválido."))
+            raise forms.ValidationError(_("Invalid number."))
 
         return value.quantize(Decimal("0.01"))
 
     def clean_category(self):
-        """
-        Aceita string de categoria; cria-a se não existir.
-        """
         name = (self.cleaned_data.get("category") or "").strip()
         if not name:
-            return None
+            raise forms.ValidationError(_("This field is required."))
 
         user = self._user or self.instance.user
         category, _ = Category.objects.get_or_create(user=user, name=name)
@@ -225,26 +199,22 @@ class TransactionForm(forms.ModelForm):
     def clean_tags_input(self):
         return (self.cleaned_data.get("tags_input") or "").strip()
 
-    # --------------------------------------------------------------------- #
-    #  SAVE
-    # --------------------------------------------------------------------- #
-    def save(self, commit: bool = True) -> Transaction:
-        """Guarda transação, criando período e ligando tags."""
+    def save(self, commit=True) -> Transaction:
         instance: Transaction = super().save(commit=False)
 
-        # Período
         year, month = map(int, self.cleaned_data["period"].split("-"))
         period, _ = DatePeriod.objects.get_or_create(year=year, month=month)
         instance.period = period
 
-        # Força utilizador (caso view não o faça)
         if not instance.user_id and self._user:
             instance.user = self._user
+
+        if not self.cleaned_data.get("account"):
+            instance.account = None
 
         if commit:
             instance.save()
 
-        # Tags
         tags_str = self.cleaned_data.get("tags_input", "")
         tag_names = {t.strip() for t in tags_str.split(",") if t.strip()}
         if commit:
@@ -257,6 +227,8 @@ class TransactionForm(forms.ModelForm):
                 instance.tags.add(*tag_objs)
 
         return instance
+
+
 class CategoryForm(UserAwareMixin, forms.ModelForm):
     class Meta:
         model = Category

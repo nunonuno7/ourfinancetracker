@@ -135,9 +135,9 @@ $('#clear-filters').on('click', function () {
       });
     };
 
-    updateDropdown('#filter-type', json.available_types, $('#filter-type').val());
-    updateDropdown('#filter-account', json.available_accounts, $('#filter-account').val());
-    updateDropdown('#filter-category', json.available_categories, $('#filter-category').val());
-    updateDropdown('#filter-period', json.available_periods, $('#filter-period').val());
+    updateDropdown('#filter-type', json.filters.types, $('#filter-type').val());
+    updateDropdown('#filter-account', json.filters.accounts, $('#filter-account').val());
+    updateDropdown('#filter-category', json.filters.categories, $('#filter-category').val());
+    updateDropdown('#filter-period', json.filters.periods, $('#filter-period').val());
   });
 });

@@ -95,7 +95,14 @@
         <!-- ACCOUNT -->
         <div class="mb-3">
           {{ form.account.label_tag }}
-          {{ form.account|add_class:"form-select" }}
+          {% with field=form.account %}
+<select name="{{ field.name }}" id="{{ field.id_for_label }}" class="form-select">
+  <option value="">— No account —</option>
+  {% for choice in field.field.queryset %}
+    <option value="{{ choice.pk }}" {% if choice.pk == field.value %}selected{% endif %}>{{ choice }}</option>
+  {% endfor %}
+</select>
+{% endwith %}
           {% if form.account.errors %}<div class="text-danger small">{{ form.account.errors.0 }}</div>{% endif %}
         </div>
 
