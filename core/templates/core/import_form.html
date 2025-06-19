@@ -26,15 +26,16 @@
     <div class="mb-3">
       <label for="id_file" class="form-label">Select Excel file</label>
       <input type="file" name="file" id="id_file" class="form-control" accept=".xlsx" required>
-      <div class="form-text">
-        <strong>Required columns:</strong>
+
+      <div class="form-text mt-2">
+        <strong>Required columns (must match these exactly):</strong>
         <ul class="mb-0 ps-3">
-          <li><code>Date</code> (e.g. 2025-06-01)</li>
-          <li><code>Type</code> (IN, EX, IV)</li>
-          <li><code>Amount</code> (e.g. 120.00)</li>
-          <li><code>Category</code> (e.g. Groceries)</li>
-          <li><code>Tags</code> (comma-separated: food, market)</li>
-          <li><code>Account</code> (e.g. Revolut)</li>
+          <li><code>Date</code> – format: <code>YYYY-MM-DD</code> (e.g. <code>2025-06-15</code>)</li>
+          <li><code>Type</code> – one of: <code>Income</code>, <code>Expense</code>, <code>Investment</code>, <code>Transfer</code></li>
+          <li><code>Amount</code> – numeric value (e.g. <code>150.00</code> or <code>-250.00</code> for withdrawals)</li>
+          <li><code>Category</code> – free text (will be created if not found)</li>
+          <li><code>Tags</code> – optional, comma-separated (e.g. <code>food,monthly</code>)</li>
+          <li><code>Account</code> – required; account will be created if it doesn't exist</li>
         </ul>
       </div>
     </div>
@@ -43,7 +44,6 @@
     <div class="d-flex justify-content-between">
       <button type="submit" class="btn btn-success">📥 Import Transactions</button>
       <a href="{% url 'import_transactions_template_xlsx' %}" class="btn btn-outline-primary">📄 Download Template</a>
-
     </div>
   </form>
 </div>

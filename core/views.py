@@ -60,6 +60,8 @@ from .forms import (
 from .utils.cache_helpers import clear_tx_cache
 
 from django.views.generic import TemplateView
+from django.db import transaction as db_tx, connection
+from core.utils.cache_helpers import clear_tx_cache
 
 # ==============================================================================
 # UTILITÁRIOS DE CACHE SEGUROS
@@ -1122,187 +1124,306 @@ def export_transactions_xlsx(request):
     return response
 
 
+
+
+
+
+
+
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
+from django.db import transaction as db_tx, connection
+from django.utils.timezone import now
+from django.contrib import messages
+
+import pandas as pd
+import re
+from decimal import Decimal, InvalidOperation
+
+
+# ────────────────────  HELPER NORMALISERS  ────────────────────
+def normalise_amount(raw):
+    """Return a Decimal or None; accepts 1.234,56 €  –100,00 +1 000,00 etc."""
+    if pd.isna(raw):
+        return None
+    raw = str(raw).strip().replace("\u00A0", "")
+    raw = re.sub(r"[€$+]", "", raw).replace(" ", "")
+    if "," in raw and "." in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "," in raw:
+        raw = raw.replace(",", ".")
+    try:
+        return Decimal(raw)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def normalise_type(raw):
+    """Map many human spellings to canonical codes IN / EX / IV / TR."""
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip().lower()
+    mapping = {
+        "in": "IN", "income": "IN", "receita": "IN",
+        "ex": "EX", "expense": "EX", "gasto": "EX",
+        "iv": "IV", "investment": "IV", "investimento": "IV",
+        "tr": "TR", "transfer": "TR", "transferência": "TR",
+    }
+    return mapping.get(raw)
+
+
+# ──────────────────────  MAIN VIEW  ───────────────────────────
+@require_http_methods(["GET", "POST"])
 @login_required
 def import_transactions_xlsx(request):
-    """Importar transações de Excel."""
+    """Import XLSX with columns: Date | Type | Amount | Category | Tags | Account."""
     if request.method == "GET":
         return render(request, "core/import_form.html")
 
     try:
-        file = request.FILES["file"]
-        df = pd.read_excel(file)
-
-        required = {"Date", "Type", "Amount", "Category", "Tags", "Account"}
-        if not required.issubset(df.columns):
-            missing = required - set(df.columns)
-            messages.error(request, f"Missing columns: {', '.join(missing)}")
-            return redirect("transaction_import_xlsx")
-
-        user_id = request.user.id
-        transactions = []
-        tag_links = []
-        periods_cache = {}
-        category_cache = {}
-        account_cache = {}
-        tag_cache = {}
-
-        timestamp = now()
-
-        with connection.cursor() as cursor, db_transaction.atomic():
-            cursor.execute("SELECT id FROM core_accounttype WHERE name ILIKE 'Savings' LIMIT 1")
-            row = cursor.fetchone()
-            if not row:
-                raise Exception("Tipo de conta 'Savings' não existe.")
-            default_account_type_id = row[0]
-
-            for idx, row in df.iterrows():
-                raw_date = row["Date"]
-                if pd.isna(raw_date):
-                    continue
-
-                try:
-                    date_val = pd.to_datetime(raw_date).date()
-                except Exception:
-                    continue
-
-                # Período
-                key_period = (date_val.year, date_val.month)
-                if key_period not in periods_cache:
-                    cursor.execute("""
-                        INSERT INTO core_dateperiod (year, month, label)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (year, month) DO NOTHING
-                        RETURNING id
-                    """, [date_val.year, date_val.month, date_val.strftime("%B %Y")])
-                    row_period = cursor.fetchone()
-                    if not row_period:
-                        cursor.execute("SELECT id FROM core_dateperiod WHERE year = %s AND month = %s", key_period)
-                        row_period = cursor.fetchone()
-                    periods_cache[key_period] = row_period[0]
-
-                period_id = periods_cache[key_period]
-
-                # Categoria
-                cat_name = str(row["Category"]).strip()
-                if cat_name not in category_cache:
-                    cursor.execute("""
-                        INSERT INTO core_category (user_id, name, position, created_at, updated_at)
-                        VALUES (%s, %s, 0, %s, %s)
-                        ON CONFLICT (user_id, name) DO NOTHING
-                        RETURNING id
-                    """, [user_id, cat_name, timestamp, timestamp])
-                    row_cat = cursor.fetchone()
-                    if not row_cat:
-                        cursor.execute("SELECT id FROM core_category WHERE user_id = %s AND name = %s", [user_id, cat_name])
-                        row_cat = cursor.fetchone()
-                    category_cache[cat_name] = row_cat[0]
-
-                category_id = category_cache[cat_name]
-
-                # Conta
-                acc_name = str(row["Account"]).strip()
-                if acc_name not in account_cache:
-                    cursor.execute("""
-                        INSERT INTO core_account (user_id, name, account_type_id, currency_id, created_at, position)
-                        VALUES (%s, %s, %s, NULL, %s, 0)
-                        ON CONFLICT (user_id, name) DO NOTHING
-                        RETURNING id
-                    """, [user_id, acc_name, default_account_type_id, timestamp])
-                    row_acc = cursor.fetchone()
-                    if not row_acc:
-                        cursor.execute("SELECT id FROM core_account WHERE user_id = %s AND name = %s", [user_id, acc_name])
-                        row_acc = cursor.fetchone()
-                    account_cache[acc_name] = row_acc[0]
-
-                account_id = account_cache[acc_name]
-
-                # Transação
-                transactions.append((
-                    user_id, date_val, row["Amount"], row["Type"], period_id,
-                    category_id, account_id, "", False, True,
-                    timestamp, timestamp
-                ))
-
-                # Tags
-                raw_tags = str(row.get("Tags", "")).split(",")
-                tags_cleaned = [t.strip() for t in raw_tags if t.strip()]
-                for tag in tags_cleaned:
-                    tag_links.append((len(transactions) - 1, tag))
-
-            # Inserir transações em lotes
-            def chunked(iterable, size=100):
-                for i in range(0, len(iterable), size):
-                    yield iterable[i:i + size]
-
-            transaction_ids = []
-            for chunk in chunked(transactions, 100):
-                execute_values(cursor, """
-                    INSERT INTO core_transaction
-                    (user_id, date, amount, type, period_id, category_id, account_id,
-                     notes, is_estimated, is_cleared, created_at, updated_at)
-                    VALUES %s
-                    RETURNING id
-                """, chunk)
-                transaction_ids.extend([row[0] for row in cursor.fetchall()])
-
-            # Processar tags
-            all_tag_names = sorted(set(tag for _, tag in tag_links))
-            if all_tag_names:
-                cursor.execute(
-                    "SELECT id, name FROM core_tag WHERE name = ANY(%s) AND user_id = %s",
-                    [all_tag_names, user_id]
-                )
-                for tag_id, tag_name in cursor.fetchall():
-                    tag_cache[tag_name] = tag_id
-
-                missing = [name for name in all_tag_names if name not in tag_cache]
-                if missing:
-                    execute_values(cursor, """
-                        INSERT INTO core_tag (user_id, name, position)
-                        VALUES %s
-                        RETURNING id, name
-                    """, [(user_id, name, 0) for name in missing])
-                    for tag_id, tag_name in cursor.fetchall():
-                        tag_cache[tag_name] = tag_id
-
-            # Ligações tag-transação
-            links = []
-            for i, tx_id in enumerate(transaction_ids):
-                for idx, tag_name in tag_links:
-                    if idx == i:
-                        tag_id = tag_cache.get(tag_name)
-                        if tag_id:
-                            links.append((tx_id, tag_id))
-
-            if links:
-                execute_values(cursor, """
-                    INSERT INTO core_transactiontag (transaction_id, tag_id)
-                    VALUES %s
-                    ON CONFLICT DO NOTHING
-                """, links)
-
-        # Limpar cache de transações
-        clear_tx_cache(request.user.id)
-
-        messages.success(request, f"✔ {len(transaction_ids)} transactions imported successfully!")
-
+        df = pd.read_excel(request.FILES["file"])
     except Exception as e:
-        messages.error(request, f"❌ Import failed: {str(e)}")
+        messages.error(request, f"Error reading Excel file: {e}")
+        return redirect("transaction_import_xlsx")
 
+    required = {"Date", "Type", "Amount", "Category", "Tags", "Account"}
+    if missing := (required - set(df.columns)):
+        messages.error(request, f"Missing columns: {', '.join(missing)}")
+        return redirect("transaction_import_xlsx")
+
+    user_id = request.user.id
+    ts = now()
+    inserted = 0
+    periods, cats, accts, tags = {}, {}, {}, {}
+
+    with connection.cursor() as cur, db_tx.atomic():
+        for idx, row in df.iterrows():
+            row_num = idx + 2
+            raw_date = row["Date"]
+            if pd.isna(raw_date):
+                messages.warning(request, f"⚠️ Line {row_num}: Date empty.")
+                continue
+            date_val = pd.to_datetime(raw_date).date()
+
+            tx_type = normalise_type(row["Type"])
+            if not tx_type:
+                messages.warning(request, f"⚠️ Line {row_num}: invalid Type '{row['Type']}'.")
+                continue
+
+            amount = normalise_amount(row["Amount"])
+            if amount is None:
+                messages.warning(request, f"⚠️ Line {row_num}: invalid Amount '{row['Amount']}'.")
+                continue
+            if amount == 0:
+                messages.warning(request, f"⚠️ Line {row_num}: zero Amount ignored.")
+                continue
+
+            if tx_type == "IV":
+                amount = amount if amount < 0 else abs(amount)
+            else:
+                amount = abs(amount)
+
+            key = (date_val.year, date_val.month)
+            if key not in periods:
+                cur.execute(
+                    """
+                    INSERT INTO core_dateperiod (year, month, label)
+                    VALUES (%s,%s,%s)
+                    ON CONFLICT (year,month) DO NOTHING
+                    RETURNING id
+                    """,
+                    [key[0], key[1], date_val.strftime("%B %Y")],
+                )
+                rec = cur.fetchone() or cur.execute(
+                    "SELECT id FROM core_dateperiod WHERE year=%s AND month=%s",
+                    key,
+                ) or cur.fetchone()
+                if not rec:
+                    messages.warning(request, f"⚠️ Line {row_num}: cannot resolve DatePeriod.")
+                    continue
+                periods[key] = rec[0]
+            period_id = periods[key]
+
+            cat = str(row["Category"]).strip()
+            if cat not in cats:
+                cur.execute(
+                    """
+                    INSERT INTO core_category (user_id,name,position,created_at,updated_at)
+                    VALUES (%s,%s,0,%s,%s)
+                    ON CONFLICT (user_id,name) DO NOTHING
+                    RETURNING id
+                    """,
+                    [user_id, cat, ts, ts],
+                )
+                rec = cur.fetchone() or cur.execute(
+                    "SELECT id FROM core_category WHERE user_id=%s AND name=%s",
+                    [user_id, cat],
+                ) or cur.fetchone()
+                if not rec:
+                    messages.warning(request, f"⚠️ Line {row_num}: cannot resolve Category '{cat}'.")
+                    continue
+                cats[cat] = rec[0]
+            category_id = cats[cat]
+
+            acc = str(row["Account"]).strip()
+            if acc not in accts:
+                cur.execute(
+                    "SELECT id FROM core_account WHERE user_id=%s AND name=%s",
+                    [user_id, acc],
+                )
+                rec = cur.fetchone()
+                if not rec:
+                    cur.execute(
+                        "SELECT id FROM core_accounttype WHERE name ILIKE %s LIMIT 1",
+                        ["savings"],
+                    )
+                    type_rec = cur.fetchone()
+                    if not type_rec:
+                        cur.execute("SELECT id FROM core_accounttype LIMIT 1")
+                        type_rec = cur.fetchone()
+                    if not type_rec:
+                        messages.warning(request, "⚠️ Nenhum AccountType definido na base de dados.")
+                        continue
+                    acct_type_id = type_rec[0]
+                    cur.execute(
+                        """
+                        INSERT INTO core_account (
+                            user_id, name, position, created_at, account_type_id
+                        )
+                        VALUES (%s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        [user_id, acc, 0, ts, acct_type_id],
+                    )
+                    rec = cur.fetchone()
+
+                if not rec:
+                    messages.warning(request, f"⚠️ Line {row_num}: cannot create Account '{acc}'.")
+                    continue
+                accts[acc] = rec[0]
+            account_id = accts[acc]
+
+            raw_tags = row.get("Tags", "")
+            tag_names = [] if pd.isna(raw_tags) else [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+            tag_ids = []
+
+            for tag in tag_names:
+                if tag not in tags:
+                    cur.execute(
+                        """
+                        INSERT INTO core_tag (user_id, name, position)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (user_id, name) DO NOTHING
+                        RETURNING id
+                        """,
+                        [user_id, tag, 0],
+                    )
+                    rec = cur.fetchone()
+                    if not rec:
+                        cur.execute(
+                            "SELECT id FROM core_tag WHERE user_id=%s AND name=%s",
+                            [user_id, tag],
+                        )
+                        rec = cur.fetchone()
+                    if not rec:
+                        messages.warning(request, f"⚠️ Line {row_num}: cannot resolve Tag '{tag}'.")
+                        continue
+                    tags[tag] = rec[0]
+                tag_ids.append(tags[tag])
+
+            cur.execute(
+                """
+                INSERT INTO core_transaction (
+                    user_id, type, amount, date,
+                    notes, is_cleared, is_estimated,
+                    period_id, account_id, category_id,
+                    created_at, updated_at
+                )
+                VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s
+                )
+                RETURNING id
+                """,
+                [
+                    user_id, tx_type, amount, date_val,
+                    "", False, False,
+                    period_id, account_id, category_id,
+                    ts, ts,
+                ],
+            )
+            rec = cur.fetchone()
+            if not rec:
+                messages.warning(request, f"⚠️ Line {row_num}: insert failed.")
+                continue
+            transaction_id = rec[0]
+            inserted += 1
+
+            for tag_id in tag_ids:
+                cur.execute(
+                    """
+                    INSERT INTO core_transactiontag (transaction_id, tag_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    [transaction_id, tag_id],
+                )
+
+    from core.utils.cache_helpers import clear_tx_cache
+    clear_tx_cache(user_id)
+
+    messages.success(request, f"✅ {inserted} transactions imported successfully.")
     return redirect("transaction_list")
 
 
 @login_required
 def import_transactions_template(request):
-    """Template para importação de transações."""
-    example_data = [{
-        "Date": "2025-06-10",
-        "Type": "Expense",
-        "Amount": 45.67,
-        "Category": "Groceries",
-        "Tags": "food,supermarket",
-        "Account": "Conta Principal"
-    }]
+    """Template para importação de transações com múltiplos exemplos reais."""
+    example_data = [
+        {
+            "Date": "2025-06-15",
+            "Type": "Income",
+            "Amount": 1000.00,
+            "Category": "Salary",
+            "Tags": "monthly,recurring",
+            "Account": "Bpi"
+        },
+        {
+            "Date": "2025-06-16",
+            "Type": "Expense",
+            "Amount": 200.00,
+            "Category": "Groceries",
+            "Tags": "food",
+            "Account": "Bpi"
+        },
+        {
+            "Date": "2025-06-17",
+            "Type": "Investment",
+            "Amount": 500.00,
+            "Category": "ETF",
+            "Tags": "longterm",
+            "Account": "Trading212"
+        },
+        {
+            "Date": "2025-06-18",
+            "Type": "Investment",
+            "Amount": -250.00,
+            "Category": "ETF",
+            "Tags": "rebalance",
+            "Account": "Trading212"
+        },
+        {
+            "Date": "2025-06-19",
+            "Type": "Transfer",
+            "Amount": 150.00,
+            "Category": "Transferência",
+            "Tags": "",
+            "Account": "Revolut"
+        }
+    ]
 
     df = pd.DataFrame(example_data)
 
