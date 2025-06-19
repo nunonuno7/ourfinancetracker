@@ -68,66 +68,43 @@ class TransactionForm(forms.ModelForm):
     period = forms.CharField(
         label=_("Period"),
         required=True,
-        widget=forms.TextInput(
-            attrs={
-                "type": "month",
-                "class": "form-control",
-                "id": "id_period",
-            }
-        ),
+        widget=forms.TextInput(attrs={"type": "month", "class": "form-control", "id": "id_period"}),
     )
 
     tags_input = forms.CharField(
         label=_("Tags"),
         required=False,
-        widget=forms.TextInput(
-            attrs={
-                "class": "form-control",
-                "id": "id_tags_input",
-                "placeholder": _("Optional tags…"),
-            }
-        ),
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "id": "id_tags_input",
+            "placeholder": _("Optional tags…"),
+        }),
     )
 
     category = forms.CharField(
         label=_("Category"),
         required=True,
-        widget=forms.TextInput(
-            attrs={
-                "class": "form-control",
-                "id": "id_category",
-                "placeholder": _("Enter category…"),
-                "data-category-list": "",
-            }
-        ),
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "id": "id_category",
+            "placeholder": _("Enter category…"),
+            "data-category-list": "",
+        }),
     )
 
     class Meta:
         model = Transaction
-        fields = [
-            "date",
-            "type",
-            "amount",
-            "account",
-            "category",
-            "tags_input",
-            "notes",
-            "is_cleared",
-        ]
+        fields = ["date", "type", "amount", "account", "category", "tags_input", "notes", "is_cleared"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "type": forms.Select(attrs={"class": "form-select"}),
-            "amount": forms.TextInput(
-                attrs={
-                    "class": "form-control text-end",
-                    "inputmode": "decimal",
-                    "placeholder": "0.00",
-                    "id": "id_amount",
-                }
-            ),
-            "notes": forms.Textarea(
-                attrs={"class": "form-control", "rows": "3", "style": "height:5em;"}
-            ),
+            "amount": forms.TextInput(attrs={
+                "class": "form-control text-end",
+                "inputmode": "decimal",
+                "placeholder": "0.00",
+                "id": "id_amount",
+            }),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": "3", "style": "height:5em;"}),
             "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
@@ -137,48 +114,48 @@ class TransactionForm(forms.ModelForm):
 
         self.fields["account"].required = False
         self.fields["account"].empty_label = "— No account —"
+        self.fields["type"].choices = Transaction.Type.choices
+        self.fields["type"].required = True
+
         if self._user:
             self.fields["account"].queryset = Account.objects.filter(user=self._user).only("name")
         else:
             self.fields["account"].queryset = Account.objects.none()
 
-        self.fields["type"].choices = Transaction.Type.choices
-        self.fields["type"].required = True
-
         if self.instance and self.instance.pk:
-            logger.debug("📝 Edit mode for Transaction id=%s", self.instance.pk)
             if self.instance.category:
                 self.initial["category"] = self.instance.category.name
             if self.instance.tags.exists():
-                self.initial["tags_input"] = ", ".join(
-                    self.instance.tags.values_list("name", flat=True)
-                )
+                self.initial["tags_input"] = ", ".join(self.instance.tags.values_list("name", flat=True))
             if self.instance.period:
                 self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
+
             if self.instance.amount is not None:
-                self.initial["amount"] = self.instance.amount
+                if self.instance.type == Transaction.Type.INVESTMENT:
+                    amount = self.instance.amount or Decimal("0.00")
+                    self.initial["direction"] = "OUT" if amount < 0 else "IN"
+                    self.initial["amount"] = abs(amount)
+                else:
+                    self.initial["amount"] = self.instance.amount
             elif self.data.get("amount"):
                 self.initial["amount"] = self.data["amount"]
         else:
+            today = date.today()
             if not self.initial.get("period"):
-                today = date.today()
                 self.initial["period"] = f"{today.year}-{today.month:02d}"
             if "amount" not in self.initial and not self.data:
                 self.initial["amount"] = ""
-
-        logger.debug("📋 Final initial dict: %s", self.initial)
 
     def clean_amount(self) -> Decimal:
         raw = (self.data.get("amount") or "").strip()
         if raw == "":
             raise forms.ValidationError(_("This field is required."))
 
-        normalized = (
-            raw.replace(" ", "")
-            .replace("\u00A0", "")
-            .replace(".", "")
-            .replace(",", ".")
-        )
+        normalized = raw.replace("\u00A0", "").replace(" ", "")
+        if "," in normalized and "." in normalized:
+            normalized = normalized.replace(".", "").replace(",", ".")
+        elif "," in normalized:
+            normalized = normalized.replace(",", ".")
 
         try:
             value = Decimal(normalized)
@@ -187,11 +164,18 @@ class TransactionForm(forms.ModelForm):
 
         return value.quantize(Decimal("0.01"))
 
+    def clean(self):
+        cleaned_data = super().clean()
+        amount = cleaned_data.get("amount")
+        type_ = cleaned_data.get("type")
+
+        if amount is not None and type_ != Transaction.Type.INVESTMENT and amount < 0:
+            self.add_error("amount", _("Negative amounts are not allowed."))
+
     def clean_category(self):
         name = (self.cleaned_data.get("category") or "").strip()
         if not name:
             raise forms.ValidationError(_("This field is required."))
-
         user = self._user or self.instance.user
         category, _ = Category.objects.get_or_create(user=user, name=name)
         return category
@@ -202,6 +186,7 @@ class TransactionForm(forms.ModelForm):
     def save(self, commit=True) -> Transaction:
         instance: Transaction = super().save(commit=False)
 
+        # Assign DatePeriod
         year, month = map(int, self.cleaned_data["period"].split("-"))
         period, _ = DatePeriod.objects.get_or_create(year=year, month=month)
         instance.period = period
@@ -212,9 +197,18 @@ class TransactionForm(forms.ModelForm):
         if not self.cleaned_data.get("account"):
             instance.account = None
 
+        # Apply amount sign for investments
+        if instance.type == Transaction.Type.INVESTMENT:
+            direction = self.data.get("direction", "IN")
+            if direction == "OUT":
+                instance.amount = -abs(instance.amount)
+            else:
+                instance.amount = abs(instance.amount)
+
         if commit:
             instance.save()
 
+        # Tags
         tags_str = self.cleaned_data.get("tags_input", "")
         tag_names = {t.strip() for t in tags_str.split(",") if t.strip()}
         if commit:

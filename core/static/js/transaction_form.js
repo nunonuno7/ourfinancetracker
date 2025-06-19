@@ -1,5 +1,3 @@
-// transaction_form.js (versão corrigida)
-
 function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
   const periodInput = document.getElementById("id_period");
@@ -14,11 +12,9 @@ function initTransactionForm() {
   const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
 
   if (isNewTransaction && !dateInput.value) {
-    console.log("📅 Forçar data de hoje via JS:", todayStr);
     dateInput.value = todayStr;
   }
 
-  // Flatpickr com sincronização
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
   flatpickr(dateInput, {
     dateFormat: "Y-m-d",
@@ -64,7 +60,6 @@ function initTransactionForm() {
     }
   }
 
-  // Tom Select Categoria
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
     if (categoryInput.tomselect) categoryInput.tomselect.destroy();
@@ -82,7 +77,6 @@ function initTransactionForm() {
     });
   }
 
-  // Tom Select Tags
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
     if (tagsInput.tomselect) tagsInput.tomselect.destroy();
@@ -115,23 +109,33 @@ function initTransactionForm() {
       });
   }
 
-  // Amount format (corrigido para não apagar valor inválido)
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {
       if (!value) return "";
-      const raw = value.trim();
-      const temp = raw.replace(/\./g, "").replace(",", ".");
-      const num = parseFloat(temp);
-      if (isNaN(num)) return raw;
-      return num.toLocaleString("pt-PT", {
+      const raw = value.trim().replace(/\s/g, "").replace("\u00A0", "");
+
+      let numeric;
+      if (raw.includes(",") && raw.includes(".")) {
+        numeric = parseFloat(raw.replace(/\./g, "").replace(",", "."));
+      } else if (raw.includes(",")) {
+        numeric = parseFloat(raw.replace(",", "."));
+      } else {
+        numeric = parseFloat(raw);
+      }
+
+      if (isNaN(numeric)) return value;
+
+      return numeric.toLocaleString("pt-PT", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
     };
 
     amountInput.addEventListener("blur", () => {
-      const formatted = formatNumber(amountInput.value);
+      const raw = amountInput.value.trim().replace(/\s/g, "").replace("\u00A0", "");
+      if (raw.startsWith("-")) return;  // ⛔ do not auto-format negative input
+      const formatted = formatNumber(raw);
       if (formatted !== "") {
         amountInput.value = formatted;
       }
@@ -139,11 +143,28 @@ function initTransactionForm() {
 
     const form = document.getElementById("transaction-form");
     form?.addEventListener("submit", () => {
-      amountInput.value = amountInput.value
-        .replace(/\s/g, "")
-        .replace(/\./g, "")
-        .replace(",", ".");
+      const raw = amountInput.value.trim().replace(/\s/g, "").replace("\u00A0", "");
+      let numeric;
+      if (raw.includes(",") && raw.includes(".")) {
+        numeric = raw.replace(/\./g, "").replace(",", ".");
+      } else if (raw.includes(",")) {
+        numeric = raw.replace(",", ".");
+      } else {
+        numeric = raw;
+      }
+      amountInput.value = numeric;
     });
+  }
+
+  const flowDiv = document.getElementById("investment-flow");
+  const typeRadios = document.querySelectorAll('input[name="type"]');
+  if (flowDiv && typeRadios.length) {
+    function toggleFlow() {
+      const selected = document.querySelector('input[name="type"]:checked');
+      flowDiv.style.display = (selected?.value === "IV") ? "" : "none";
+    }
+    typeRadios.forEach(r => r.addEventListener("change", toggleFlow));
+    toggleFlow();
   }
 }
 
@@ -154,7 +175,6 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
   if (targetId === "transaction-form") {
     initTransactionForm();
     if (window.transactionTable) {
-      console.log("🔄 Reload da DataTable após HTMX swap do formulário de transação");
       window.transactionTable.ajax.reload(null, false);
     }
   }

@@ -31,10 +31,11 @@
           {% if form.amount.errors %}<div class="text-danger small">{{ form.amount.errors.0 }}</div>{% endif %}
         </div>
 
-    <div class="mb-3">
-      <label for="{{ form.date.id_for_label }}" class="form-label">Date</label>
-      {{ form.date|add_class:"form-control" }}
-    </div>
+        <!-- DATE -->
+        <div class="mb-3">
+          <label for="{{ form.date.id_for_label }}" class="form-label">Date</label>
+          {{ form.date|add_class:"form-control" }}
+        </div>
 
         <!-- PERIOD -->
         <div class="mb-3">
@@ -73,6 +74,20 @@
           </div>
         </div>
 
+        <!-- INVESTMENT FLOW -->
+        <div class="mb-3" id="investment-flow" style="display:none;">
+          <label class="form-label">Investment Flow</label>
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="direction" id="dir_in" value="IN"
+                   {% if form.initial.direction != "OUT" %}checked{% endif %}>
+            <label class="btn btn-outline-success" for="dir_in">Reinforcement</label>
+
+            <input type="radio" class="btn-check" name="direction" id="dir_out" value="OUT"
+                   {% if form.initial.direction == "OUT" %}checked{% endif %}>
+            <label class="btn btn-outline-danger" for="dir_out">Withdrawal</label>
+          </div>
+        </div>
+
         <!-- CATEGORY -->
         <div class="mb-3" id="category-field">
           {{ form.category.label_tag }}
@@ -96,13 +111,13 @@
         <div class="mb-3">
           {{ form.account.label_tag }}
           {% with field=form.account %}
-<select name="{{ field.name }}" id="{{ field.id_for_label }}" class="form-select">
-  <option value="">— No account —</option>
-  {% for choice in field.field.queryset %}
-    <option value="{{ choice.pk }}" {% if choice.pk == field.value %}selected{% endif %}>{{ choice }}</option>
-  {% endfor %}
-</select>
-{% endwith %}
+            <select name="{{ field.name }}" id="{{ field.id_for_label }}" class="form-select">
+              <option value="">— No account —</option>
+              {% for choice in field.field.queryset %}
+                <option value="{{ choice.pk }}" {% if choice.pk == field.value %}selected{% endif %}>{{ choice }}</option>
+              {% endfor %}
+            </select>
+          {% endwith %}
           {% if form.account.errors %}<div class="text-danger small">{{ form.account.errors.0 }}</div>{% endif %}
         </div>
 
