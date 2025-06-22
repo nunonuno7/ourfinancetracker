@@ -387,89 +387,158 @@ AccountBalanceFormSet = modelformset_factory(
 )
 
 
+
+
 class AccountForm(UserAwareMixin, forms.ModelForm):
+    """
+    Cria/edita contas. Se existir outra conta com mesmo nome (case-insensitive),
+    pede confirmação para fundir saldos, desde que moeda e tipo coincidam.
+    """
+
+    # ✅ campo explícito em vez de olhar para request.POST["confirm_merge"]
+    confirm_merge = forms.BooleanField(
+        required=False,
+        widget=forms.HiddenInput,
+        initial=False,
+    )
+
     class Meta:
         model = Account
-        fields = ("name", "account_type", "currency")
+        fields = ("name", "account_type", "currency", "confirm_merge")
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "account_type": forms.Select(attrs={"class": "form-control"}),
             "currency": forms.Select(attrs={"class": "form-control"}),
         }
 
-    def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
+    # ------------------------------------------------------------------ #
+    # INIT
+    # ------------------------------------------------------------------ #
+    def __init__(self, *args: Any, user: "User | None" = None, **kwargs: Any) -> None:
         super().__init__(*args, user=user, **kwargs)
 
         self.fields["account_type"].queryset = AccountType.objects.order_by("name")
         self.fields["currency"].queryset = Currency.objects.order_by("code")
 
-        if not self.instance.pk and getattr(user, "settings", None) and user.settings.default_currency:
+        if (
+            not self.instance.pk
+            and getattr(user, "settings", None)
+            and user.settings.default_currency
+        ):
             self.initial["currency"] = user.settings.default_currency
 
+    # ------------------------------------------------------------------ #
+    # CLEANERS
+    # ------------------------------------------------------------------ #
     def clean_name(self) -> str:
         return self.cleaned_data["name"].strip()
 
-    def find_duplicate(self) -> Account | None:
-        """Returns an existing account with the same name (case-insensitive), if any."""
-        name = self.cleaned_data.get("name", "").strip()
-        return Account.objects.filter(
-            user=self.user,
-            name__iexact=name
-        ).exclude(pk=self.instance.pk).first()
+    def clean(self) -> None:
+        super().clean()
 
+        name: str = self.cleaned_data.get("name", "").strip()
+        account_type = self.cleaned_data.get("account_type")
+        currency = self.cleaned_data.get("currency")
+        confirm_merge = self.cleaned_data.get("confirm_merge")
+
+        if not name or not account_type or not currency:
+            return
+
+        duplicate_qs = (
+            Account.objects.filter(user=self.user, name__iexact=name)
+            .exclude(pk=self.instance.pk)
+        )
+
+        if not duplicate_qs.exists():
+            return  # → sem duplicados
+
+        duplicate = duplicate_qs.first()
+
+        # Não permitir fundir com conta especial “Cash” (regra de negócio)
+        if duplicate.name.lower() == "cash":
+            raise ValidationError(
+                _("Merging with the ‘Cash’ account is not allowed."),
+                code="merge_cash_forbidden",
+            )
+
+        # Moeda/tipo diferentes ⇒ bloqueio duro
+        if duplicate.account_type_id != account_type.id or duplicate.currency_id != currency.id:
+            raise ValidationError(
+                _(
+                    "Another account with this name already exists but with a "
+                    "different type or currency. Merging is not possible."
+                ),
+                code="merge_incompatible",
+            )
+
+        # Alerta suave se ainda não confirmou
+        if not confirm_merge:
+            raise ValidationError(
+                _(
+                    "An account with this name already exists. "
+                    "Tick ‘confirm_merge’ to merge balances."
+                ),
+                code="merge_confirmation_required",
+            )
+
+        # A partir daqui consideramos merge confirmado → guardamos ref.
+        self._duplicate_to_merge: Account | None = duplicate  # type: ignore[attr-defined]
+
+    # ------------------------------------------------------------------ #
+    # SAVE
+    # ------------------------------------------------------------------ #
     def save(self, commit: bool = True) -> Account:
-        new_name = self.cleaned_data["name"].strip()
-        self.cleaned_data["name"] = new_name
-        self.instance.name = new_name
-        self.instance.user = self.user
+        """
+        - Guarda a nova/actual conta normalmente.
+        - Se houver duplicado e confirm_merge, funde saldos de forma transacional.
+        """
+        name = self.cleaned_data["name"].strip()
+        self.instance.name = name
+        self.instance.user = self.user  # ← garante owner correcto
 
-        existing_qs = Account.objects.filter(
-            user=self.user,
-            name__iexact=new_name
-        ).exclude(pk=self.instance.pk)
+        duplicate: Account | None = getattr(self, "_duplicate_to_merge", None)
 
-        if existing_qs.exists():
-            existing = existing_qs.first()
+        if duplicate:
+            return self._merge_into(duplicate)
 
-            if existing.name.strip().lower() == "cash":
-                raise ValidationError("Merging with 'Cash' account is not allowed.")
-
-            if (
-                existing.currency_id != self.cleaned_data["currency"].id or
-                existing.account_type_id != self.cleaned_data["account_type"].id
-            ):
-                raise ValidationError("Já existe uma conta com esse nome, mas com tipo ou moeda diferente. Não é possível fundir.")
-
-            confirm_merge = self.data.get("confirm_merge", "").lower() == "true"
-            if not confirm_merge:
-                self.add_error(None, "Já existe uma conta com esse nome. Queres fundir os saldos?")
-                return self.instance  # ⚠️ Voltar para form_invalid sem crash
-
-            # Fundir saldos
-            for balance in AccountBalance.objects.filter(account=self.instance):
-                existing_balance = AccountBalance.objects.filter(
-                    account=existing,
-                    period=balance.period
-                ).first()
-
-                if existing_balance:
-                    # Fix: use reported_balance instead of amount
-                    existing_balance.reported_balance += balance.reported_balance
-                    existing_balance.save()
-                    balance.delete()
-                else:
-                    balance.account = existing
-                    balance.save()
-            
-
-            if self.instance.pk:
-                self.instance.delete()
-
-            return existing
-
+        # ---------- criação/edição normal ----------
         if commit:
             self.instance.save()
         return self.instance
+
+    # ------------------------------------------------------------------ #
+    # MERGE HELPER
+    # ------------------------------------------------------------------ #
+    def _merge_into(self, target: Account) -> Account:
+        """
+        Move saldos da `self.instance` para `target` (duplicado), somando
+        reported_balance quando já existe o mesmo periodo.
+        Tudo dentro de uma transacção atómica.
+        """
+        with transaction.atomic():
+            # Salva/actualiza self.instance para obter FK consistentes
+            if not self.instance.pk:
+                self.instance.save()
+
+            # 1) fundir saldos
+            balances_qs = AccountBalance.objects.select_for_update().filter(account=self.instance)
+
+            for bal in balances_qs:
+                merged, created = AccountBalance.objects.get_or_create(
+                    account=target,
+                    period=bal.period,
+                    defaults={"reported_balance": bal.reported_balance},
+                )
+                if not created:
+                    merged.reported_balance = F("reported_balance") + bal.reported_balance
+                    merged.save(update_fields=["reported_balance"])
+                bal.delete()
+
+            # 2) eliminar conta antiga, se existia na BD
+            if self.instance.pk:
+                self.instance.delete()
+
+        return target
 
 
 class TransactionImportForm(forms.Form):

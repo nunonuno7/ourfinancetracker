@@ -17,6 +17,7 @@ PRINCIPAIS CORREÇÕES IMPLEMENTADAS:
 
 import json
 import logging
+logger = logging.getLogger(__name__)
 import hashlib
 from datetime import date, datetime
 from decimal import Decimal
@@ -61,7 +62,7 @@ from .utils.cache_helpers import clear_tx_cache
 
 from django.views.generic import TemplateView
 from django.db import transaction as db_tx, connection
-from core.utils.cache_helpers import clear_tx_cache
+
 
 # ==============================================================================
 # UTILITÁRIOS DE CACHE SEGUROS
@@ -278,14 +279,23 @@ def account_balances_pivot_json(request):
 # ==============================================================================
 
 class TransactionListView(LoginRequiredMixin, ListView):
-    """Lista todas as transações do utilizador atual."""
+    """Lista todas as transações do utilizador atual, paginadas por 50 linhas."""
     model = Transaction
     template_name = "core/transaction_list.html"
     context_object_name = "transactions"
+    paginate_by = 50  # ← evita carregar tudo de uma só vez
 
     def get_queryset(self):
-        return Transaction.objects.filter(user=self.request.user).order_by("-date")
-
+        """
+        Retorna o queryset filtrado pelo utilizador corrente,
+        com relações carregadas de forma eficiente.
+        """
+        return (
+            Transaction.objects
+            .filter(user=self.request.user)
+            .select_related("category", "account", "period")
+            .order_by("-date", "-id")
+        )
 
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     """Criar nova transação com validação de segurança."""
@@ -297,7 +307,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     def form_valid(self, form):
         """Processar formulário válido e limpar cache."""
         self.object = form.save()
-        print('📝 Criado:', self.object)  # ✅ DEBUG no terminal
+        logger.debug('📝 Criado:', self.object)  # ✅ DEBUG no terminal
         clear_tx_cache(self.request.user.id)
 
         if self.request.headers.get("HX-Request") == "true":
@@ -308,7 +318,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 
     def form_invalid(self, form):
         """Processar formulário inválido."""
-        print("❌ Formulário inválido:", form.errors)  # DEBUG
+        logger.debug("❌ Formulário inválido:", form.errors)  # DEBUG
         if self.request.headers.get("HX-Request") == "true":
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
         return super().form_invalid(form)

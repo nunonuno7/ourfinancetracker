@@ -7,6 +7,8 @@ from django.db.models.signals import post_save, post_delete
 
 from .models import Transaction, Account, AccountType, Currency, UserSettings
 from core.utils.cache_helpers import clear_tx_cache
+import logging
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -18,7 +20,7 @@ def update_transaction_status(sender, instance, created, **kwargs):
     Mensagem de debug ao criar uma nova despesa.
     """
     if created and instance.type == Transaction.Type.EXPENSE:
-        print(f"🧾 Nova despesa criada: {instance}")
+        logger.debug(f"🧾 Nova despesa criada: {instance}")
 
 @receiver([post_save, post_delete], sender=Transaction)
 def clear_transaction_cache(sender, instance, **kwargs):
@@ -27,7 +29,7 @@ def clear_transaction_cache(sender, instance, **kwargs):
     é criada, atualizada ou eliminada.
     """
     user_id = instance.user_id
-    print(f"🧹 Sinal ativado — limpando cache para user_id={user_id}")
+    logger.debug(f"🧹 Sinal ativado — limpando cache para user_id={user_id}")
     clear_tx_cache(user_id)
 
 # ───────────────────────────── Utilizador ─────────────────────────────
