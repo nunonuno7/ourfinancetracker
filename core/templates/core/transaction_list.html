@@ -5,7 +5,10 @@
 
 {% block content %}
 <div class="container mt-4">
-  
+
+  <!-- 🆕 ADICIONADO — token CSRF global para o fetch() -->
+  <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
   <!-- Cabeçalho -->
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0">Transactions</h2>
@@ -20,28 +23,30 @@
   </div>
 
   <!-- Filtros por datas -->
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <label for="start-date" class="form-label" id="start-label">Start Date</label>
-    <input type="text" id="start-date" name="start-date" class="form-control" value="2025-01-01" aria-labelledby="start-label">
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <label for="start-date" class="form-label" id="start-label">Start Date</label>
+      <input type="text" id="start-date" name="start-date" class="form-control"
+             value="2025-01-01" aria-labelledby="start-label">
+    </div>
+    <div class="col-md-3">
+      <label for="end-date" class="form-label" id="end-label">End Date</label>
+      <input type="text" id="end-date" name="end-date" class="form-control"
+             value="{{ today }}" aria-labelledby="end-label">
+    </div>
   </div>
-  <div class="col-md-3">
-    <label for="end-date" class="form-label" id="end-label">End Date</label>
-    <input type="text" id="end-date" name="end-date" class="form-control" value="{{ today }}" aria-labelledby="end-label">
-  </div>
-</div>
 
   <!-- Filtros adicionais -->
   <div class="row g-3 mb-3">
     <div class="col-md-3">
       <label for="filter-type" class="form-label">Type</label>
-<select id="filter-type" name="filter-type" class="form-select">
-  <option value="">All Types</option>
-  <option value="Expense">Expense</option>
-  <option value="Income">Income</option>
-  <option value="Investment">Investment</option>
-  <option value="Transfer">Transfer</option>
-</select>
+      <select id="filter-type" name="filter-type" class="form-select">
+        <option value="">All Types</option>
+        <option value="Expense">Expense</option>
+        <option value="Income">Income</option>
+        <option value="Investment">Investment</option>
+        <option value="Transfer">Transfer</option>
+      </select>
     </div>
 
     <div class="col-md-3">
@@ -61,17 +66,19 @@
       </select>
     </div>
 
-<div class="col-md-3">
-  <label for="filter-period" class="form-label">Period</label>
-  <select id="filter-period" name="filter-period" class="form-select">
-    <option value="">All Periods</option>
-    {% for p in period_options %}
-      <option value="{{ p }}" {% if p == current_period %}selected{% endif %}>
-        {{ p }}
-      </option>
-    {% endfor %}
-  </select>
-</div>
+    <div class="col-md-3">
+      <label for="filter-period" class="form-label">Period</label>
+      <select id="filter-period" name="filter-period" class="form-select">
+        <option value="">All Periods</option>
+        {% for p in period_options %}
+          <option value="{{ p }}" {% if p == current_period %}selected{% endif %}>
+            {{ p }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
   <!-- Botões de ação -->
   <div class="d-flex align-items-center gap-2 mb-3">
     <button id="clear-filters" class="btn btn-outline-danger">
@@ -101,7 +108,7 @@
   </div>
 </div>
 
-<!-- CSRF global -->
+<!-- CSRF também disponível em JS -->
 <script>window.CSRF_TOKEN = '{{ csrf_token }}';</script>
 
 <!-- jQuery -->
@@ -113,7 +120,6 @@
 <!-- DataTables -->
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 

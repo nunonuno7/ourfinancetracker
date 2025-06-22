@@ -1,213 +1,275 @@
-from pathlib import Path
+"""Django **settings.py** — versão optimizada para **Supabase Postgres**.
+
+Principais características 🔧
+────────────────────────────
+• Mantém‐se compatível com desenvolvimento local *(SQLite)* caso o
+  Postgres não esteja configurado, mas **usa sempre a mesma base Supabase**
+  quando presentes as variáveis DB_* ou DATABASE_URL.
+• Carrega variáveis de ambiente via **python‑dotenv**.
+• Debug Toolbar apenas em `DEBUG=True`.
+• Redis opcional — se `REDIS_URL` não existir recorre a `LocMemCache`.
+• WhiteNoise para servir estáticos em produção.
+• Logging com **RotatingFileHandler** e filtro para suprimir spam das
+  chamadas JSON.
+
+EnvVars mínimas ⬇️
+─────────────────
+SECRET_KEY, DEBUG, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT (5432),
+REDIS_URL *(opcional)*, SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET.
+"""
+from __future__ import annotations
+
+import logging
+import logging.handlers
 import os
+from pathlib import Path
+from typing import List
+
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente de .env
-load_dotenv()
+try:
+    import dj_database_url  # type: ignore
+except ImportError:  # pragma: no cover
+    dj_database_url = None
 
+# ────────────────────────────────────────────────────
+# Carregar .env (se existir)
+# ────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
-# Segurança
-SECRET_KEY = os.getenv('SECRET_KEY')
+ENV = os.getenv  # alias
+
+# ────────────────────────────────────────────────────
+# Segurança & chave secreta
+# ────────────────────────────────────────────────────
+DEBUG: bool = ENV("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
+SECRET_KEY: str | None = ENV("SECRET_KEY")
 if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is required")  # Critico para segurança[1]
+    raise RuntimeError("SECRET_KEY environment variable is required")
 
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'  # DEBUG controlado externamente[2]
-
-ALLOWED_HOSTS = [
-    'ourfinancetracker.onrender.com', 'localhost', '127.0.0.1',
-    'ourfinancetracker.com', 'www.ourfinancetracker.com'
+# ────────────────────────────────────────────────────
+# Hosts e CSRF
+# ────────────────────────────────────────────────────
+ALLOWED_HOSTS: List[str] = [
+    "ourfinancetracker.onrender.com",
+    "ourfinancetracker.com",
+    "www.ourfinancetracker.com",
+    "localhost",
+    "127.0.0.1",
 ]
-if host := os.getenv("RENDER_EXTERNAL_HOSTNAME"):
-    ALLOWED_HOSTS.append(host)
+if ext_host := ENV("RENDER_EXTERNAL_HOSTNAME"):
+    ALLOWED_HOSTS.append(ext_host)
 if DEBUG:
-    ALLOWED_HOSTS += ["4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app"]  # Dev hosts[3]
+    ALLOWED_HOSTS += [
+        "4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
+    ]
 
-CSRF_TRUSTED_ORIGINS = [
+CSRF_TRUSTED_ORIGINS: List[str] = [
     "https://ourfinancetracker.onrender.com",
-    "https://ourfinancetracker.com"
+    "https://ourfinancetracker.com",
 ]
 if DEBUG:
-    CSRF_TRUSTED_ORIGINS.append("https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app")  # Dev CSRF[4]
+    CSRF_TRUSTED_ORIGINS.append(
+        "https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app"
+    )
 
-LOGIN_URL = "/login/"
-LOGIN_REDIRECT_URL = "/"
-
-# Apps instaladas
+# ────────────────────────────────────────────────────
+# Apps & middleware
+# ────────────────────────────────────────────────────
 INSTALLED_APPS = [
-    "django.contrib.admin", "django.contrib.auth",
-    "django.contrib.contenttypes", "django.contrib.sessions",
-    "django.contrib.messages", "django.contrib.staticfiles",
-    "core", "widget_tweaks", "django.contrib.humanize"
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    # Terceiros
+    "whitenoise.runserver_nostatic",
+    "widget_tweaks",
+    "django.contrib.humanize",
+    # Internos
+    "core",
 ]
 if DEBUG:
-    INSTALLED_APPS += ["debug_toolbar"]  # Toolbar em ambiente dev[5]
+    INSTALLED_APPS += ["debug_toolbar"]
 
-# Middleware
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'core.middleware.log_filter.SuppressJsonLogMiddleware',
+    "core.middleware.log_filter.SuppressJsonLogMiddleware",
 ]
 if DEBUG:
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-    INTERNAL_IPS = ["127.0.0.1"]  # Toolbar IPs permitidos[6]
+    INTERNAL_IPS = ["127.0.0.1"]
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
-
-# Templates
-TEMPLATES = [{
-    "BACKEND": "django.template.backends.django.DjangoTemplates",
-    "DIRS": [BASE_DIR / "core" / "templates"],
-    "APP_DIRS": True,
-    "OPTIONS": {
-        "context_processors": [
-            "django.template.context_processors.debug",
-            "django.template.context_processors.request",
-            "django.contrib.auth.context_processors.auth",
-            "django.contrib.messages.context_processors.messages"
-        ]
-    }
-}]
-
 WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
 
-# Base de dados PostgreSQL configurada por ambiente
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "postgres"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT", "5432")
+# ────────────────────────────────────────────────────
+# Templates
+# ────────────────────────────────────────────────────
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "core" / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
     }
-}
-
-# Validação de passwords
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"}
 ]
 
+# ────────────────────────────────────────────────────
+# Base de dados – prioriza Supabase/Postgres
+# ────────────────────────────────────────────────────
+SUPA_URL = ENV("DATABASE_URL")  # string completa
+if not SUPA_URL and ENV("DB_HOST"):
+    SUPA_URL = (
+        f"postgresql://{ENV('DB_USER')}:{ENV('DB_PASSWORD')}@{ENV('DB_HOST')}:"
+        f"{ENV('DB_PORT', '5432')}/{ENV('DB_NAME')}"
+    )
+
+if SUPA_URL and dj_database_url:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            SUPA_URL,
+            conn_max_age=int(ENV("DB_CONN_MAX_AGE", "600")),
+            ssl_require=not DEBUG,
+        )
+    }
+else:
+    # Fallback leve para dev — SQLite
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+# ────────────────────────────────────────────────────
+# Cache
+# ────────────────────────────────────────────────────
+if redis_url := ENV("REDIS_URL"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": redis_url,
+            "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+            "KEY_PREFIX": "ourft",
+            "TIMEOUT": 300,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ourfinancetracker-cache",
+        }
+    }
+
+# ────────────────────────────────────────────────────
 # Internacionalização
+# ────────────────────────────────────────────────────
 LANGUAGE_CODE = "en-gb"
-TIME_ZONE = "UTC"
+TIME_ZONE = ENV("TIME_ZONE", "Europe/Lisbon")
 USE_I18N = True
 USE_TZ = True
 
-# Ficheiros estáticos
+# ────────────────────────────────────────────────────
+# Ficheiros estáticos & media
+# ────────────────────────────────────────────────────
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "core" / "static"]
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"  # Produção eficiente[7]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = (
+    "whitenoise.storage.CompressedManifestStaticFilesStorage" if not DEBUG else "django.contrib.staticfiles.storage.StaticFilesStorage"
+)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# ────────────────────────────────────────────────────
+# Autenticação
+# ────────────────────────────────────────────────────
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/login/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Cache (Redis em produção, locmem em DEBUG)
-CACHES = {
-    "default": {
-        "BACKEND": (
-            "django.core.cache.backends.redis.RedisCache"
-            if not DEBUG else "django.core.cache.backends.locmem.LocMemCache"
-        ),
-        "LOCATION": (
-            os.getenv("REDIS_URL", "redis://127.0.0.1:6379/1")
-            if not DEBUG else "ourfinancetracker-cache"
-        ),
-        "OPTIONS": (
-            {"CLIENT_CLASS": "django_redis.client.DefaultClient"}
-            if not DEBUG else {}
-        ),
-        "KEY_PREFIX": "ourft",
-        "TIMEOUT": 300
-    }
-}
-
-
-
+# ────────────────────────────────────────────────────
 # Logging estruturado
-
-import logging
-
+# ────────────────────────────────────────────────────
 class SuppressTransactionJsonFilter(logging.Filter):
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
         return "/transactions/json" not in record.getMessage()
 
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "filters": {
-        "suppress_transaction_json": {
-            "()": SuppressTransactionJsonFilter,
-        },
-    },
+    "filters": {"suppress_transaction_json": {"()": SuppressTransactionJsonFilter}},
     "formatters": {
         "verbose": {
             "format": "[{levelname}] {asctime} {name} {process:d} {thread:d} {message}",
-            "style": "{"
+            "style": "{",
         },
-        "simple": {"format": "[{levelname}] {message}", "style": "{"}
+        "simple": {"format": "[{levelname}] {message}", "style": "{"},
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "simple" if DEBUG else "verbose",
-            "filters": ["suppress_transaction_json"]
+            "filters": ["suppress_transaction_json"],
         },
-        "file": (
-            {
-                "class": "logging.FileHandler",
-                "filename": os.path.join(BASE_DIR, "django.log"),
-                "formatter": "verbose"
-            } if not DEBUG else {"class": "logging.NullHandler"}
-        )
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "django.log",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+        },
     },
     "root": {
-        "handlers": ["console"],
-        "level": "DEBUG" if DEBUG else "INFO"
+        "handlers": ["console", "file"],
+        "level": "DEBUG" if DEBUG else "INFO",
     },
     "loggers": {
-        "django": {
-            "handlers": ["console", "file"] if not DEBUG else ["console"],
-            "level": "INFO", "propagate": False
-        },
-        "django.server": {  # <--- logger responsável pelos logs HTTP
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False
-        },
-        "core": {
-            "handlers": ["console", "file"] if not DEBUG else ["console"],
-            "level": "DEBUG" if DEBUG else "INFO",
-            "propagate": False
-        }
-    }
+        "django.server": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "core": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+    },
 }
 
-
-# Segurança extra em produção
+# ────────────────────────────────────────────────────
+# Segurança extra
+# ────────────────────────────────────────────────────
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    X_FRAME_OPTIONS = "DENY"  # Mitigação de clickjacking[8]
+    X_FRAME_OPTIONS = "DENY"
 
-# Configurações Supabase (opcional)
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+# ────────────────────────────────────────────────────
+# Supabase creds (para RPC)
+# ────────────────────────────────────────────────────
+SUPABASE_URL = ENV("SUPABASE_URL")
+SUPABASE_KEY = ENV("SUPABASE_KEY")
+SUPABASE_JWT_SECRET = ENV("SUPABASE_JWT_SECRET")

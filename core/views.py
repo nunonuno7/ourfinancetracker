@@ -482,10 +482,22 @@ def transactions_json(request):
         ]
 
     # Filtros únicos dinâmicos
-    available_types = sorted(df_for_type["type"].dropna().unique())
-    available_categories = sorted(df_for_category["category"].dropna().unique())
-    available_accounts = sorted(df_for_account["account"].dropna().unique())
-    available_periods = sorted(df_for_period["period"].dropna().unique(), reverse=True)
+    available_types = sorted(
+        [t for t in df_for_type["type"].dropna().unique() if t]
+    )
+
+    available_categories = sorted(
+        [c for c in df_for_category["category"].dropna().unique() if c]
+    )
+
+    available_accounts = sorted(
+        [a for a in df_for_account["account"].dropna().unique() if a]
+    )
+
+    available_periods = sorted(
+        [p for p in df_for_period["period"].dropna().unique() if p],
+        reverse=True
+    )
 
     # Ordenação
     order_col = request.GET.get("order[0][column]", "1")
@@ -1090,48 +1102,69 @@ def tag_autocomplete(request):
 # IMPORT/EXPORT EXCEL
 # ==============================================================================
 
+# core/views.py
+from io import BytesIO
+from django.http import HttpResponse
+from django.db import connection
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+import pandas as pd
+
+
+@require_GET
 @login_required
 def export_transactions_xlsx(request):
-    """Exportar transações para Excel."""
+    """Exporta todas as transacções do utilizador (tags e type por extenso)."""
     user_id = request.user.id
 
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT
-                t.date AS Date,
-                t.type AS Type,
-                t.amount AS Amount,
-                COALESCE(c.name, '') AS Category,
-                (
-                    SELECT STRING_AGG(tg.name, ', ')
-                    FROM core_transaction_tags tt
-                    JOIN core_tag tg ON tg.id = tt.tag_id
-                    WHERE tt.transaction_id = t.id
-                ) AS Tags,
-                COALESCE(a.name, '') AS Account,
-                CONCAT(p.year, '-', LPAD(p.month::text, 2, '0')) AS Period
+              t.date                                           AS "Date",
+              CASE t.type
+                   WHEN 'EX' THEN 'Expense'
+                   WHEN 'IN' THEN 'Income'
+                   WHEN 'IV' THEN 'Investment'
+                   WHEN 'TR' THEN 'Transfer'
+                   ELSE t.type
+              END                                              AS "Type",
+              t.amount                                         AS "Amount",
+              COALESCE(a.name, '')                             AS "Account",
+              COALESCE(c.name, '')                             AS "Category",
+              COALESCE((
+                 SELECT STRING_AGG(DISTINCT tg.name, ', ' ORDER BY tg.name)
+                 FROM core_transactiontag tt
+                 JOIN core_tag tg ON tg.id = tt.tag_id
+                 WHERE tt.transaction_id = t.id
+                   AND tg.user_id      = t.user_id
+              ), '')                                           AS "Tags",
+              COALESCE(t.notes, '')                            AS "Notes",
+              CONCAT(p.year, '-', LPAD(p.month::text, 2, '0')) AS "Period"
             FROM core_transaction t
-            LEFT JOIN core_category c ON t.category_id = c.id
-            LEFT JOIN core_account a ON t.account_id = a.id
-            LEFT JOIN core_dateperiod p ON t.period_id = p.id
+            LEFT JOIN core_account     a ON a.id = t.account_id
+            LEFT JOIN core_category    c ON c.id = t.category_id
+            LEFT JOIN core_dateperiod  p ON p.id = t.period_id
             WHERE t.user_id = %s
-            ORDER BY t.date DESC
+            ORDER BY t.date DESC;
         """, [user_id])
-        rows = cursor.fetchall()
+
+        rows    = cursor.fetchall()
         columns = [col[0] for col in cursor.description]
 
     df = pd.DataFrame(rows, columns=columns)
 
     buffer = BytesIO()
-    df.to_excel(buffer, index=False, sheet_name="Transações")
+    df.to_excel(buffer, index=False, sheet_name="Transactions")
     buffer.seek(0)
 
     response = HttpResponse(
         buffer,
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    response['Content-Disposition'] = 'attachment; filename=transactions.xlsx'
+    response["Content-Disposition"] = "attachment; filename=transactions.xlsx"
     return response
+
+
 
 
 

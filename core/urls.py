@@ -1,22 +1,30 @@
+# core/urls.py
 from django.urls import path
 from django.contrib.auth import views as auth_views
 
 from .views import (
+    # Home & Auth
     HomeView, signup, LogoutView,
+    # Transactions
     TransactionListView, TransactionCreateView,
     TransactionUpdateView, TransactionDeleteView,
     transactions_json, import_transactions_xlsx,
     import_transactions_template, transaction_clear_cache,
+    export_transactions_xlsx,
+    # Categories & Tags
     CategoryListView, CategoryCreateView,
     CategoryUpdateView, CategoryDeleteView,
     category_autocomplete, tag_autocomplete,
+    # Accounts
     AccountListView, AccountCreateView,
     AccountUpdateView, AccountDeleteView,
     AccountMergeView, move_account_up,
     move_account_down, account_reorder,
+    # Account Balances
     account_balance_view, delete_account_balance,
     copy_previous_balances_view, account_balance_export_xlsx,
     account_balance_import_xlsx, account_balance_template_xlsx,
+    # Dashboard & APIs
     DashboardView, period_autocomplete,
     api_jwt_my_transactions, dashboard_data,
     account_balances_pivot_json, dashboard_kpis_json,
@@ -25,10 +33,10 @@ from .views import (
 from core.views_reporting import proxy_report_csv_token
 
 urlpatterns = [
-    # Página principal
+    # Home
     path("", HomeView.as_view(), name="home"),
 
-    # Autenticação
+    # Authentication
     path("signup/", signup, name="signup"),
     path("login/", auth_views.LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
@@ -36,18 +44,18 @@ urlpatterns = [
     # Dashboard
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
 
-    # Transações
+    # Transactions
     path("transactions/", TransactionListView.as_view(), name="transaction_list"),
     path("transactions/new/", TransactionCreateView.as_view(), name="transaction_create"),
     path("transactions/<int:pk>/edit/", TransactionUpdateView.as_view(), name="transaction_update"),
     path("transactions/<int:pk>/delete/", TransactionDeleteView.as_view(), name="transaction_delete"),
     path("transactions/json/", transactions_json, name="transactions_json"),
-    path("transactions/export-excel/", proxy_report_csv_token, name="transaction_export_xlsx"),
+    path("transactions/export-excel/", export_transactions_xlsx, name="transaction_export_xlsx"),
     path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
 
-    # Categorias e Tags
+    # Categories & Tags
     path("categories/", CategoryListView.as_view(), name="category_list"),
     path("categories/new/", CategoryCreateView.as_view(), name="category_create"),
     path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_update"),
@@ -55,7 +63,7 @@ urlpatterns = [
     path("categories/autocomplete/", category_autocomplete, name="category_autocomplete"),
     path("tags/autocomplete/", tag_autocomplete, name="tag_autocomplete"),
 
-    # Contas
+    # Accounts
     path("accounts/", AccountListView.as_view(), name="account_list"),
     path("accounts/new/", AccountCreateView.as_view(), name="account_create"),
     path("accounts/<int:pk>/edit/", AccountUpdateView.as_view(), name="account_update"),
@@ -65,7 +73,7 @@ urlpatterns = [
     path("accounts/<int:pk>/down/", move_account_down, name="account_move_down"),
     path("accounts/reorder/", account_reorder, name="account_reorder"),
 
-    # Saldos
+    # Account Balances
     path("account-balance/", account_balance_view, name="account_balance"),
     path("account-balance/delete/<int:pk>/", delete_account_balance, name="account_balance_delete"),
     path("account-balance/copy/", copy_previous_balances_view, name="account_balance_copy"),
@@ -73,13 +81,13 @@ urlpatterns = [
     path("account-balance/import/", account_balance_import_xlsx, name="account_balance_import_xlsx"),
     path("account-balance/template/", account_balance_template_xlsx, name="account_balance_template_xlsx"),
 
-    # APIs auxiliares
+    # Auxiliary APIs
     path("periods/autocomplete/", period_autocomplete, name="period_autocomplete"),
     path("api/jwt/my-transactions/", api_jwt_my_transactions, name="api_jwt_my_transactions"),
     path("api/dashboard-data/", dashboard_data, name="dashboard_data"),
     path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
     path("api/dashboard-kpis/", dashboard_kpis_json, name="dashboard_kpis"),
 
-    # Reporting
+    # Reporting (token-based)
     path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),
 ]

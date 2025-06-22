@@ -48,7 +48,7 @@ def clear_tx_cache(user_id: int) -> None:
         user_id: ID do utilizador cujo cache deve ser limpo
     """
     try:
-        logger.info(f"🧹 A limpar cache de transações para user_id={user_id}")
+        logger.info(f"A limpar cache de transações para user_id={user_id}")
         keys = [
             get_cache_key_for_transactions(user_id, "*", "*"),
             make_key(f"account_balance_user_{user_id}_*", "ourfinance"),
@@ -57,11 +57,11 @@ def clear_tx_cache(user_id: int) -> None:
 
         # Como não há suporte a wildcards no Django cache padrão, usa-se .delete() manual
         for key in keys:
-            cache.delete(key)  # Se usar cache local como LocMemCache, key pattern não funciona — deve-se gerar as chaves manualmente em produção
-            logger.debug(f"🗑️ Cache limpa para key: {key}")
+            cache.delete(key)
+            logger.debug(f"Cache limpa para key: {key}")
 
     except Exception as e:
-        logger.exception(f"❌ Erro ao limpar cache para user {user_id}: {e}")
+        logger.exception(f"Erro ao limpar cache para user {user_id}: {e}")
 
 
 def get_cache_key_for_transactions(user_id: int, start_date: str, end_date: str) -> str:

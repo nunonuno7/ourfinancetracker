@@ -121,23 +121,23 @@ $('#clear-filters').on('click', function () {
       });
   });
 
-  // 🔄 Atualizar filtros com valores recebidos do backend
-  table.on('xhr.dt', function (e, settings, json) {
-    if (!json) return;
+// 🔄 Atualizar filtros com valores recebidos do backend
+table.on('xhr.dt', function (e, settings, json) {
+  if (!json) return;
 
-    const updateDropdown = (selector, values, current) => {
-      const select = $(selector);
-      const set = new Set(values || []);
-      select.empty().append(`<option value="">All</option>`);
-      set.forEach(v => {
-        const selected = current === v ? ' selected' : '';
-        select.append(`<option value="${v}"${selected}>${v}</option>`);
-      });
-    };
+  const updateDropdown = (selector, values, current) => {
+    const select = $(selector);
+    const set = new Set((values || []).filter(v => v));  // ⬅️ remove valores vazios
+    select.empty().append(`<option value="">All</option>`);
+    set.forEach(v => {
+      const selected = current === v ? ' selected' : '';
+      select.append(`<option value="${v}"${selected}>${v}</option>`);
+    });
+  };
 
-    updateDropdown('#filter-type', json.filters.types, $('#filter-type').val());
-    updateDropdown('#filter-account', json.filters.accounts, $('#filter-account').val());
-    updateDropdown('#filter-category', json.filters.categories, $('#filter-category').val());
-    updateDropdown('#filter-period', json.filters.periods, $('#filter-period').val());
-  });
+  updateDropdown('#filter-type', json.filters.types, $('#filter-type').val());
+  updateDropdown('#filter-account', json.filters.accounts, $('#filter-account').val());
+  updateDropdown('#filter-category', json.filters.categories, $('#filter-category').val());
+  updateDropdown('#filter-period', json.filters.periods, $('#filter-period').val());
+});
 });
