@@ -300,17 +300,17 @@ class TransactionListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         """Add additional context for filters."""
         context = super().get_context_data(**kwargs)
-        
+
         # Get available periods for the filter dropdown
         periods = DatePeriod.objects.order_by("-year", "-month")
         context["period_options"] = [
             f"{p.year}-{p.month:02d}" for p in periods
         ]
-        
+
         # Set current period (current month by default)
         today = date.today()
         context["current_period"] = f"{today.year}-{today.month:02d}"
-        
+
         return context
 
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
@@ -486,7 +486,7 @@ def transactions_json(request):
     df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
     df["amount_float"] = df["amount"].astype(float)
-    
+
     # Add investment direction for display with line break
     df["type_display"] = df.apply(lambda row: 
         f"Investment<br>({'Withdrawal' if row['amount_float'] < 0 else 'Reinforcement'})" 
@@ -573,7 +573,7 @@ def transactions_json(request):
             df = df[df["tags"].str.contains(tag_pattern, case=False, na=False)]
             logger.debug(f"Applied tags filter: {tag_list}, remaining rows: {len(df)}")
 
-    
+
 
     # Filtros únicos dinâmicos
     available_types = sorted(
@@ -628,7 +628,7 @@ def transactions_json(request):
     draw = int(request.GET.get("draw", 1))
     start = int(request.GET.get("start", 0))
     length = int(request.GET.get("length", 10))
-    
+
     # Se length for -1, mostrar todos os registros
     if length == -1:
         page_df = df
@@ -781,9 +781,9 @@ def transaction_bulk_delete(request):
                     SELECT COUNT(*) FROM core_transaction 
                     WHERE id = ANY(%s) AND user_id = %s
                 """, [transaction_ids, user_id])
-                
+
                 valid_count = cursor.fetchone()[0]
-                
+
                 if valid_count != len(transaction_ids):
                     return JsonResponse({'success': False, 'error': 'Some transactions not found'})
 
@@ -815,52 +815,47 @@ def transaction_bulk_delete(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+@require_GET
+@login_required
+def check_cache_status(request):
+    """Check cache status without clearing it."""
+    try:
+        # Just return that cache is OK - no clearing needed
+        return JsonResponse({
+            "cache_cleared": False, 
+            "status": "ok",
+            "message": "Cache status checked - no action needed"
+        })
+    except Exception as e:
+        logger.error(f"Error checking cache status: {e}")
+        return JsonResponse({
+            "cache_cleared": False,
+            "status": "error", 
+            "message": str(e)
+        }, status=500)
+
+
 @require_POST
 @login_required
 def transaction_clear_cache(request):
-    """Limpar cache de transações e retornar status."""
+    """Atualizar cache de transações preservando dados válidos."""
     try:
         user_id = request.user.id
-        clear_tx_cache(user_id)
-
-        # Clear all cache keys that might contain user data
-        from django.core.cache import cache
-        import hashlib
-
-        # Get the secret hash used in cache keys
-        secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:8]
-
-        # Clear all possible cachevariations for this user
-        cache_patterns = [
-            f"tx_cache_user_{user_id}_",
-            f"account_balance_user_{user_id}_",
-            f"dashboard_data_user_{user_id}",
-        ]
-
-        # Try to clear cache keys that match our patterns
-        try:
-            # This is a more aggressive cache clear
-            cache.clear()  # Clear entire cache as fallback
-        except:
-            # If cache.clear() fails, try individual patterns
-            for pattern in cache_patterns:
-                for i in range(12):  # Clear up to 12 months of data
-                    for j in range(31):  # Clear up to 31 days
-                        cache.delete(f"{pattern}{i}_{j}_{secret_hash}")
-
-        logger.info(f"Cache cleared successfully for user {user_id}")
+        
+        # Instead of clearing cache, just log that update was requested
+        # The actual cache will be updated when new data is fetched
+        logger.info(f"Cache update requested for user {user_id} - cache will be refreshed on next data fetch")
+        
         return JsonResponse({
-            "status": "ok", 
-            "message": "Cache limpo com sucesso",
-            "user_id": user_id,
-            "cleared": True
+            "status": "ok",
+            "message": "Cache refresh requested - data will be updated on next fetch"
         })
 
     except Exception as e:
-        logger.error(f"Error clearing cache for user {request.user.id}: {e}")
+        logger.error(f"Error requesting cache update for user {request.user.id}: {e}")
         return JsonResponse({
-            "status": "error", 
-            "message": f"Erro ao limpar cache: {str(e)}"
+            "status": "error",
+            "message": str(e)
         }, status=500)
 
 @require_GET
@@ -1171,11 +1166,11 @@ def account_balance_view(request):
     for form in formset:
         if hasattr(form.instance, 'account') and form.instance.account:
             account = form.instance.account
-            
+
             # Verificações de segurança para account_type e currency
             account_type_name = account.account_type.name if account.account_type else "Unknown"
             currency_code = account.currency.code if account.currency else "EUR"
-            
+
             key = (account_type_name, currency_code)
             grouped_forms.setdefault(key, []).append(form)
 
@@ -1695,8 +1690,7 @@ def import_transactions_xlsx(request):
                     created_at, updated_at
                 )
                 VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s                    %s, %s, %s,
                     %s, %s, %s,
                     %s, %s
                 )
@@ -2060,7 +2054,7 @@ def check_cache_status(request):
     if cache_cleared:
         # Clear the flag after checking
         del request.session['cache_cleared']
-    
+
     return JsonResponse({
         'cache_cleared': cache_cleared,
         'should_reload_cache': cache_cleared

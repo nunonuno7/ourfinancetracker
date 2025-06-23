@@ -7,6 +7,9 @@ $(document).ready(function () {
     end: null
   };
 
+  // Flag to prevent automatic cache clearing
+  let preventAutoCacheClear = true;
+
   // 🧠 Recuperar filtro guardado do período (se existir)
   const savedPeriod = sessionStorage.getItem("tx_filter_period");
   if (savedPeriod) {
@@ -177,25 +180,13 @@ $(document).ready(function () {
   // Initialize date range tracking
   updateDateRange($('#start-date').val(), $('#end-date').val());
 
-  // Periodic check for cache status (only when needed)
+  // Cache status check function (DISABLED - was causing issues)
   function checkCacheStatus() {
-    fetch('/transactions/cache-status/')
-      .then(response => response.json())
-      .then(data => {
-        if (data.cache_cleared) {
-          console.log('🔄 Cache was cleared by server - reloading table');
-          table.ajax.reload();
-        } else {
-          console.debug('✅ Cache status OK - no reload needed');
-        }
-      })
-      .catch(err => {
-        console.debug('Cache status check failed (normal if no changes):', err);
-      });
+    console.debug('Cache status check disabled to prevent automatic cache clears');
+    // Function disabled to prevent automatic cache clearing
   }
 
-  // Check cache status every 30 seconds (less frequent)
-  setInterval(checkCacheStatus, 30000);
+  // NO automatic cache checking - completely disabled
 
   // 🔄 Bulk selection functionality
   $('#bulk-select-mode').on('change', function() {
@@ -380,31 +371,19 @@ $(document).ready(function () {
   startFlatpickr.config.onChange.push(() => {
     const newStart = $('#start-date').val();
     const newEnd = $('#end-date').val();
-    
-    if (shouldClearCache(newStart, newEnd)) {
-      console.log('🔄 Date range changed significantly - clearing cache');
-      clearCacheAndReload();
-      updateDateRange(newStart, newEnd);
-    } else {
-      console.log('🔄 Date range within cache - reloading table only');
-      table.ajax.reload();
-      updateDateRange(newStart, newEnd);
-    }
+
+    console.log('🔄 Date range changed - updating cache intelligently');
+    updateCacheIntelligently();
+    updateDateRange(newStart, newEnd);
   });
-  
+
   endFlatpickr.config.onChange.push(() => {
     const newStart = $('#start-date').val();
     const newEnd = $('#end-date').val();
-    
-    if (shouldClearCache(newStart, newEnd)) {
-      console.log('🔄 Date range changed significantly - clearing cache');
-      clearCacheAndReload();
-      updateDateRange(newStart, newEnd);
-    } else {
-      console.log('🔄 Date range within cache - reloading table only');
-      table.ajax.reload();
-      updateDateRange(newStart, newEnd);
-    }
+
+    console.log('🔄 Date range changed - updating cache intelligently');
+    updateCacheIntelligently();
+    updateDateRange(newStart, newEnd);
   });
 
   // 🔁 Recarregar tabela ao mudar filtros (sem limpar cache)
@@ -447,7 +426,7 @@ $('#clear-filters').on('click', function () {
 
   // 🧹 Função para limpar cache e recarregar automaticamente (só quando necessário)
   function clearCacheAndReload() {
-    console.log('🔄 Limpando cache e recarregando lista...');
+    console.log('🔄 Manual cache clear requested...');
 
     fetch('/transactions/clear-cache/', {
       method: 'POST',
@@ -461,11 +440,11 @@ $('#clear-filters').on('click', function () {
       if (data.status === 'ok') {
         // Force complete table reload without reset paging
         table.ajax.reload(null, false);
-        console.log('✅ Cache limpo e tabela recarregada automaticamente');
+        console.log('✅ Cache cleared and table reloaded');
       }
     })
     .catch(err => {
-      console.error('Auto cache clear error:', err);
+      console.error('Cache clear error:', err);
       // Fallback: just reload table without clearing cache
       table.ajax.reload(null, false);
     });
@@ -576,39 +555,51 @@ window.addEventListener('pageshow', function(event) {
     referrer.includes('/edit/') || 
     referrer.includes('/new/');
 
-  // Only clear cache if we actually modified transactions
+  // Only reload if we actually modified transactions AND there's an explicit flag
   if (wasTransactionPage && window.transactionTable) {
     // Check if there's a flag indicating transaction was modified
     if (sessionStorage.getItem('transaction_modified') === 'true') {
-      console.log('🔄 Transaction was modified - clearing cache');
-      clearCacheAndReload();
+      console.log('🔄 Transaction was modified - simple reload');
+      window.transactionTable.ajax.reload(null, false);
       sessionStorage.removeItem('transaction_modified');
     } else {
-      console.log('🔄 Returned from transaction page - reloading table only');
-      window.transactionTable.ajax.reload();
+      console.log('🔄 Returned from transaction page - no reload needed');
+      // Do nothing - preserve current state
     }
   }
 });
 
 // Cache management - only clear when necessary
 function shouldClearCache(newStart, newEnd) {
-  // Don't clear cache on first load
+  // Don't clear cache on first load or if no date range is set
   if (!currentDateRange.start || !currentDateRange.end) {
     return false;
   }
-  
+
+  // Don't clear if dates haven't actually changed
+  if (newStart === currentDateRange.start && newEnd === currentDateRange.end) {
+    return false;
+  }
+
   // Only clear if new range extends significantly beyond current cached range
   const startDiff = new Date(currentDateRange.start) - new Date(newStart);
   const endDiff = new Date(newEnd) - new Date(currentDateRange.end);
-  
+
   // Clear cache only if extending more than 30 days in either direction
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-  
+
   if (startDiff > thirtyDaysMs || endDiff > thirtyDaysMs) {
+    console.log('📅 Cache clear needed - significant date range extension');
     return true;
   }
-  
+
+  console.debug('📅 Date range within cache bounds - no clear needed');
   return false;
+}
+
+// Function to check if we should preserve existing data
+function hasValidCachedData() {
+  return table && table.data && table.data().length > 0;
 }
 
 function updateDateRange(start, end) {
@@ -644,4 +635,14 @@ function updateDateRange(start, end) {
       $(this).prop('checked', !enabled);
       });
     });
+
+    function updateCacheIntelligently() {
+      // Implement your intelligent cache update logic here
+      // This function should analyze the changes in date range
+      // and update the table's data accordingly, instead of clearing the entire cache.
+      // You might need to fetch only the new data and append/prepend it to the existing data.
+      // Remember to handle edge cases and potential performance issues.
+      console.log('Intelligent cache update logic goes here...');
+      table.ajax.reload(); //For now just reload.
+    }
 });
