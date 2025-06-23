@@ -11,7 +11,7 @@ from .views import (
     import_transactions_template, transaction_clear_cache,
     export_transactions_xlsx, transaction_bulk_update,
     transaction_bulk_duplicate, transaction_bulk_delete,
-    clear_session_flag,
+    clear_session_flag, check_cache_status,
     # Categories & Tags
     CategoryListView, CategoryCreateView,
     CategoryUpdateView, CategoryDeleteView,
@@ -55,8 +55,9 @@ urlpatterns = [
     path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
+    path("transactions/cache-status/", check_cache_status, name="check_cache_status"),
     path("transactions/clear-session-flag/", clear_session_flag, name="clear_session_flag"),
-    
+
     path("transactions/bulk-update/", transaction_bulk_update, name="transaction_bulk_update"),
     path("transactions/bulk-duplicate/", transaction_bulk_duplicate, name="transaction_bulk_duplicate"),
     path("transactions/bulk-delete/", transaction_bulk_delete, name="transaction_bulk_delete"),

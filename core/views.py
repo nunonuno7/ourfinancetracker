@@ -325,14 +325,15 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
         self.object = form.save()
         logger.debug(f'📝 Criado: {self.object}')  # ✅ DEBUG no terminal
 
-        # Limpar cache imediatamente
+        # Limpar cache imediatamente (transação criada)
         clear_tx_cache(self.request.user.id)
 
-        # Adicionar flag para JavaScript saber que deve recarregar
+        # Set flags for JavaScript to know cache was cleared
         self.request.session['transaction_changed'] = True
+        self.request.session['cache_cleared'] = True
 
         if self.request.headers.get("HX-Request") == "true":
-            return JsonResponse({"success": True, "reload_needed": True})
+            return JsonResponse({"success": True, "reload_needed": True, "cache_cleared": True})
 
         messages.success(self.request, "Transação criada com sucesso!")
         return redirect(self.get_success_url())
@@ -366,11 +367,12 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
         return super().get_queryset().prefetch_related("tags")
 
     def form_valid(self, form):
-        # Limpar cache imediatamente
+        # Limpar cache imediatamente (transação editada)
         clear_tx_cache(self.request.user.id)
 
-        # Adicionar flag para JavaScript saber que deve recarregar
+        # Set flags for JavaScript to know cache was cleared
         self.request.session['transaction_changed'] = True
+        self.request.session['cache_cleared'] = True
 
         messages.success(self.request, "Transação atualizada com sucesso!")
 
@@ -401,14 +403,19 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
         # Delete the transaction
         response = super().delete(request, *args, **kwargs)
 
-        # Clear cache after deletion
+        # Clear cache after deletion (transação eliminada)
         clear_tx_cache(user_id)
+
+        # Set modification flag for frontend
+        request.session['transaction_changed'] = True
+        request.session['cache_cleared'] = True
 
         # Handle AJAX requests
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
             return JsonResponse({
                 'success': True,
-                'message': 'Transação eliminada com sucesso!'
+                'message': 'Transação eliminada com sucesso!',
+                'cache_cleared': True
             })
 
         messages.success(request, "Transação eliminada com sucesso!")
@@ -591,8 +598,8 @@ def transactions_json(request):
     order_dir = request.GET.get("order[0][dir]", "desc")
     ascending = order_dir != "desc"
     column_map = {
-        "0": "period", "1": "date", "2": "type",
-        "3": "amount_float", "4": "category", "5": "tags", "6": "account"
+        "0": "id", "1": "period", "2": "date", "3": "type",
+        "4": "amount_float", "5": "category", "6": "account", "7": "tags"
     }
     sort_col = column_map.get(order_col, "date")
     if sort_col in df.columns:
@@ -601,9 +608,9 @@ def transactions_json(request):
         except Exception:
             pass
 
-    # Formatar montantes
+    # Formatar montantes (sem duplicar o símbolo da moeda)
     df["amount"] = df.apply(
-        lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" {r['currency']}",
+        lambda r: f"{r['amount_float']:,.2f} {r['currency']}".replace(",", "X").replace(".", ",").replace("X", "."),
         axis=1
     )
 
@@ -621,7 +628,12 @@ def transactions_json(request):
     draw = int(request.GET.get("draw", 1))
     start = int(request.GET.get("start", 0))
     length = int(request.GET.get("length", 10))
-    page_df = df.iloc[start : start + length]
+    
+    # Se length for -1, mostrar todos os registros
+    if length == -1:
+        page_df = df
+    else:
+        page_df = df.iloc[start : start + length]
 
     return JsonResponse({
         "draw": draw,
@@ -751,7 +763,7 @@ def transaction_bulk_duplicate(request):
 @require_POST
 @login_required
 def transaction_bulk_delete(request):
-    """Bulk delete transactions."""
+    """Bulk delete transactions with optimized performance."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get('transaction_ids', [])
@@ -759,22 +771,38 @@ def transaction_bulk_delete(request):
         if not transaction_ids:
             return JsonResponse({'success': False, 'error': 'No transactions selected'})
 
-        # Validate transactions belong to user
-        transactions = Transaction.objects.filter(
-            id__in=transaction_ids,
-            user=request.user
-        )
-
-        if len(transactions) != len(transaction_ids):
-            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
-
-        deleted_count = len(transactions)
+        user_id = request.user.id
 
         with db_transaction.atomic():
-            transactions.delete()
+            # Use raw SQL for maximum performance
+            with connection.cursor() as cursor:
+                # First verify all transactions belong to user
+                cursor.execute("""
+                    SELECT COUNT(*) FROM core_transaction 
+                    WHERE id = ANY(%s) AND user_id = %s
+                """, [transaction_ids, user_id])
+                
+                valid_count = cursor.fetchone()[0]
+                
+                if valid_count != len(transaction_ids):
+                    return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+
+                # Delete transaction-tag relationships first (foreign key constraint)
+                cursor.execute("""
+                    DELETE FROM core_transactiontag 
+                    WHERE transaction_id = ANY(%s)
+                """, [transaction_ids])
+
+                # Delete transactions
+                cursor.execute("""
+                    DELETE FROM core_transaction 
+                    WHERE id = ANY(%s) AND user_id = %s
+                """, [transaction_ids, user_id])
+
+                deleted_count = cursor.rowcount
 
         # Clear cache after bulk delete
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(user_id)
 
         return JsonResponse({
             'success': True,
@@ -1143,7 +1171,12 @@ def account_balance_view(request):
     for form in formset:
         if hasattr(form.instance, 'account') and form.instance.account:
             account = form.instance.account
-            key = (account.account_type.name, account.currency.code)
+            
+            # Verificações de segurança para account_type e currency
+            account_type_name = account.account_type.name if account.account_type else "Unknown"
+            currency_code = account.currency.code if account.currency else "EUR"
+            
+            key = (account_type_name, currency_code)
             grouped_forms.setdefault(key, []).append(form)
 
     for key, forms in grouped_forms.items():
@@ -2016,7 +2049,22 @@ def clear_session_flag(request):
     """Limpar flag de mudança de transação da sessão."""
     if 'transaction_changed' in request.session:
         del request.session['transaction_changed']
+    if 'cache_cleared' in request.session:
+        del request.session['cache_cleared']
     return JsonResponse({'success': True})
+
+@login_required
+def check_cache_status(request):
+    """Check if cache was cleared and needs frontend update."""
+    cache_cleared = request.session.get('cache_cleared', False)
+    if cache_cleared:
+        # Clear the flag after checking
+        del request.session['cache_cleared']
+    
+    return JsonResponse({
+        'cache_cleared': cache_cleared,
+        'should_reload_cache': cache_cleared
+    })
 
 @login_required
 def dashboard_kpis_json(request):

@@ -1,6 +1,12 @@
 $(document).ready(function () {
   console.log('JavaScript carregado e $(document).ready() executado');
 
+  // Cache management - declare early to avoid initialization errors
+  let currentDateRange = {
+    start: null,
+    end: null
+  };
+
   // 🧠 Recuperar filtro guardado do período (se existir)
   const savedPeriod = sessionStorage.getItem("tx_filter_period");
   if (savedPeriod) {
@@ -61,15 +67,14 @@ $(document).ready(function () {
         d.account = clean($('#filter-account').val());
         d.category = clean($('#filter-category').val());
         d.period = clean($('#filter-period').val());
-
-        // Advanced filters
         d.amount_min = $('#filter-amount-min').val();
         d.amount_max = $('#filter-amount-max').val();
         d.tags = $('#filter-tags').val();
       }
     },
-    pageLength: 25,
-    order: [[2, 'desc']], // Adjusted for new column order
+    pageLength: 50,
+    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+    order: [[2, 'desc']], // Order by date column (index 2) in descending order
     responsive: true,
     columns: [
       { 
@@ -91,6 +96,13 @@ $(document).ready(function () {
             return `<span class="fw-bold">${data}</span>
                     <br><small class="text-muted d-md-none">${row.period}</small>`;
           }
+          if (type === 'type' || type === 'sort') {
+            // Convert DD/MM/YYYY to YYYY-MM-DD for proper sorting
+            const parts = data.split('/');
+            if (parts.length === 3) {
+              return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+          }
           return data;
         }
       },
@@ -104,11 +116,11 @@ $(document).ready(function () {
             'Investment': 'bg-primary',
             'Transfer': 'bg-warning text-dark'
           };
-          
+
           // Use type_display for investments to show direction
           const displayText = row.type_display || data;
           const badgeClass = badges[data] || 'bg-secondary';
-          
+
           return `<span class="badge ${badgeClass}">${displayText}</span>`;
         }
       },
@@ -125,6 +137,7 @@ $(document).ready(function () {
         }
       },
       { data: 'category', orderable: true, className: 'd-none d-lg-table-cell' },
+      { data: 'account', orderable: true, className: 'd-none d-md-table-cell' },
       { 
         data: 'tags', 
         orderable: false, 
@@ -136,7 +149,6 @@ $(document).ready(function () {
           ).join('');
         }
       },
-      { data: 'account', orderable: true, className: 'd-none d-md-table-cell' },
       { 
         data: 'actions', 
         orderable: false,
@@ -161,6 +173,29 @@ $(document).ready(function () {
   });
 
   window.transactionTable = table;
+
+  // Initialize date range tracking
+  updateDateRange($('#start-date').val(), $('#end-date').val());
+
+  // Periodic check for cache status (only when needed)
+  function checkCacheStatus() {
+    fetch('/transactions/cache-status/')
+      .then(response => response.json())
+      .then(data => {
+        if (data.cache_cleared) {
+          console.log('🔄 Cache was cleared by server - reloading table');
+          table.ajax.reload();
+        } else {
+          console.debug('✅ Cache status OK - no reload needed');
+        }
+      })
+      .catch(err => {
+        console.debug('Cache status check failed (normal if no changes):', err);
+      });
+  }
+
+  // Check cache status every 30 seconds (less frequent)
+  setInterval(checkCacheStatus, 30000);
 
   // 🔄 Bulk selection functionality
   $('#bulk-select-mode').on('change', function() {
@@ -327,12 +362,12 @@ $(document).ready(function () {
     $('#modal-edit-btn').attr('href', `/transactions/${transactionId}/edit/`);
   });
 
-  // Advanced filters with debounce for better performance
+  // Advanced filters with debounce for better performance (no cache clear)
   let filterTimeout;
   $('#filter-amount-min, #filter-amount-max, #filter-tags').on('change input', function() {
     clearTimeout(filterTimeout);
     filterTimeout = setTimeout(() => {
-      console.log('🔍 Advanced filter applied:', {
+      console.log('🔍 Advanced filter applied (no cache clear):', {
         amount_min: $('#filter-amount-min').val(),
         amount_max: $('#filter-amount-max').val(),
         tags: $('#filter-tags').val()
@@ -341,19 +376,47 @@ $(document).ready(function () {
     }, 500); // 500ms debounce
   });
 
-  // 🔄 Recarregar tabela ao mudar datas
-  startFlatpickr.config.onChange.push(() => table.ajax.reload());
-  endFlatpickr.config.onChange.push(() => table.ajax.reload());
+  // 🔄 Recarregar tabela ao mudar datas (com cache inteligente)
+  startFlatpickr.config.onChange.push(() => {
+    const newStart = $('#start-date').val();
+    const newEnd = $('#end-date').val();
+    
+    if (shouldClearCache(newStart, newEnd)) {
+      console.log('🔄 Date range changed significantly - clearing cache');
+      clearCacheAndReload();
+      updateDateRange(newStart, newEnd);
+    } else {
+      console.log('🔄 Date range within cache - reloading table only');
+      table.ajax.reload();
+      updateDateRange(newStart, newEnd);
+    }
+  });
+  
+  endFlatpickr.config.onChange.push(() => {
+    const newStart = $('#start-date').val();
+    const newEnd = $('#end-date').val();
+    
+    if (shouldClearCache(newStart, newEnd)) {
+      console.log('🔄 Date range changed significantly - clearing cache');
+      clearCacheAndReload();
+      updateDateRange(newStart, newEnd);
+    } else {
+      console.log('🔄 Date range within cache - reloading table only');
+      table.ajax.reload();
+      updateDateRange(newStart, newEnd);
+    }
+  });
 
-  // 🔁 Recarregar tabela ao mudar filtros
+  // 🔁 Recarregar tabela ao mudar filtros (sem limpar cache)
   $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
     if (this.id === 'filter-period') {
       sessionStorage.setItem("tx_filter_period", $(this).val());
     }
+    console.log('🔄 Filter changed - reloading table without cache clear');
     table.ajax.reload();
   });
 
-  // 🧼 Clear Filters
+// 🧼 Clear Filters
 $('#clear-filters').on('click', function () {
   // Clear dropdown filters
   $('#filter-type').val('');
@@ -373,7 +436,16 @@ $('#clear-filters').on('click', function () {
   table.ajax.reload();
 });
 
-  // 🧹 Função para limpar cache e recarregar automaticamente
+  // 📋 Show all entries
+  $('#show-all-entries').on('click', function() {
+    table.page.len(-1).draw();
+    $(this).html('<i class="fas fa-check"></i> Showing All');
+    setTimeout(() => {
+      $(this).html('<i class="fas fa-list"></i> Show All Entries');
+    }, 2000);
+  });
+
+  // 🧹 Função para limpar cache e recarregar automaticamente (só quando necessário)
   function clearCacheAndReload() {
     console.log('🔄 Limpando cache e recarregando lista...');
 
@@ -394,6 +466,8 @@ $('#clear-filters').on('click', function () {
     })
     .catch(err => {
       console.error('Auto cache clear error:', err);
+      // Fallback: just reload table without clearing cache
+      table.ajax.reload(null, false);
     });
   }
 
@@ -495,42 +569,52 @@ $(document).on('submit', 'form[action*="/delete/"]', function(e) {
   });
 });
 
-// 🔄 Auto-reload quando regressa de páginas de edição/criação/eliminação
+// 🔄 Auto-reload quando regressa de páginas de edição/criação/eliminação (só se transação foi alterada)
 window.addEventListener('pageshow', function(event) {
   const referrer = document.referrer;
-  const shouldReload = event.persisted || 
-    referrer.includes('/delete/') || 
+  const wasTransactionPage = referrer.includes('/delete/') || 
     referrer.includes('/edit/') || 
     referrer.includes('/new/');
 
-  if (shouldReload && window.transactionTable) {
-    console.log('🔄 Página regressou de operação, limpando cache...');
-    clearCacheAndReload();
+  // Only clear cache if we actually modified transactions
+  if (wasTransactionPage && window.transactionTable) {
+    // Check if there's a flag indicating transaction was modified
+    if (sessionStorage.getItem('transaction_modified') === 'true') {
+      console.log('🔄 Transaction was modified - clearing cache');
+      clearCacheAndReload();
+      sessionStorage.removeItem('transaction_modified');
+    } else {
+      console.log('🔄 Returned from transaction page - reloading table only');
+      window.transactionTable.ajax.reload();
+    }
   }
 });
 
-// 🔄 Auto-reload a cada 30 segundos se houver atividade
-let autoReloadInterval;
-function startAutoReload() {
-  // Clear existing interval
-  if (autoReloadInterval) {
-    clearInterval(autoReloadInterval);
+// Cache management - only clear when necessary
+function shouldClearCache(newStart, newEnd) {
+  // Don't clear cache on first load
+  if (!currentDateRange.start || !currentDateRange.end) {
+    return false;
   }
-
-  // Set up new interval
-  autoReloadInterval = setInterval(() => {
-    console.log('🔄 Auto-reload periódico da lista de transações');
-    clearCacheAndReload();
-  }, 30000); // 30 segundos
+  
+  // Only clear if new range extends significantly beyond current cached range
+  const startDiff = new Date(currentDateRange.start) - new Date(newStart);
+  const endDiff = new Date(newEnd) - new Date(currentDateRange.end);
+  
+  // Clear cache only if extending more than 30 days in either direction
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  
+  if (startDiff > thirtyDaysMs || endDiff > thirtyDaysMs) {
+    return true;
+  }
+  
+  return false;
 }
 
-// Start auto-reload
-startAutoReload();
-
-// Reset auto-reload timer on user activity
-$(document).on('click keypress', function() {
-  startAutoReload();
-});
+function updateDateRange(start, end) {
+  currentDateRange.start = start;
+  currentDateRange.end = end;
+}
 
   // 💰 Cash auto-update toggle
   $('#cash-auto-update').on('change', function() {
