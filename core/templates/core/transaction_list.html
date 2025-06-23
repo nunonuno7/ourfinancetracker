@@ -18,6 +18,7 @@
       <a href="#" class="btn btn-outline-secondary" id="clear-cache-btn" title="Limpar cache">
         🧹 Limpar cache
       </a>
+
       <a href="{% url 'transaction_create' %}" class="btn btn-success">➕ New Transaction</a>
     </div>
   </div>
@@ -38,7 +39,7 @@
 
   <!-- Filtros adicionais -->
   <div class="row g-3 mb-3">
-    <div class="col-md-3">
+    <div class="col-md-3 col-sm-6">
       <label for="filter-type" class="form-label">Type</label>
       <select id="filter-type" name="filter-type" class="form-select">
         <option value="">All Types</option>
@@ -49,7 +50,7 @@
       </select>
     </div>
 
-    <div class="col-md-3">
+    <div class="col-md-3 col-sm-6">
       <label for="filter-account" class="form-label">Account</label>
       <select id="filter-account" name="filter-account" class="form-select">
         <option value="">All Accounts</option>
@@ -59,14 +60,14 @@
       </select>
     </div>
 
-    <div class="col-md-3">
+    <div class="col-md-3 col-sm-6">
       <label for="filter-category" class="form-label">Category</label>
       <select id="filter-category" name="filter-category" class="form-select">
         <option value="">All Categories</option>
       </select>
     </div>
 
-    <div class="col-md-3">
+    <div class="col-md-3 col-sm-6">
       <label for="filter-period" class="form-label">Period</label>
       <select id="filter-period" name="filter-period" class="form-select">
         <option value="">All Periods</option>
@@ -79,11 +80,56 @@
     </div>
   </div>
 
+  <!-- Filtros avançados -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-3 col-sm-6">
+      <label for="filter-amount-min" class="form-label">Min Amount</label>
+      <input type="number" id="filter-amount-min" class="form-control" 
+             placeholder="0.00" step="0.01" min="0">
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <label for="filter-amount-max" class="form-label">Max Amount</label>
+      <input type="number" id="filter-amount-max" class="form-control" 
+             placeholder="999999.99" step="0.01" min="0">
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <label for="filter-tags" class="form-label">Tags</label>
+      <input type="text" id="filter-tags" class="form-control" 
+             placeholder="tag1, tag2..." data-bs-toggle="tooltip" 
+             title="Separate multiple tags with commas">
+    </div>
+  </div>
+
   <!-- Botões de ação -->
-  <div class="d-flex align-items-center gap-2 mb-3">
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <button id="clear-filters" class="btn btn-outline-danger">
       <i class="fas fa-times-circle"></i> Clear Filters
     </button>
+
+    <div class="btn-group" role="group">
+      <input type="checkbox" class="btn-check" id="bulk-select-mode" autocomplete="off">
+      <label class="btn btn-outline-primary" for="bulk-select-mode">
+        <i class="fas fa-check-square"></i> Bulk Select
+      </label>
+    </div>
+
+    <div id="bulk-actions" class="btn-group d-none" role="group">
+      <button type="button" class="btn btn-outline-success" id="bulk-mark-cleared">
+        <i class="fas fa-check"></i> Mark Cleared
+      </button>
+      <button type="button" class="btn btn-outline-warning" id="bulk-duplicate">
+        <i class="fas fa-copy"></i> Duplicate
+      </button>
+      <button type="button" class="btn btn-outline-danger" id="bulk-delete">
+        <i class="fas fa-trash"></i> Delete Selected
+      </button>
+    </div>
+
+    <div class="ms-auto">
+      <small class="text-muted" id="results-count">Loading...</small>
+    </div>
   </div>
 
   <!-- Tabela -->
@@ -91,20 +137,42 @@
     <table id="transaction-table" class="table table-bordered table-hover align-middle" style="width: 100%">
       <thead class="table-light">
         <tr>
-          <th>Period</th>
+          <th style="width: 40px;">
+            <input type="checkbox" class="form-check-input" id="select-all" style="display: none;">
+          </th>
+          <th class="d-none d-md-table-cell">Period</th>
           <th>Date</th>
           <th>Type</th>
           <th>Amount</th>
-          <th>Category</th>
-          <th>Tags</th>
-          <th>Account</th>
-          <th class="text-center" style="width: 140px;">Actions</th>
+          <th class="d-none d-lg-table-cell">Category</th>
+          <th class="d-none d-xl-table-cell">Tags</th>
+          <th class="d-none d-md-table-cell">Account</th>
+          <th class="text-center" style="width: 100px;">Actions</th>
         </tr>
       </thead>
       <tbody>
         <!-- AJAX -->
       </tbody>
     </table>
+  </div>
+
+  <!-- Modal para visualização completa em mobile -->
+  <div class="modal fade" id="transactionModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Transaction Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="transaction-details">
+          <!-- Populated by JavaScript -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <a href="#" class="btn btn-primary" id="modal-edit-btn">Edit</a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -127,8 +195,76 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
+<!-- Custom CSS for improved UX -->
+<style>
+@media (max-width: 768px) {
+  .table-responsive {
+    font-size: 0.9rem;
+  }
+
+  .btn-group .btn {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .badge {
+    font-size: 0.7rem;
+  }
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+.row-select {
+  cursor: pointer;
+}
+
+#bulk-actions {
+  transition: all 0.3s ease;
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba(0, 123, 255, 0.1);
+}
+
+.transaction-amount {
+  font-family: 'Courier New', monospace;
+}
+</style>
+
 <!-- Scripts do projeto -->
 <script src="{% static 'js/transaction_list_ajax.js' %}"></script>
 <script src="{% static 'js/main.js' %}"></script>
+
+<!-- Initialize tooltips -->
+<script>
+$(document).ready(function() {
+  $('[data-bs-toggle="tooltip"]').tooltip();
+});
+</script>
+
+<script>
+// 🔄 Verificar se houve mudanças e recarregar se necessário
+$(document).ready(function() {
+  // Verificar se há flag de mudança na sessão
+  {% if request.session.transaction_changed %}
+    console.log('🔄 Transação foi alterada, recarregando lista...');
+    if (window.transactionTable) {
+      // Usar setTimeout para garantir que a tabela está inicializada
+      setTimeout(() => {
+        window.transactionTable.ajax.reload(null, false);
+      }, 500);
+    }
+
+    // Limpar flag da sessão via AJAX
+    fetch('/transactions/clear-session-flag/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+      },
+    });
+  {% endif %}
+});
+</script>
 
 {% endblock %}

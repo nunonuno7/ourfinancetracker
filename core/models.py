@@ -286,7 +286,6 @@ class Transaction(models.Model):
 
     notes = models.TextField(blank=True)
     is_estimated = models.BooleanField(default=False)
-    is_cleared = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

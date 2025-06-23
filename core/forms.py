@@ -94,7 +94,7 @@ class TransactionForm(forms.ModelForm):
 
     class Meta:
         model = Transaction
-        fields = ["date", "type", "amount", "account", "category", "tags_input", "notes", "is_cleared"]
+        fields = ["date", "type", "amount", "account", "category", "tags_input", "notes"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "type": forms.Select(attrs={"class": "form-select"}),
@@ -105,7 +105,6 @@ class TransactionForm(forms.ModelForm):
                 "id": "id_amount",
             }),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": "3", "style": "height:5em;"}),
-            "is_cleared": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, user: User = None, **kwargs):

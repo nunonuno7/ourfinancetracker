@@ -82,7 +82,7 @@ def parse_safe_date(value: str | None, fallback: date) -> date:
     """
     if not value:
         return fallback
-        
+
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m"):
         try:
             parsed = datetime.strptime(value.strip(), fmt)
@@ -101,22 +101,22 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
     Mixin seguro que limita queryset apenas a objetos do utilizador atual.
     Inclui verificação adicional de segurança.
     """
-    
+
     def get_queryset(self) -> QuerySet:
         """Filtra queryset apenas para objetos do utilizador atual."""
         if not self.request.user.is_authenticated:
             raise PermissionDenied("User must be authenticated")
-            
+
         qs = super().get_queryset()
         return qs.filter(user=self.request.user)
-    
+
     def get_object(self, queryset=None):
         """Garante que o objeto pertence ao utilizador atual."""
         obj = super().get_object(queryset)
-        
+
         if hasattr(obj, 'user') and obj.user != self.request.user:
             raise PermissionDenied("You don't have permission to access this object")
-            
+
         return obj
 
 
@@ -134,7 +134,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         # Períodos disponíveis
         ctx["periods"] = DatePeriod.objects.order_by("-year", "-month")
-        
+
         # Filtros de período
         start_period = self.request.GET.get("start-period")
         end_period = self.request.GET.get("end-period")
@@ -152,7 +152,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 ORDER BY dp.year, dp.month
             """, [user.id])
             tx_rows = cursor.fetchall()
-            
+
             # Saldos das contas
             cursor.execute("""
                 SELECT 
@@ -191,7 +191,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         df_saving = df_bal[df_bal["account_type"].str.lower() == "savings"]
         saving_mes = df_saving.groupby("period")["reported_balance"].sum().astype(float)
-        
+
         # Cálculo estimado de despesas
         periods = sorted(set(receita_mes.index) & set(saving_mes.index))
         despesas_estimadas = []
@@ -297,6 +297,22 @@ class TransactionListView(LoginRequiredMixin, ListView):
             .order_by("-date", "-id")
         )
 
+    def get_context_data(self, **kwargs):
+        """Add additional context for filters."""
+        context = super().get_context_data(**kwargs)
+        
+        # Get available periods for the filter dropdown
+        periods = DatePeriod.objects.order_by("-year", "-month")
+        context["period_options"] = [
+            f"{p.year}-{p.month:02d}" for p in periods
+        ]
+        
+        # Set current period (current month by default)
+        today = date.today()
+        context["current_period"] = f"{today.year}-{today.month:02d}"
+        
+        return context
+
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     """Criar nova transação com validação de segurança."""
     model = Transaction
@@ -307,27 +323,32 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     def form_valid(self, form):
         """Processar formulário válido e limpar cache."""
         self.object = form.save()
-        logger.debug('📝 Criado:', self.object)  # ✅ DEBUG no terminal
+        logger.debug(f'📝 Criado: {self.object}')  # ✅ DEBUG no terminal
+
+        # Limpar cache imediatamente
         clear_tx_cache(self.request.user.id)
 
+        # Adicionar flag para JavaScript saber que deve recarregar
+        self.request.session['transaction_changed'] = True
+
         if self.request.headers.get("HX-Request") == "true":
-            return JsonResponse({"success": True})
-        
+            return JsonResponse({"success": True, "reload_needed": True})
+
         messages.success(self.request, "Transação criada com sucesso!")
         return redirect(self.get_success_url())
 
     def form_invalid(self, form):
         """Processar formulário inválido."""
-        logger.debug("❌ Formulário inválido:", form.errors)  # DEBUG
+        logger.debug(f"❌ Formulário inválido: {form.errors}")  # DEBUG
         if self.request.headers.get("HX-Request") == "true":
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
         return super().form_invalid(form)
-    
+
     def get_context_data(self, **kwargs):
         """Adicionar contexto seguro."""
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        
+
         context["accounts"] = Account.objects.filter(user=user).order_by("name")
         context["category_list"] = list(
             Category.objects.filter(user=user).values_list("name", flat=True)
@@ -345,9 +366,14 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
         return super().get_queryset().prefetch_related("tags")
 
     def form_valid(self, form):
+        # Limpar cache imediatamente
         clear_tx_cache(self.request.user.id)
+
+        # Adicionar flag para JavaScript saber que deve recarregar
+        self.request.session['transaction_changed'] = True
+
         messages.success(self.request, "Transação atualizada com sucesso!")
-        
+
         response = super().form_valid(form)
         if self.request.headers.get("HX-Request") == "true":
             context = self.get_context_data(form=form)
@@ -371,12 +397,33 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
         user_id = self.object.user_id
-        
+
+        # Delete the transaction
         response = super().delete(request, *args, **kwargs)
+
+        # Clear cache after deletion
         clear_tx_cache(user_id)
+
+        # Handle AJAX requests
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
+            return JsonResponse({
+                'success': True,
+                'message': 'Transação eliminada com sucesso!'
+            })
+
         messages.success(request, "Transação eliminada com sucesso!")
-        
         return response
+
+    def post(self, request, *args, **kwargs):
+        """Override post to handle both AJAX and regular form submissions."""
+        self.object = self.get_object()
+
+        # For AJAX requests, delete immediately
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self.delete(request, *args, **kwargs)
+
+        # For regular requests, use standard flow
+        return super().post(request, *args, **kwargs)
 
 
 
@@ -432,6 +479,14 @@ def transactions_json(request):
     df["period"] = df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
     df["type"] = df["type"].map(dict(Transaction.Type.choices)).fillna(df["type"])
     df["amount_float"] = df["amount"].astype(float)
+    
+    # Add investment direction for display with line break
+    df["type_display"] = df.apply(lambda row: 
+        f"Investment<br>({'Withdrawal' if row['amount_float'] < 0 else 'Reinforcement'})" 
+        if row['type'] == 'Investment' 
+        else row['type'], 
+        axis=1
+    )
 
     # Filtros GET
     tx_type = request.GET.get("type", "").strip()
@@ -439,6 +494,11 @@ def transactions_json(request):
     account = request.GET.get("account", "").strip()
     period = request.GET.get("period", "").strip()
     search = request.GET.get("search[value]", "").strip()
+
+    # Advanced filters
+    amount_min = request.GET.get("amount_min", "").strip()
+    amount_max = request.GET.get("amount_max", "").strip()
+    tags_filter = request.GET.get("tags", "").strip()
 
     df_for_type = df.copy()
     df_for_category = df.copy()
@@ -480,6 +540,33 @@ def transactions_json(request):
             df["type"].str.contains(search, case=False, na=False) |
             df["tags"].str.contains(search, case=False, na=False)
         ]
+
+    # Advanced filters
+    if amount_min:
+        try:
+            min_val = float(amount_min)
+            df = df[df["amount_float"] >= min_val]
+            logger.debug(f"Applied amount_min filter: {min_val}, remaining rows: {len(df)}")
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid amount_min value: {amount_min}")
+
+    if amount_max:
+        try:
+            max_val = float(amount_max)
+            df = df[df["amount_float"] <= max_val]
+            logger.debug(f"Applied amount_max filter: {max_val}, remaining rows: {len(df)}")
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid amount_max value: {amount_max}")
+
+    if tags_filter:
+        tag_list = [t.strip().lower() for t in tags_filter.split(",") if t.strip()]
+        if tag_list:
+            # Use regex to match any of the tags
+            tag_pattern = '|'.join(tag_list)
+            df = df[df["tags"].str.contains(tag_pattern, case=False, na=False)]
+            logger.debug(f"Applied tags filter: {tag_list}, remaining rows: {len(df)}")
+
+    
 
     # Filtros únicos dinâmicos
     available_types = sorted(
@@ -552,10 +639,201 @@ def transactions_json(request):
 
 
 
+@require_POST
+@login_required
+def transaction_bulk_update(request):
+    """Bulk update transactions (mark as cleared, etc.)."""
+    try:
+        data = json.loads(request.body)
+        action = data.get('action')
+        transaction_ids = data.get('transaction_ids', [])
+
+        if not transaction_ids:
+            return JsonResponse({'success': False, 'error': 'No transactions selected'})
+
+        # Validate transactions belong to user
+        transactions = Transaction.objects.filter(
+            id__in=transaction_ids, 
+            user=request.user
+        )
+
+        if len(transactions) != len(transaction_ids):
+            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+
+        updated = 0
+        if action == 'mark_cleared':
+            updated = transactions.update(is_cleared=True)
+        elif action == 'mark_uncleared':
+            updated = transactions.update(is_cleared=False)
+        elif action == 'mark_estimated':
+            updated = transactions.update(is_estimated=True)
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid action'})
+
+        # Clear cache after bulk update
+        clear_tx_cache(request.user.id)
+
+        return JsonResponse({
+            'success': True, 
+            'updated': updated,
+            'message': f'{updated} transactions updated'
+        })
+
+    except Exception as e:
+        logger.error(f"Bulk update error for user {request.user.id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_POST
+@login_required  
+def transaction_bulk_duplicate(request):
+    """Bulk duplicate transactions."""
+    try:
+        data = json.loads(request.body)
+        transaction_ids = data.get('transaction_ids', [])
+
+        if not transaction_ids:
+            return JsonResponse({'success': False, 'error': 'No transactions selected'})
+
+        # Get original transactions
+        transactions = Transaction.objects.filter(
+            id__in=transaction_ids,
+            user=request.user
+        ).select_related('category', 'account', 'period')
+
+        if len(transactions) != len(transaction_ids):
+            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+
+        created = 0
+        today = date.today()
+        current_period, _ = DatePeriod.objects.get_or_create(
+            year=today.year,
+            month=today.month,
+            defaults={'label': today.strftime('%B %Y')}
+        )
+
+        with db_transaction.atomic():
+            for tx in transactions:
+                # Create duplicate with today's date
+                new_tx = Transaction.objects.create(
+                    user=tx.user,
+                    type=tx.type,
+                    amount=tx.amount,
+                    date=today,
+                    notes=f"Duplicate of transaction from {tx.date}",
+                    is_cleared=False,
+                    is_estimated=tx.is_estimated,
+                    period=current_period,
+                    account=tx.account,
+                    category=tx.category
+                )
+
+                # Copy tags
+                for tag in tx.tags.all():
+                    new_tx.tags.add(tag)
+
+                created += 1
+
+        # Clear cache after bulk create
+        clear_tx_cache(request.user.id)
+
+        return JsonResponse({
+            'success': True,
+            'created': created,
+            'message': f'{created} transactions duplicated'
+        })
+
+    except Exception as e:
+        logger.error(f"Bulk duplicate error for user {request.user.id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_POST
+@login_required
+def transaction_bulk_delete(request):
+    """Bulk delete transactions."""
+    try:
+        data = json.loads(request.body)
+        transaction_ids = data.get('transaction_ids', [])
+
+        if not transaction_ids:
+            return JsonResponse({'success': False, 'error': 'No transactions selected'})
+
+        # Validate transactions belong to user
+        transactions = Transaction.objects.filter(
+            id__in=transaction_ids,
+            user=request.user
+        )
+
+        if len(transactions) != len(transaction_ids):
+            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+
+        deleted_count = len(transactions)
+
+        with db_transaction.atomic():
+            transactions.delete()
+
+        # Clear cache after bulk delete
+        clear_tx_cache(request.user.id)
+
+        return JsonResponse({
+            'success': True,
+            'deleted': deleted_count,
+            'message': f'{deleted_count} transactions deleted'
+        })
+
+    except Exception as e:
+        logger.error(f"Bulk delete error for user {request.user.id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_POST
 @login_required
 def transaction_clear_cache(request):
-    clear_tx_cache(request.user.id)
-    return JsonResponse({"status": "ok"})
+    """Limpar cache de transações e retornar status."""
+    try:
+        user_id = request.user.id
+        clear_tx_cache(user_id)
+
+        # Clear all cache keys that might contain user data
+        from django.core.cache import cache
+        import hashlib
+
+        # Get the secret hash used in cache keys
+        secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:8]
+
+        # Clear all possible cachevariations for this user
+        cache_patterns = [
+            f"tx_cache_user_{user_id}_",
+            f"account_balance_user_{user_id}_",
+            f"dashboard_data_user_{user_id}",
+        ]
+
+        # Try to clear cache keys that match our patterns
+        try:
+            # This is a more aggressive cache clear
+            cache.clear()  # Clear entire cache as fallback
+        except:
+            # If cache.clear() fails, try individual patterns
+            for pattern in cache_patterns:
+                for i in range(12):  # Clear up to 12 months of data
+                    for j in range(31):  # Clear up to 31 days
+                        cache.delete(f"{pattern}{i}_{j}_{secret_hash}")
+
+        logger.info(f"Cache cleared successfully for user {user_id}")
+        return JsonResponse({
+            "status": "ok", 
+            "message": "Cache limpo com sucesso",
+            "user_id": user_id,
+            "cleared": True
+        })
+
+    except Exception as e:
+        logger.error(f"Error clearing cache for user {request.user.id}: {e}")
+        return JsonResponse({
+            "status": "error", 
+            "message": f"Erro ao limpar cache: {str(e)}"
+        }, status=500)
 
 @require_GET
 @login_required
@@ -635,7 +913,7 @@ class CategoryDeleteView(OwnerQuerysetMixin, DeleteView):
             Transaction.objects.filter(category=self.object).delete()
             self.object.delete()
             messages.success(request, "✅ Category and all its transactions were deleted.")
-            
+
         elif option == "move_to_other":
             fallback = Category.get_fallback(request.user)
 
@@ -795,7 +1073,7 @@ def account_balance_view(request):
     try:
         year = int(request.GET.get("year", today.year))
         month = int(request.GET.get("month", today.month))
-        
+
         if month < 1 or month > 12:
             messages.error(request, "Mês inválido.")
             month = today.month
@@ -921,7 +1199,7 @@ def signup(request):
             messages.error(request, "Erro na validação do formulário.")
     else:
         form = CustomUserCreationForm()
-    
+
     return render(request, "registration/signup.html", {"form": form})
 
 
@@ -940,13 +1218,13 @@ class HomeView(TemplateView):
     Redireciona utilizadores autenticados para o dashboard.
     """
     template_name = "core/home.html"
-    
+
     def get(self, request, *args, **kwargs):
         # Se utilizador autenticado, redirecionar para dashboard
         if request.user.is_authenticated:
             return redirect('dashboard')
         return super().get(request, *args, **kwargs)
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['title'] = 'OurFinanceTracker - Gestão Financeira Pessoal'
@@ -1026,7 +1304,7 @@ def move_account_up(request, pk):
         user=request.user, 
         position__lt=account.position
     ).order_by("-position").first()
-    
+
     if above:
         account.position, above.position = above.position, account.position
         account.save()
@@ -1042,7 +1320,7 @@ def move_account_down(request, pk):
         user=request.user, 
         position__gt=account.position
     ).order_by("position").first()
-    
+
     if below:
         account.position, below.position = below.position, account.position
         account.save()
@@ -1721,10 +1999,10 @@ def api_jwt_my_transactions(request):
             WHERE t.user_id = %s
             ORDER BY t.date DESC
         """, [user_id])
-        
+
         columns = [col[0] for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    
+
     return JsonResponse(rows, safe=False)
 
 
@@ -1732,11 +2010,19 @@ def api_jwt_my_transactions(request):
 # FIM DO FICHEIRO
 # ==============================================================================
 
+@require_POST
+@login_required
+def clear_session_flag(request):
+    """Limpar flag de mudança de transação da sessão."""
+    if 'transaction_changed' in request.session:
+        del request.session['transaction_changed']
+    return JsonResponse({'success': True})
+
 @login_required
 def dashboard_kpis_json(request):
     """
     API JSON para KPIs do dashboard - função em falta no views.py original.
-    
+
     Esta função calcula e retorna indicadores financeiros principais:
     - Patrimônio total atual
     - Receita média mensal
@@ -1745,7 +2031,7 @@ def dashboard_kpis_json(request):
     - Taxa de crescimento patrimonial
     """
     user_id = request.user.id
-    
+
     try:
         with connection.cursor() as cursor:
             # Query para obter dados financeiros agregados
@@ -1793,9 +2079,9 @@ def dashboard_kpis_json(request):
                 ORDER BY md.year DESC, md.month DESC
                 LIMIT 12
             """, [user_id, user_id, user_id])
-            
+
             rows = cursor.fetchall()
-            
+
         if not rows:
             # Retornar valores default se não há dados
             return JsonResponse({
@@ -1807,27 +2093,27 @@ def dashboard_kpis_json(request):
                 "num_meses": 0,
                 "status": "no_data"
             })
-        
+
         # Processar dados para cálculos
         df = pd.DataFrame(rows, columns=['year', 'month', 'income', 'expenses', 'patrimonio', 'savings'])
         df = df.fillna(0)
-        
+
         # KPIs principais
         patrimonio_atual = float(df['patrimonio'].iloc[0]) if len(df) > 0 else 0
         receita_media = float(df['income'].mean())
         despesa_media = float(df['expenses'].mean())
-        
+
         # Cálculo de poupança média
         df['poupanca_mensal'] = df['income'] - df['expenses']
         poupanca_media = float(df['poupanca_mensal'].mean())
-        
+
         # Crescimento patrimonial (diferença entre primeiro e último)
         if len(df) > 1:
             patrimonio_inicial = float(df['patrimonio'].iloc[-1])  # Mais antigo
             crescimento = patrimonio_atual - patrimonio_inicial
         else:
             crescimento = 0
-            
+
         # Formatação para display
         return JsonResponse({
             "patrimonio_atual": f"{patrimonio_atual:,.0f} €".replace(",", "."),
@@ -1838,7 +2124,7 @@ def dashboard_kpis_json(request):
             "num_meses": len(df),
             "status": "success"
         })
-        
+
     except Exception as e:
         # Log do erro e retorno de valores safe
         return JsonResponse({

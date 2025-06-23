@@ -127,12 +127,6 @@
           {{ form.notes|add_class:"form-control" }}
         </div>
 
-        <!-- IS CLEARED -->
-        <div class="form-check mb-3">
-          {{ form.is_cleared|add_class:"form-check-input" }}
-          <label for="{{ form.is_cleared.id_for_label }}" class="form-check-label">Is cleared</label>
-        </div>
-
         <!-- ACTIONS -->
         <div class="d-flex justify-content-between">
           <a href="{% url 'transaction_list' %}" class="btn btn-outline-secondary">← Back</a>
