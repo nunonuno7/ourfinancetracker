@@ -10,11 +10,17 @@ class TransactionManager {
     this.selectedRows = new Set();
     this.bulkMode = false;
     this.maxPageSize = 1000; // Limite máximo de segurança
+    
+    // Sorting state
+    this.sortField = 'date';
+    this.sortDirection = 'desc'; // 'asc' or 'desc'
 
     console.log('⚙️ [TransactionManager] Configuração inicial:', {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
-      cacheSize: this.cache.size
+      cacheSize: this.cache.size,
+      sortField: this.sortField,
+      sortDirection: this.sortDirection
     });
 
     this.init();
@@ -37,6 +43,10 @@ class TransactionManager {
 
     this.loadTransactions();
     this.loadTotals();
+    
+    // Initialize sort indicators
+    this.updateSortIndicators();
+    
     console.log('✅ [init] Inicialização completa finalizada');
   }
 
@@ -93,6 +103,9 @@ class TransactionManager {
     // Row selection
     $(document).on('change', '.row-select', (e) => this.handleRowSelect(e));
     $(document).on('click', '.transaction-row', (e) => this.handleRowClick(e));
+
+    // Column sorting
+    $(document).on('click', '.sortable-header', (e) => this.handleSort(e));
   }
 
   debounce(func, wait) {
@@ -185,7 +198,9 @@ class TransactionManager {
       tags: $('#filter-tags').val(),
       search: $('#global-search').val(),
       page: this.currentPage,
-      page_size: this.pageSize
+      page_size: this.pageSize,
+      sort_field: this.sortField,
+      sort_direction: this.sortDirection
     };
   }
 
@@ -463,8 +478,21 @@ class TransactionManager {
   }
 
   createTransactionRow(tx, index) {
-    const amountClass = tx.amount >= 0 ? 'amount-positive' : 'amount-negative';
+    // Display expenses as negative values
+    const displayAmount = tx.type === 'Expense' ? -Math.abs(tx.amount) : tx.amount;
+    const amountClass = displayAmount >= 0 ? 'amount-positive' : 'amount-negative';
     const typeIcon = this.getTypeIcon(tx.type);
+    
+    // Create type display with investment flow
+    let typeDisplay = `${typeIcon} ${tx.type}`;
+    if (tx.type === 'Investment' && tx.investment_flow) {
+      const flowIcon = tx.investment_flow === 'Withdrawal' ? '📤' : '💰';
+      typeDisplay = `${typeIcon} Investment<br><small class="d-block">${flowIcon} ${tx.investment_flow}</small>`;
+    }
+    
+    // Format amount for display (expenses show negative)
+    const formattedAmount = tx.type === 'Expense' ? 
+      this.formatDisplayAmount(displayAmount) : tx.amount_formatted;
 
     return `
       <tr class="transaction-row" data-id="${tx.id}">
@@ -482,12 +510,12 @@ class TransactionManager {
         </td>
         <td>
           <span class="badge ${this.getTypeBadgeClass(tx.type)}">
-            ${typeIcon} ${tx.type}
+            ${typeDisplay}
           </span>
         </td>
         <td>
           <span class="transaction-amount ${amountClass}">
-            ${tx.amount_formatted}
+            ${formattedAmount}
           </span>
         </td>
         <td class="d-none d-lg-table-cell">
@@ -540,8 +568,8 @@ class TransactionManager {
 
     const income = this.formatCurrency(totals.income || 0);
     const expenses = this.formatCurrency(totals.expenses || 0);
-    const investments = this.formatCurrency(totals.investments || 0);
-    const balance = this.formatCurrency(totals.balance || 0);
+    const investments = this.formatCurrencyPortuguese(totals.investments || 0);
+    const balance = this.formatCurrencyPortuguese(totals.balance || 0);
 
     console.log('💰 [renderTotals] Valores formatados:', {
       income, expenses, investments, balance
@@ -560,6 +588,32 @@ class TransactionManager {
       style: 'currency',
       currency: 'EUR'
     }).format(amount);
+  }
+
+  formatCurrencyPortuguese(amount) {
+    // Format number in Portuguese style: -1.234,56 €
+    const isNegative = amount < 0;
+    const absAmount = Math.abs(amount);
+    
+    // Format with Portuguese locale
+    const formatted = absAmount.toFixed(2)
+      .replace('.', ',')  // Decimal separator
+      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');  // Thousands separator
+    
+    return `${isNegative ? '-' : ''}${formatted} €`;
+  }
+
+  formatDisplayAmount(amount) {
+    // Format amount for display in table
+    const isNegative = amount < 0;
+    const absAmount = Math.abs(amount);
+    
+    // Format with Portuguese locale
+    const formatted = absAmount.toFixed(2)
+      .replace('.', ',')  // Decimal separator
+      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');  // Thousands separator
+    
+    return `€ ${isNegative ? '-' : ''}${formatted}`;
   }
 
   updateFilterOptions(filters) {
@@ -812,77 +866,7 @@ class TransactionManager {
     }
   }
 
-  simulateProgressForBulkOperation(operationType, itemCount) {
-    let progress = 0;
-    const totalSteps = Math.max(itemCount / 3, 15); // Steps para progresso mais controlado
-    const baseIncrement = 60 / totalSteps; // Só vai até 60% na simulação inicial
-
-    const messages = {
-      'delete': [
-        'Validating selected transactions...',
-        'Checking permissions...',
-        'Removing transactions from database...',
-        'Updating account balances...',
-        'Clearing transaction cache...',
-        'Finalizing operation...'
-      ],
-      'duplicate': [
-        'Reading original transactions...',
-        'Creating duplicates...',
-        'Copying transaction data...',
-        'Assigning to current period...',
-        'Updating cache...',
-        'Finalizing operation...'
-      ]
-    };
-
-    const interval = setInterval(() => {
-      // Progresso mais lento conforme se aproxima do fim
-      let increment = baseIncrement;
-      if (progress > 30) increment *= 0.8;
-      if (progress > 45) increment *= 0.6;
-
-      progress += increment;
-
-      if (progress >= 60) {
-        clearInterval(interval);
-        // Progresso mais lento e realista no final
-        this.finalProgressSteps(operationType, messages[operationType]);
-        return;
-      }
-
-      const messageIndex = Math.floor(progress / 12);
-      const message = messages[operationType][messageIndex] || `Processing ${itemCount} transactions...`;
-
-      this.updateProgress(Math.min(progress, 60), `${message} (${Math.floor(progress)}%)`);
-    }, 250);
-
-    return interval;
-  }
-
-  finalProgressSteps(operationType, messages) {
-    // Passos finais mais lentos e realistas (de 60% para 93%)
-    const finalSteps = [
-      { percent: 65, message: messages[3] || `Processing ${operationType}...`, delay: 500 },
-      { percent: 72, message: messages[4] || `Finishing ${operationType}...`, delay: 700 },
-      { percent: 78, message: messages[5] || `Almost done...`, delay: 600 },
-      { percent: 84, message: `Completing operation...`, delay: 800 },
-      { percent: 89, message: `Finalizing...`, delay: 600 },
-      { percent: 93, message: `Preparing final response...`, delay: 500 }
-    ];
-
-    let stepIndex = 0;
-    const stepInterval = setInterval(() => {
-      if (stepIndex >= finalSteps.length) {
-        clearInterval(stepInterval);
-        return;
-      }
-
-      const step = finalSteps[stepIndex];
-      this.updateProgress(step.percent, step.message);
-      stepIndex++;
-    }, finalSteps[stepIndex]?.delay || 600);
-  }
+  
 
   async bulkDuplicate() {
     if (this.selectedRows.size === 0) {
@@ -893,12 +877,12 @@ class TransactionManager {
     const confirmed = confirm(`Duplicate ${this.selectedRows.size} transactions?`);
     if (!confirmed) return;
 
-    this.showProgressModal('Duplicating Transactions', 'Preparing to duplicate transactions...');
+    // Show simple loading indicator
+    this.showLoading(true);
+    const loadingToast = this.showToast(`Duplicating ${this.selectedRows.size} transactions...`, 'info', 0);
 
     try {
-      this.updateProgress(10, 'Sending request...');
-      const progressInterval = this.simulateProgressForBulkOperation('duplicate', this.selectedRows.size);
-
+      const startTime = performance.now();
 
       const response = await fetch('/transactions/bulk-duplicate/', {
         method: 'POST',
@@ -911,31 +895,33 @@ class TransactionManager {
         })
       });
 
-      clearInterval(progressInterval);
-      this.updateProgress(95, 'Processing duplicates...');
-
-
-      if (response.ok) {
-        this.updateProgress(96, 'Clearing cache...');
-        this.cache.clear();
-
-        this.updateProgress(97, 'Reloading data...');
-        await Promise.all([
-          this.loadTransactions(),
-          this.loadTotals()
-        ]);
-
-        this.updateProgress(100, 'Complete!');
-        setTimeout(() => {
-          this.hideProgressModal();
-          this.showSuccess('Transactions duplicated successfully');
-        }, 500);
-      } else {
-        throw new Error('Failed to duplicate transactions');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to duplicate transactions');
       }
+
+      const result = await response.json();
+      const endTime = performance.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(1);
+
+      // Clear cache and reload data
+      this.cache.clear();
+      await Promise.all([
+        this.loadTransactions(),
+        this.loadTotals()
+      ]);
+
+      // Hide loading toast
+      if (loadingToast) loadingToast.remove();
+
+      this.showSuccess(`✅ ${result.created} transactions duplicated successfully in ${duration}s`);
+
     } catch (error) {
-      this.hideProgressModal();
-      this.showError('Failed to duplicate transactions');
+      console.error('Bulk duplicate error:', error);
+      if (loadingToast) loadingToast.remove();
+      this.showError(`❌ Failed to duplicate transactions: ${error.message}`);
+    } finally {
+      this.showLoading(false);
     }
   }
 
@@ -948,11 +934,12 @@ class TransactionManager {
     const confirmed = confirm(`⚠️ Delete ${this.selectedRows.size} transactions? This action cannot be undone.`);
     if (!confirmed) return;
 
-    this.showProgressModal('Deleting Transactions', 'Preparing to delete transactions...');
+    // Show simple loading indicator instead of fake progress
+    this.showLoading(true);
+    const loadingToast = this.showToast(`Deleting ${this.selectedRows.size} transactions...`, 'info', 0); // No auto-hide
 
     try {
-      this.updateProgress(10, 'Sending delete request...');
-      const progressInterval = this.simulateProgressForBulkOperation('delete', this.selectedRows.size);
+      const startTime = performance.now();
 
       const response = await fetch('/transactions/bulk-delete/', {
         method: 'POST',
@@ -965,34 +952,37 @@ class TransactionManager {
         })
       });
 
-      clearInterval(progressInterval);
-      this.updateProgress(95, 'Processing deletions...');
-
-
-      if (response.ok) {
-        this.updateProgress(96, 'Updating cash balances...');
-
-        this.updateProgress(97, 'Clearing cache and selections...');
-        this.cache.clear();
-        this.selectedRows.clear();
-
-        this.updateProgress(98, 'Reloading data...');
-        await Promise.all([
-          this.loadTransactions(),
-          this.loadTotals()
-        ]);
-
-        this.updateProgress(100, 'Complete!');
-        setTimeout(() => {
-          this.hideProgressModal();
-          this.showSuccess('Transactions deleted successfully');
-        }, 500);
-      } else {
-        throw new Error('Failed to delete transactions');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete transactions');
       }
+
+      const result = await response.json();
+      const endTime = performance.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(1);
+
+      // Clear selections and cache immediately
+      this.selectedRows.clear();
+      this.cache.clear();
+      this.updateSelectionCount();
+
+      // Reload data
+      await Promise.all([
+        this.loadTransactions(),
+        this.loadTotals()
+      ]);
+
+      // Hide loading toast
+      if (loadingToast) loadingToast.remove();
+
+      this.showSuccess(`✅ ${result.deleted} transactions deleted successfully in ${duration}s`);
+
     } catch (error) {
-      this.hideProgressModal();
-      this.showError('Failed to delete transactions');
+      console.error('Bulk delete error:', error);
+      if (loadingToast) loadingToast.remove();
+      this.showError(`❌ Failed to delete transactions: ${error.message}`);
+    } finally {
+      this.showLoading(false);
     }
   }
 
@@ -1038,9 +1028,10 @@ class TransactionManager {
     this.showToast(message, 'danger');
   }
 
-  showToast(message, type) {
+  showToast(message, type, delay = 3000) {
+    const toastId = `toast-${Date.now()}-${Math.random()}`;
     const toast = $(`
-      <div class="toast position-fixed top-0 end-0 m-3" style="z-index: 9999;">
+      <div class="toast position-fixed top-0 end-0 m-3" id="${toastId}" style="z-index: 9999;">
         <div class="toast-body bg-${type} text-white">
           ${message}
         </div>
@@ -1048,9 +1039,16 @@ class TransactionManager {
     `);
 
     $('body').append(toast);
-    toast.toast({ delay: 3000 }).toast('show');
+    
+    if (delay > 0) {
+      toast.toast({ delay: delay }).toast('show');
+      toast.on('hidden.bs.toast', () => toast.remove());
+    } else {
+      // Persistent toast - won't auto-hide
+      toast.show();
+    }
 
-    toast.on('hidden.bs.toast', () => toast.remove());
+    return toast; // Return toast element for manual control
   }
 
   showProgressModal(title, initialMessage) {
@@ -1119,6 +1117,60 @@ class TransactionManager {
       // Remove modal after animation completes
       setTimeout(() => modal.remove(), 300);
     }
+  }
+
+  handleSort(e) {
+    const header = $(e.currentTarget);
+    const sortField = header.data('sort');
+    
+    console.log('🔤 [handleSort] Column clicked:', sortField);
+    
+    // Toggle sort direction if same field, otherwise default to desc for most fields, asc for text fields
+    if (this.sortField === sortField) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      // Default sorting directions
+      const textFields = ['type', 'category', 'account', 'tags', 'period'];
+      this.sortDirection = textFields.includes(sortField) ? 'asc' : 'desc';
+    }
+    
+    this.sortField = sortField;
+    this.currentPage = 1; // Reset to first page when sorting
+    
+    console.log('🔤 [handleSort] New sort state:', {
+      field: this.sortField,
+      direction: this.sortDirection
+    });
+    
+    // Update visual indicators
+    this.updateSortIndicators();
+    
+    // Clear cache and reload data
+    this.cache.clear();
+    this.loadTransactions();
+  }
+
+  updateSortIndicators() {
+    // Remove all active states and reset icons
+    $('.sortable-header').removeClass('active sort-asc sort-desc');
+    $('.sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
+    
+    // Add active state to current sort column
+    const activeHeader = $(`.sortable-header[data-sort="${this.sortField}"]`);
+    activeHeader.addClass('active');
+    
+    if (this.sortDirection === 'asc') {
+      activeHeader.addClass('sort-asc');
+      activeHeader.find('.sort-icon').removeClass('fa-sort').addClass('fa-sort-up');
+    } else {
+      activeHeader.addClass('sort-desc');
+      activeHeader.find('.sort-icon').removeClass('fa-sort').addClass('fa-sort-down');
+    }
+    
+    console.log('🔤 [updateSortIndicators] Visual indicators updated for:', {
+      field: this.sortField,
+      direction: this.sortDirection
+    });
   }
 }
 

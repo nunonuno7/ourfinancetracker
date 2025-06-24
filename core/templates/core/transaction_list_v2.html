@@ -1,20 +1,20 @@
-{% extends "base.html" %}
-{% load static %}
-{% load filtros %}
-{% now "Y-m-d" as today %}
-
-{% block content %}
+{% extends "base.html" %} {% load static %} {% load filtros %} {% now "Y-m-d" as
+today %} {% block content %}
 <div class="container-fluid mt-4">
   <!-- CSRF Token -->
-  <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+  <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
 
   <!-- Header Section -->
   <div class="row mb-4">
     <div class="col-12">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+      <div
+        class="d-flex justify-content-between align-items-center flex-wrap gap-3"
+      >
         <div>
           <h1 class="mb-1">💳 Transactions 2.0</h1>
-          <small class="text-muted" id="total-count">Loading transactions...</small>
+          <small class="text-muted" id="total-count"
+            >Loading transactions...</small
+          >
         </div>
         <div class="d-flex gap-2 flex-wrap">
           <button class="btn btn-outline-primary" id="export-btn">
@@ -50,9 +50,21 @@
         <div class="col-md-3">
           <label class="form-label fw-bold">📅 Date Range</label>
           <div class="input-group">
-            <input type="text" id="date-start" class="form-control" placeholder="Start date" value="2025-01-01">
+            <input
+              type="text"
+              id="date-start"
+              class="form-control"
+              placeholder="Start date"
+              value="2025-01-01"
+            />
             <span class="input-group-text">to</span>
-            <input type="text" id="date-end" class="form-control" placeholder="End date" value="{{ today }}">
+            <input
+              type="text"
+              id="date-end"
+              class="form-control"
+              placeholder="End date"
+              value="{{ today }}"
+            />
           </div>
         </div>
         <div class="col-md-2">
@@ -89,20 +101,43 @@
       <div class="row g-3">
         <div class="col-md-2">
           <label class="form-label">💰 Min Amount</label>
-          <input type="number" id="filter-amount-min" class="form-control" placeholder="0.00" step="0.01">
+          <input
+            type="number"
+            id="filter-amount-min"
+            class="form-control"
+            placeholder="0.00"
+            step="0.01"
+          />
         </div>
         <div class="col-md-2">
           <label class="form-label">💰 Max Amount</label>
-          <input type="number" id="filter-amount-max" class="form-control" placeholder="999999" step="0.01">
+          <input
+            type="number"
+            id="filter-amount-max"
+            class="form-control"
+            placeholder="999999"
+            step="0.01"
+          />
         </div>
         <div class="col-md-3">
           <label class="form-label">🏷️ Tags</label>
-          <input type="text" id="filter-tags" class="form-control" placeholder="tag1, tag2..." 
-                 data-bs-toggle="tooltip" title="Separate multiple tags with commas">
+          <input
+            type="text"
+            id="filter-tags"
+            class="form-control"
+            placeholder="tag1, tag2..."
+            data-bs-toggle="tooltip"
+            title="Separate multiple tags with commas"
+          />
         </div>
         <div class="col-md-3">
           <label class="form-label">🔍 Search</label>
-          <input type="text" id="global-search" class="form-control" placeholder="Search in all fields...">
+          <input
+            type="text"
+            id="global-search"
+            class="form-control"
+            placeholder="Search in all fields..."
+          />
         </div>
         <div class="col-md-2 d-flex align-items-end">
           <button class="btn btn-primary w-100" id="apply-filters-btn">
@@ -150,12 +185,18 @@
   </div>
 
   <!-- Page Size and Bulk Actions Section -->
-  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+  <div
+    class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3"
+  >
     <div class="d-flex gap-3 align-items-center flex-wrap">
       <!-- Page Size Selector -->
       <div class="d-flex align-items-center gap-2">
         <label class="form-label mb-0 fw-bold">📄 Show:</label>
-        <select id="page-size-selector" class="form-select form-select-sm" style="width: auto;">
+        <select
+          id="page-size-selector"
+          class="form-select form-select-sm"
+          style="width: auto"
+        >
           <option value="25">25 per page</option>
           <option value="50">50 per page</option>
           <option value="100">100 per page</option>
@@ -168,12 +209,15 @@
       <!-- Bulk Mode Toggle -->
       <div class="d-flex gap-2 align-items-center">
         <label class="form-check-label">
-          <input type="checkbox" class="form-check-input" id="bulk-mode-toggle">
+          <input
+            type="checkbox"
+            class="form-check-input"
+            id="bulk-mode-toggle"
+          />
           Bulk Select Mode
         </label>
         <div id="bulk-actions" class="d-none">
           <div class="btn-group" role="group">
-            
             <button class="btn btn-sm btn-outline-info" id="bulk-duplicate">
               <i class="fas fa-copy"></i> Duplicate
             </button>
@@ -198,18 +242,37 @@
         <table id="transactions-table" class="table table-hover mb-0">
           <thead class="table-light sticky-top">
             <tr>
-              <th style="width: 40px;">
-                <input type="checkbox" class="form-check-input" id="select-all" style="display: none;">
+              <th style="width: 40px">
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  id="select-all"
+                  style="display: none"
+                />
                 #
               </th>
-              <th>📅 Date</th>
-              <th class="d-none d-md-table-cell">📆 Period</th>
-              <th>📊 Type</th>
-              <th>💰 Amount</th>
-              <th class="d-none d-lg-table-cell">🏷️ Category</th>
-              <th class="d-none d-xl-table-cell">🏷️ Tags</th>
-              <th class="d-none d-md-table-cell">🏦 Account</th>
-              <th style="width: 120px;">⚙️ Actions</th>
+              <th class="sortable-header" data-sort="date">
+                📅 Date <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th class="d-none d-md-table-cell sortable-header" data-sort="period">
+                📆 Period <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th class="sortable-header" data-sort="type">
+                📊 Type <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th class="sortable-header" data-sort="amount">
+                💰 Amount <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th class="d-none d-lg-table-cell sortable-header" data-sort="category">
+                🏷️ Category <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th class="d-none d-xl-table-cell sortable-header" data-sort="tags">
+                🏷️ Tags <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th class="d-none d-md-table-cell sortable-header" data-sort="account">
+                🏦 Account <i class="fas fa-sort sort-icon"></i>
+              </th>
+              <th style="width: 120px">⚙️ Actions</th>
             </tr>
           </thead>
           <tbody id="transactions-tbody">
@@ -241,7 +304,11 @@
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">📊 Category Breakdown</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+          ></button>
         </div>
         <div class="modal-body">
           <canvas id="categoryChart" width="400" height="200"></canvas>
@@ -257,109 +324,168 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+/>
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+/>
 
 <!-- Custom Styles -->
 <style>
-.sticky-top {
-  position: sticky !important;
-  top: 0;
-  z-index: 1020;
-}
-
-.table-hover tbody tr:hover {
-  background-color: rgba(0, 123, 255, 0.05);
-}
-
-.card {
-  border: none;
-  border-radius: 12px;
-}
-
-.btn {
-  border-radius: 8px;
-}
-
-.form-select, .form-control {
-  border-radius: 6px;
-}
-
-.transaction-amount {
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-}
-
-.badge {
-  font-size: 0.75rem;
-}
-
-@media (max-width: 768px) {
-  .container-fluid {
-    padding: 0.5rem;
+  .sticky-top {
+    position: sticky !important;
+    top: 0;
+    z-index: 1020;
   }
 
-  .card-body {
-    padding: 1rem;
+  .table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+  }
+
+  .card {
+    border: none;
+    border-radius: 12px;
   }
 
   .btn {
-    padding: 0.375rem 0.5rem;
-    font-size: 0.875rem;
+    border-radius: 8px;
   }
-}
 
-.amount-positive {
-  color: #28a745;
-}
+  .form-select,
+  .form-control {
+    border-radius: 6px;
+  }
 
-.amount-negative {
-  color: #dc3545;
-}
+  .transaction-amount {
+    font-family: "Courier New", monospace;
+    font-weight: 600;
+  }
 
-.amount-neutral {
-  color: #6c757d;
-}
+  .badge {
+    font-size: 0.75rem;
+  }
 
-/* Progress Modal Styles */
-#progressModal .modal-content {
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
+  @media (max-width: 768px) {
+    .container-fluid {
+      padding: 0.5rem;
+    }
 
-#progressModal .modal-header {
-  background: linear-gradient(135deg, #007bff, #0056b3);
-  color: white;
-  border-radius: 15px 15px 0 0;
-  border-bottom: none;
-}
+    .card-body {
+      padding: 1rem;
+    }
 
-#progressModal .modal-title {
-  font-weight: 600;
-}
+    .btn {
+      padding: 0.375rem 0.5rem;
+      font-size: 0.875rem;
+    }
+  }
 
-#progressModal .progress {
-  border-radius: 12px;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
-}
+  .amount-positive {
+    color: #28a745;
+  }
 
-#progressModal .progress-bar {
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  transition: width 0.3s ease;
-}
+  .amount-negative {
+    color: #dc3545;
+  }
 
-#progressModal #progress-message {
-  font-size: 15px;
-  min-height: 20px;
-}
+  .amount-neutral {
+    color: #6c757d;
+  }
 
-#progressModal .spinner-border-sm {
-  width: 1rem;
-  height: 1rem;
-}
+  /* Investment Flow Styles */
+  .badge small {
+    font-size: 0.65rem;
+    font-weight: 500;
+    opacity: 0.9;
+  }
+
+  .badge br + small {
+    margin-top: 2px;
+  }
+
+  /* Progress Modal Styles */
+  #progressModal .modal-content {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+
+  #progressModal .modal-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-radius: 15px 15px 0 0;
+    border-bottom: none;
+  }
+
+  #progressModal .modal-title {
+    font-weight: 600;
+  }
+
+  #progressModal .progress {
+    border-radius: 12px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  #progressModal .progress-bar {
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: width 0.3s ease;
+  }
+
+  #progressModal #progress-message {
+    font-size: 15px;
+    min-height: 20px;
+  }
+
+  #progressModal .spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  /* Sortable Headers Styles */
+  .sortable-header {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    transition: background-color 0.2s ease;
+  }
+
+  .sortable-header:hover {
+    background-color: rgba(0, 123, 255, 0.1) !important;
+  }
+
+  .sortable-header.active {
+    background-color: rgba(0, 123, 255, 0.15) !important;
+    font-weight: 600;
+  }
+
+  .sort-icon {
+    font-size: 0.8em;
+    margin-left: 4px;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+  }
+
+  .sortable-header:hover .sort-icon {
+    opacity: 1;
+  }
+
+  .sortable-header.active .sort-icon {
+    opacity: 1;
+    color: #007bff;
+  }
+
+  .sort-asc .sort-icon::before {
+    content: "\f0de"; /* fa-sort-up */
+  }
+
+  .sort-desc .sort-icon::before {
+    content: "\f0dd"; /* fa-sort-down */
+  }
 </style>
 
 <!-- Custom JavaScript -->

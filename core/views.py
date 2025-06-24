@@ -723,7 +723,7 @@ def transaction_bulk_duplicate(request):
 @require_POST
 @login_required
 def transaction_bulk_delete(request):
-    """Bulk delete transactions."""
+    """Bulk delete transactions with optimized performance."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get('transaction_ids', [])
@@ -731,34 +731,53 @@ def transaction_bulk_delete(request):
         if not transaction_ids:
             return JsonResponse({'success': False, 'error': 'No transactions selected'})
 
-        # Validate transactions belong to user
-        transactions = Transaction.objects.filter(
-            id__in=transaction_ids,
-            user=request.user
-        )
+        # Convert to integers for security and validation
+        try:
+            transaction_ids = [int(tid) for tid in transaction_ids]
+        except (ValueError, TypeError):
+            return JsonResponse({'success': False, 'error': 'Invalid transaction IDs'})
 
-        if len(transactions) != len(transaction_ids):
-            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+        # Optimize: Use direct DB query instead of Django ORM for speed
+        with connection.cursor() as cursor:
+            # First, validate all transactions belong to user (security check)
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM core_transaction 
+                WHERE id = ANY(%s) AND user_id = %s
+            """, [transaction_ids, request.user.id])
+            
+            valid_count = cursor.fetchone()[0]
+            if valid_count != len(transaction_ids):
+                return JsonResponse({'success': False, 'error': 'Some transactions not found or access denied'})
 
-        deleted_count = len(transactions)
+            # Batch delete in atomic transaction - much faster than ORM
+            with db_transaction.atomic():
+                # Delete transaction-tag relationships first (foreign key constraint)
+                cursor.execute("""
+                    DELETE FROM core_transactiontag 
+                    WHERE transaction_id = ANY(%s)
+                """, [transaction_ids])
 
-        # Use atomic transaction for bulk delete
-        with db_transaction.atomic():
-            # Delete all transactions in a single operation
-            transactions.delete()
+                # Delete transactions in single batch operation
+                cursor.execute("""
+                    DELETE FROM core_transaction 
+                    WHERE id = ANY(%s) AND user_id = %s
+                """, [transaction_ids, request.user.id])
+                
+                deleted_count = cursor.rowcount
 
-        # Clear cache only AFTER all database operations are complete
+        # Clear cache only AFTER all database operations complete
         clear_tx_cache(request.user.id)
-        logger.info(f"✅ Bulk delete completed: {deleted_count} transactions deleted, cache cleared for user {request.user.id}")
+        logger.info(f"⚡ Fast bulk delete: {deleted_count} transactions deleted for user {request.user.id}")
 
         return JsonResponse({
             'success': True,
             'deleted': deleted_count,
-            'message': f'{deleted_count} transactions deleted'
+            'message': f'{deleted_count} transactions deleted successfully'
         })
 
     except Exception as e:
-        logger.error(f"Bulk delete error for user {request.user.id}: {e}")
+        logger.error(f"❌ Bulk delete error for user {request.user.id}: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
@@ -1473,7 +1492,7 @@ def normalise_type(raw):
 @require_http_methods(["GET", "POST"])
 @login_required
 def import_transactions_xlsx(request):
-    """Import XLSX with columns: Date | Type | Amount | Category | Tags | Account."""
+    """Import XLSX with optimized batch operations for faster processing."""
     if request.method == "GET":
         return render(request, "core/import_form.html")
 
@@ -1490,210 +1509,317 @@ def import_transactions_xlsx(request):
 
     user_id = request.user.id
     ts = now()
-    inserted = 0
-    periods, cats, accts, tags = {}, {}, {}, {}
-
     total_rows = len(df)
-    logger.info(f"📊 Starting import of {total_rows} rows for user {user_id}")
-
-    with connection.cursor() as cur, db_tx.atomic():
-        for idx, row in df.iterrows():
-            row_num = idx + 2
-
-            # Log progress every 50 rows
-            if idx > 0 and idx % 50 == 0:
-                logger.info(f"📈 Progress: {idx}/{total_rows} rows processed ({(idx/total_rows)*100:.1f}%)")
-
-            raw_date = row["Date"]
-            if pd.isna(raw_date):
-                messages.warning(request, f"⚠️ Line {row_num}: Date empty.")
+    
+    # ⚡ Pre-validate all data before database operations
+    logger.info(f"📊 Starting optimized import of {total_rows} rows for user {user_id}")
+    
+    # Pre-process and validate data
+    valid_transactions = []
+    validation_errors = []
+    
+    for idx, row in df.iterrows():
+        row_num = idx + 2
+        try:
+            # Validate date
+            if pd.isna(row["Date"]):
+                validation_errors.append(f"Line {row_num}: Date empty")
                 continue
-            date_val = pd.to_datetime(raw_date).date()
-
+            date_val = pd.to_datetime(row["Date"]).date()
+            
+            # Validate type
             tx_type = normalise_type(row["Type"])
             if not tx_type:
-                messages.warning(request, f"⚠️ Line {row_num}: invalid Type '{row['Type']}'.")
+                validation_errors.append(f"Line {row_num}: invalid Type '{row['Type']}'")
                 continue
-
+            
+            # Validate amount
             amount = normalise_amount(row["Amount"])
             if amount is None:
-                messages.warning(request, f"⚠️ Line {row_num}: invalid Amount '{row['Amount']}'.")
+                validation_errors.append(f"Line {row_num}: invalid Amount '{row['Amount']}'")
                 continue
             if amount == 0:
-                messages.warning(request, f"⚠️ Line {row_num}: zero Amount ignored.")
+                validation_errors.append(f"Line {row_num}: zero Amount ignored")
                 continue
-
+            
+            # Normalize amount by type
             if tx_type == "IV":
                 amount = amount if amount < 0 else abs(amount)
             else:
                 amount = abs(amount)
-
-            key = (date_val.year, date_val.month)
-            if key not in periods:
-                cur.execute(
-                    """
-                    INSERT INTO core_dateperiod (year, month, label)
-                    VALUES (%s,%s,%s)
-                    ON CONFLICT (year,month) DO NOTHING
-                    RETURNING id
-                    """,
-                    [key[0], key[1], date_val.strftime("%B %Y")],
-                )
-                rec = cur.fetchone() or cur.execute(
-                    "SELECT id FROM core_dateperiod WHERE year=%s AND month=%s",
-                    key,
-                ) or cur.fetchone()
-                if not rec:
-                    messages.warning(request, f"⚠️ Line {row_num}: cannot resolve DatePeriod.")
-                    continue
-                periods[key] = rec[0]
-            period_id = periods[key]
-
-            cat = str(row["Category"]).strip()
-            if cat not in cats:
-                cur.execute(
-                    """
-                    INSERT INTO core_category (user_id,name,position,created_at,updated_at)
-                    VALUES (%s,%s,0,%s,%s)
-                    ON CONFLICT (user_id,name) DO NOTHING
-                    RETURNING id
-                    """,
-                    [user_id, cat, ts, ts],
-                )
-                rec = cur.fetchone() or cur.execute(
-                    "SELECT id FROM core_category WHERE user_id=%s AND name=%s",
-                    [user_id, cat],
-                ) or cur.fetchone()
-                if not rec:
-                    messages.warning(request, f"⚠️ Line {row_num}: cannot resolve Category '{cat}'.")
-                    continue
-                cats[cat] = rec[0]
-            category_id = cats[cat]
-
-            acc = str(row["Account"]).strip()
-            if acc not in accts:
-                cur.execute(
-                    "SELECT id FROM core_account WHERE user_id=%s AND name=%s",
-                    [user_id, acc],
-                )
-                rec = cur.fetchone()
-                if not rec:
-                    cur.execute(
-                        "SELECT id FROM core_accounttype WHERE name ILIKE %s LIMIT 1",
-                        ["savings"],
-                    )
-                    type_rec = cur.fetchone()
-                    if not type_rec:
-                        cur.execute("SELECT id FROM core_accounttype LIMIT 1")
-                        type_rec = cur.fetchone()
-                    if not type_rec:
-                        messages.warning(request, "⚠️ Nenhum AccountType definido na base de dados.")
-                        continue
-                    acct_type_id = type_rec[0]
-                    cur.execute(
-                        """
-                        INSERT INTO core_account (
-                            user_id, name, position, created_at, account_type_id
-                        )
-                        VALUES (%s, %s, %s, %s, %s)
-                        RETURNING id
-                        """,
-                        [user_id, acc, 0, ts, acct_type_id],
-                    )
-                    rec = cur.fetchone()
-
-                if not rec:
-                    messages.warning(request, f"⚠️ Line {row_num}: cannot create Account '{acc}'.")
-                    continue
-                accts[acc] = rec[0]
-            account_id = accts[acc]
-
+            
+            # Process tags
             raw_tags = row.get("Tags", "")
             tag_names = [] if pd.isna(raw_tags) else [t.strip() for t in str(raw_tags).split(",") if t.strip()]
-            tag_ids = []
+            
+            valid_transactions.append({
+                'date': date_val,
+                'type': tx_type,
+                'amount': amount,
+                'category': str(row["Category"]).strip(),
+                'account': str(row["Account"]).strip(),
+                'tags': tag_names,
+                'row_num': row_num
+            })
+            
+        except Exception as e:
+            validation_errors.append(f"Line {row_num}: {str(e)}")
+    
+    # Show validation errors as warnings
+    for error in validation_errors[:10]:  # Limit to first 10 errors
+        messages.warning(request, f"⚠️ {error}")
+    
+    if len(validation_errors) > 10:
+        messages.warning(request, f"⚠️ ... and {len(validation_errors) - 10} more validation errors")
+    
+    if not valid_transactions:
+        messages.error(request, "❌ No valid transactions found in file")
+        return redirect("transaction_import_xlsx")
+    
+    logger.info(f"✅ Pre-validation: {len(valid_transactions)} valid, {len(validation_errors)} errors")
 
-            for tag in tag_names:
-                if tag not in tags:
-                    cur.execute(
-                        """
-                        INSERT INTO core_tag (user_id, name, position)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (user_id, name) DO NOTHING
-                        RETURNING id
-                        """,
-                        [user_id, tag, 0],
-                    )
-                    rec = cur.fetchone()
-                    if not rec:
-                        cur.execute(
-                            "SELECT id FROM core_tag WHERE user_id=%s AND name=%s",
-                            [user_id, tag],
-                        )
-                        rec = cur.fetchone()
-                    if not rec:
-                        messages.warning(request, f"⚠️ Line {row_num}: cannot resolve Tag '{tag}'.")
-                        continue
-                    tags[tag] = rec[0]
-                tag_ids.append(tags[tag])
-
-            cur.execute(
-                """
-                INSERT INTO core_transaction (
-                    user_id, type, amount, date,
-                    notes, is_estimated,
-                    period_id, account_id, category_id,
-                    created_at, updated_at
-                )
-                VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s,
-                    %s, %s, %s,
-                    %s, %s
-                )
-                RETURNING id
-                """,
-                [
-                    user_id, tx_type, amount, date_val,
-                    "", False,
-                    period_id, account_id, category_id,
-                    ts, ts,
-                ],
+    # ⚡ Batch database operations
+    inserted = 0
+    
+    with connection.cursor() as cur, db_tx.atomic():
+        # 🚀 Pre-load all lookup tables to avoid repeated queries
+        logger.info("🔍 Pre-loading lookup tables...")
+        
+        # Pre-load existing periods, categories, accounts, tags
+        cur.execute("SELECT year, month, id FROM core_dateperiod")
+        periods = {(year, month): id for year, month, id in cur.fetchall()}
+        
+        cur.execute("SELECT name, id FROM core_category WHERE user_id = %s", [user_id])
+        cats = {name: id for name, id in cur.fetchall()}
+        
+        cur.execute("SELECT name, id FROM core_account WHERE user_id = %s", [user_id])
+        accts = {name: id for name, id in cur.fetchall()}
+        
+        cur.execute("SELECT name, id FROM core_tag WHERE user_id = %s", [user_id])
+        tags = {name: id for name, id in cur.fetchall()}
+        
+        # Get default account type
+        cur.execute("SELECT id FROM core_accounttype WHERE name ILIKE 'savings' LIMIT 1")
+        default_account_type = cur.fetchone()
+        if not default_account_type:
+            cur.execute("SELECT id FROM core_accounttype LIMIT 1")
+            default_account_type = cur.fetchone()
+        
+        if not default_account_type:
+            messages.error(request, "⚠️ No AccountType found in database")
+            return redirect("transaction_import_xlsx")
+        
+        default_account_type_id = default_account_type[0]
+        
+        # 🚀 Batch create missing periods
+        new_periods = set()
+        for tx in valid_transactions:
+            key = (tx['date'].year, tx['date'].month)
+            if key not in periods:
+                new_periods.add(key)
+        
+        if new_periods:
+            logger.info(f"📅 Creating {len(new_periods)} new periods...")
+            period_values = [
+                (year, month, f"{pd.Timestamp(year, month, 1).strftime('%B %Y')}")
+                for year, month in new_periods
+            ]
+            execute_values(
+                cur,
+                """INSERT INTO core_dateperiod (year, month, label) 
+                   VALUES %s ON CONFLICT (year, month) DO NOTHING""",
+                period_values
             )
-            rec = cur.fetchone()
-            if not rec:
-                messages.warning(request, f"⚠️ Line {row_num}: insert failed.")
+            # Reload periods
+            cur.execute("SELECT year, month, id FROM core_dateperiod WHERE (year, month) = ANY(%s)", 
+                       [list(new_periods)])
+            for year, month, id in cur.fetchall():
+                periods[(year, month)] = id
+        
+        # 🚀 Batch create missing categories
+        new_categories = set()
+        for tx in valid_transactions:
+            if tx['category'] not in cats:
+                new_categories.add(tx['category'])
+        
+        if new_categories:
+            logger.info(f"🏷️ Creating {len(new_categories)} new categories...")
+            cat_values = [(user_id, cat, 0, ts, ts) for cat in new_categories]
+            execute_values(
+                cur,
+                """INSERT INTO core_category (user_id, name, position, created_at, updated_at)
+                   VALUES %s ON CONFLICT (user_id, name) DO NOTHING""",
+                cat_values
+            )
+            # Reload categories
+            cur.execute("SELECT name, id FROM core_category WHERE user_id = %s AND name = ANY(%s)", 
+                       [user_id, list(new_categories)])
+            for name, id in cur.fetchall():
+                cats[name] = id
+        
+        # 🚀 Batch create missing accounts
+        new_accounts = set()
+        for tx in valid_transactions:
+            if tx['account'] not in accts:
+                new_accounts.add(tx['account'])
+        
+        if new_accounts:
+            logger.info(f"🏦 Creating {len(new_accounts)} new accounts...")
+            acc_values = [(user_id, acc, 0, ts, default_account_type_id) for acc in new_accounts]
+            execute_values(
+                cur,
+                """INSERT INTO core_account (user_id, name, position, created_at, account_type_id)
+                   VALUES %s ON CONFLICT (user_id, name) DO NOTHING""",
+                acc_values
+            )
+            # Reload accounts
+            cur.execute("SELECT name, id FROM core_account WHERE user_id = %s AND name = ANY(%s)", 
+                       [user_id, list(new_accounts)])
+            for name, id in cur.fetchall():
+                accts[name] = id
+        
+        # 🚀 Batch create missing tags
+        all_tag_names = set()
+        for tx in valid_transactions:
+            all_tag_names.update(tx['tags'])
+        
+        new_tags = all_tag_names - set(tags.keys())
+        if new_tags:
+            logger.info(f"🏷️ Creating {len(new_tags)} new tags...")
+            tag_values = [(user_id, tag, 0) for tag in new_tags]
+            execute_values(
+                cur,
+                """INSERT INTO core_tag (user_id, name, position)
+                   VALUES %s ON CONFLICT (user_id, name) DO NOTHING""",
+                tag_values
+            )
+            # Reload tags
+            cur.execute("SELECT name, id FROM core_tag WHERE user_id = %s AND name = ANY(%s)", 
+                       [user_id, list(new_tags)])
+            for name, id in cur.fetchall():
+                tags[name] = id
+        
+        # 🚀 Batch insert transactions
+        logger.info(f"💾 Batch inserting {len(valid_transactions)} transactions...")
+        
+        transaction_values = []
+        transaction_tag_values = []
+        
+        for idx, tx in enumerate(valid_transactions):
+            if idx > 0 and idx % 100 == 0:
+                logger.info(f"📈 Processing: {idx}/{len(valid_transactions)} ({(idx/len(valid_transactions))*100:.1f}%)")
+            
+            period_key = (tx['date'].year, tx['date'].month)
+            period_id = periods.get(period_key)
+            category_id = cats.get(tx['category'])
+            account_id = accts.get(tx['account'])
+            
+            if not all([period_id, category_id, account_id]):
+                logger.warning(f"⚠️ Skipping row {tx['row_num']}: missing foreign keys")
                 continue
-            transaction_id = rec[0]
-            inserted += 1
-
-            for tag_id in tag_ids:
-                cur.execute(
-                    """
-                    INSERT INTO core_transactiontag (transaction_id, tag_id)
-                    VALUES (%s, %s)
-                    ON CONFLICT DO NOTHING
-                    """,
-                    [transaction_id, tag_id],
+            
+            # Use index as temporary transaction ID for tag relationships
+            temp_tx_id = idx
+            transaction_values.append((
+                user_id, tx['type'], tx['amount'], tx['date'],
+                "", False,  # notes, is_estimated
+                period_id, account_id, category_id,
+                ts, ts,  # created_at, updated_at
+                temp_tx_id  # temporary ID for tag relationships
+            ))
+            
+            # Prepare tag relationships
+            for tag_name in tx['tags']:
+                tag_id = tags.get(tag_name)
+                if tag_id:
+                    transaction_tag_values.append((temp_tx_id, tag_id))
+        
+        # Insert transactions in batch
+        if transaction_values:
+            cur.execute("""
+                WITH inserted_transactions AS (
+                    INSERT INTO core_transaction (
+                        user_id, type, amount, date, notes, is_estimated,
+                        period_id, account_id, category_id, created_at, updated_at
+                    )
+                    SELECT user_id, type, amount, date, notes, is_estimated,
+                           period_id, account_id, category_id, created_at, updated_at
+                    FROM unnest(%s::bigint[], %s::varchar[], %s::decimal[], %s::date[],
+                               %s::text[], %s::boolean[], %s::bigint[], %s::bigint[], 
+                               %s::bigint[], %s::timestamp[], %s::timestamp[]) 
+                    AS t(user_id, type, amount, date, notes, is_estimated,
+                         period_id, account_id, category_id, created_at, updated_at)
+                    RETURNING id
                 )
+                SELECT COUNT(*) FROM inserted_transactions
+            """, [
+                [v[0] for v in transaction_values],  # user_id
+                [v[1] for v in transaction_values],  # type
+                [v[2] for v in transaction_values],  # amount
+                [v[3] for v in transaction_values],  # date
+                [v[4] for v in transaction_values],  # notes
+                [v[5] for v in transaction_values],  # is_estimated
+                [v[6] for v in transaction_values],  # period_id
+                [v[7] for v in transaction_values],  # account_id
+                [v[8] for v in transaction_values],  # category_id
+                [v[9] for v in transaction_values],  # created_at
+                [v[10] for v in transaction_values], # updated_at
+            ])
+            
+            inserted = cur.fetchone()[0]
+            
+            # Insert tags if we have any
+            if transaction_tag_values and inserted > 0:
+                # Get the actual transaction IDs that were inserted
+                cur.execute("""
+                    SELECT id FROM core_transaction 
+                    WHERE user_id = %s AND created_at = %s 
+                    ORDER BY id DESC LIMIT %s
+                """, [user_id, ts, inserted])
+                
+                actual_tx_ids = [row[0] for row in cur.fetchall()]
+                actual_tx_ids.reverse()  # Match original order
+                
+                # Map temp IDs to actual IDs and insert tags
+                tag_insert_values = []
+                temp_to_actual = {}
+                
+                for i, (temp_id, tag_id) in enumerate(transaction_tag_values):
+                    if temp_id not in temp_to_actual:
+                        # Find the actual transaction ID for this temp ID
+                        actual_idx = next((j for j, v in enumerate(transaction_values) if v[11] == temp_id), None)
+                        if actual_idx is not None and actual_idx < len(actual_tx_ids):
+                            temp_to_actual[temp_id] = actual_tx_ids[actual_idx]
+                    
+                    if temp_id in temp_to_actual:
+                        tag_insert_values.append((temp_to_actual[temp_id], tag_id))
+                
+                if tag_insert_values:
+                    execute_values(
+                        cur,
+                        """INSERT INTO core_transactiontag (transaction_id, tag_id) 
+                           VALUES %s ON CONFLICT DO NOTHING""",
+                        tag_insert_values
+                    )
 
+    # Clear cache and show results
     from core.utils.cache_helpers import clear_tx_cache
     clear_tx_cache(user_id)
 
-    # Calculate statistics
-    skipped = total_rows - inserted
+    skipped = len(validation_errors)
     success_rate = (inserted / total_rows * 100) if total_rows > 0 else 0
 
-    logger.info(f"🎯 Import completed: {inserted} inserted, {skipped} skipped from {total_rows} total rows")
+    logger.info(f"🎯 Optimized import completed: {inserted} inserted, {skipped} skipped from {total_rows} total rows")
 
     if inserted > 0:
         if skipped > 0:
             messages.success(request, 
-                f"✅ Import completed! {inserted} transactions imported successfully. "
+                f"🚀 Fast import completed! {inserted} transactions imported successfully. "
                 f"{skipped} rows were skipped due to validation errors. "
                 f"Success rate: {success_rate:.1f}%")
         else:
             messages.success(request, 
-                f"🎉 Perfect import! All {inserted} transactions imported successfully!")
+                f"🎉 Perfect fast import! All {inserted} transactions imported successfully!")
     else:
         messages.error(request, 
             "❌ No transactions were imported. Please check your file format and try again.")
@@ -2276,6 +2402,52 @@ def transactions_json_v2(request):
 
         where_clause = " AND ".join(where_conditions)
 
+        # ✅ PAGINAÇÃO E ORDENAÇÃO
+        try:
+            page = int(data.get('page', 1))
+            page_size = int(data.get('page_size', 25))
+        except (ValueError, TypeError):
+            page, page_size = 1, 25
+
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 1000:
+            page_size = 25
+
+        offset = (page - 1) * page_size
+
+        # ✅ SORTING
+        sort_field = data.get('sort_field', 'date')
+        sort_direction = data.get('sort_direction', 'desc')
+
+        # Map frontend sort fields to database columns
+        sort_mapping = {
+            'date': 'tx.date',
+            'type': 'tx.type',
+            'amount': 'tx.amount',
+            'category': 'cat.name',
+            'account': 'acc.name',
+            'period': 'dp.year, dp.month',
+            'tags': 'STRING_AGG(tag.name, \', \' ORDER BY tag.name)'
+        }
+
+        sort_column = sort_mapping.get(sort_field, 'tx.date')
+        sort_dir = 'ASC' if sort_direction == 'asc' else 'DESC'
+
+        # For tags, we need special handling since it's an aggregated field
+        if sort_field == 'tags':
+            order_clause = f"STRING_AGG(tag.name, ', ' ORDER BY tag.name) {sort_dir}"
+        else:
+            order_clause = f"{sort_column} {sort_dir}"
+
+        # Always add ID as secondary sort to ensure consistent ordering
+        if sort_field != 'date':
+            order_clause += f", tx.date DESC, tx.id DESC"
+        else:
+            order_clause += f", tx.id DESC"
+
+        logger.info(f"🔤 [transactions_json_v2] Sorting: {sort_field} {sort_direction} -> {order_clause}")
+
         # First get ALL filtered transaction IDs (without pagination)
         # This ensures filters apply to ALL matching transactions
         all_filtered_query = f"""
@@ -2323,10 +2495,10 @@ def transactions_json_v2(request):
             transactions_query = f"""
                 SELECT 
                     tx.id, tx.date, tx.type, tx.amount,
-                    COALESCE(cat.name, '') AS category,
-                    COALESCE(acc.name, '') AS account,
-                    CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) AS period,
-                    COALESCE(STRING_AGG(tag.name, ', '), '') AS tags
+                    COALESCE(cat.name, '') as category, 
+                    COALESCE(acc.name, '') as account,
+                    CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
+                    COALESCE(STRING_AGG(tag.name, ', ' ORDER BY tag.name), '') as tags
                 FROM core_transaction tx
                 LEFT JOIN core_category cat ON tx.category_id = cat.id
                 LEFT JOIN core_account acc ON tx.account_id = acc.id
@@ -2335,7 +2507,7 @@ def transactions_json_v2(request):
                 LEFT JOIN core_tag tag ON tt.tag_id = tag.id
                 WHERE tx.id IN ({id_placeholders})
                 GROUP BY tx.id, tx.date, tx.type, tx.amount, cat.name, acc.name, dp.year, dp.month
-                ORDER BY tx.date DESC, tx.id DESC
+                ORDER BY {order_clause}
             """
             cursor.execute(transactions_query, paginated_ids)
             transactions = cursor.fetchall()
@@ -2511,10 +2683,15 @@ def transactions_json_v2(request):
     # Format transactions
     formatted_transactions = []
     for tx in transactions:
-        tx_id, tx_date, tx_type, amount, cat, acc, per, tags = tx
+        tx_id, tx_date, tx_type, amount, cat, acc, period, tags = tx
 
         # Map type codes to display names
         type_display = dict(Transaction.Type.choices).get(tx_type, tx_type)
+
+        # Add investment flow discrimination
+        investment_flow = None
+        if tx_type == 'IV':  # Investment type
+            investment_flow = 'Withdrawal' if float(amount) < 0 else 'Reinforcement'
 
         formatted_transactions.append({
             'id': tx_id,
@@ -2522,10 +2699,11 @@ def transactions_json_v2(request):
             'type': type_display,
             'amount': float(amount),
             'amount_formatted': f"€ {amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-            'category': cat,
-            'account': acc,
-            'period': per,
-            'tags': tags
+            'category': cat or '',
+            'account': acc or '',
+            'period': period or '',
+            'tags': tags or '',
+            'investment_flow': investment_flow
         })
 
     response_data = {
@@ -2649,7 +2827,8 @@ def transactions_totals_v2(request):
     investments = float(totals_by_type.get('IV', 0))
     transfers = float(totals_by_type.get('TR', 0))
 
-    balance = income - expenses + investments + transfers
+    # Balance = Income - Expenses (excluding investments and transfers)
+    balance = income - expenses
 
     return JsonResponse({
         'income': income,
