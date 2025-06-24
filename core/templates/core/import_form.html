@@ -22,7 +22,7 @@
   <!-- Formulário de upload -->
   <form method="post" action="{% url 'transaction_import_xlsx' %}" enctype="multipart/form-data" class="card shadow-sm p-4">
     {% csrf_token %}
-    
+
     <div class="mb-3">
       <label for="id_file" class="form-label">Select Excel file</label>
       <input type="file" name="file" id="id_file" class="form-control" accept=".xlsx" required>
@@ -42,12 +42,169 @@
 
     <!-- Botões -->
     <div class="d-flex justify-content-between">
-      <button type="submit" class="btn btn-success">📥 Import Transactions</button>
+      <button type="submit" class="btn btn-success" id="import-btn">
+        <span id="import-text">📥 Import Transactions</span>
+        <span id="import-loading" class="d-none">
+          <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+          Importing...
+        </span>
+      </button>
       <a href="{% url 'import_transactions_template_xlsx' %}" class="btn btn-outline-primary">📄 Download Template</a>
+    </div>
+
+    <!-- Progress Section -->
+    <div id="progress-section" class="mt-3 d-none">
+      <div class="card">
+        <div class="card-body">
+          <h6 class="card-title">
+            <i class="fas fa-upload me-2"></i>
+            Import Progress
+          </h6>
+          <div class="progress mb-3" style="height: 25px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                 role="progressbar" style="width: 0%" id="progress-bar">
+              <span id="progress-text" class="fw-bold">0%</span>
+            </div>
+          </div>
+          <div id="progress-details" class="text-muted">
+            Preparing import...
+          </div>
+          <small class="text-muted d-block mt-2">
+            <i class="fas fa-info-circle me-1"></i>
+            Please wait, do not close this window...
+          </small>
+        </div>
+      </div>
+    </div>
     </div>
   </form>
 </div>
 
 <!-- Bootstrap JS (para alertas e botão fechar) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const importBtn = document.getElementById('import-btn');
+    const importText = document.getElementById('import-text');
+    const importLoading = document.getElementById('import-loading');
+    const progressSection = document.getElementById('progress-section');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const progressDetails = document.getElementById('progress-details');
+
+    form.addEventListener('submit', function(e) {
+        const fileInput = document.getElementById('id_file');
+        if (!fileInput.files.length) {
+            e.preventDefault();
+            alert('Please select a file first.');
+            return;
+        }
+
+        // Show loading state
+        importBtn.disabled = true;
+        importText.classList.add('d-none');
+        importLoading.classList.remove('d-none');
+
+        // Show progress section
+        progressSection.classList.remove('d-none');
+
+        // Start with initial progress
+        updateProgress(5, 'Starting import process...');
+
+        // Simulate progress steps since Django upload is synchronous
+        setTimeout(() => {
+            simulateProgress();
+        }, 200);
+    });
+
+    function simulateProgress() {
+        let progress = 0;
+        const baseIncrement = 60 / 15; // Só vai até 60% na simulação inicial
+
+        const messages = [
+            'Uploading file...',
+            'Validating Excel format...',
+            'Reading transaction data...',
+            'Processing categories and accounts...',
+            'Creating account records...',
+            'Preparing bulk insert...'
+        ];
+
+        const interval = setInterval(() => {
+            // Progresso mais lento conforme se aproxima do fim
+            let increment = baseIncrement;
+            if (progress > 30) increment *= 0.8;
+            if (progress > 45) increment *= 0.6;
+
+            progress += increment;
+
+            if (progress >= 60) {
+                clearInterval(interval);
+                // Progresso mais lento e realista no final
+                finalProgressSteps();
+                return;
+            }
+
+            const messageIndex = Math.floor(progress / 12);
+            const message = messages[messageIndex] || 'Processing import...';
+
+            updateProgress(Math.min(progress, 60), `${message} (${Math.floor(progress)}%)`);
+        }, 300);
+
+        return interval;
+    }
+
+    function finalProgressSteps() {
+        // Passos finais mais lentos e realistas (de 60% para 93%)
+        const finalSteps = [
+            { percent: 65, message: 'Inserting transactions into database...', delay: 600 },
+            { percent: 72, message: 'Processing transaction relationships...', delay: 800 },
+            { percent: 78, message: 'Updating account balances...', delay: 700 },
+            { percent: 84, message: 'Clearing cache...', delay: 900 },
+            { percent: 89, message: 'Finalizing import...', delay: 600 },
+            { percent: 93, message: 'Preparing redirect...', delay: 500 }
+        ];
+
+        let stepIndex = 0;
+        const stepInterval = setInterval(() => {
+            if (stepIndex >= finalSteps.length) {
+                clearInterval(stepInterval);
+                return;
+            }
+
+            const step = finalSteps[stepIndex];
+            updateProgress(step.percent, step.message);
+            stepIndex++;
+        }, finalSteps[stepIndex]?.delay || 600);
+    }
+
+    function updateProgress(percent, details) {
+        progressBar.style.width = percent + '%';
+        progressText.textContent = percent + '%';
+        progressDetails.textContent = details;
+
+        // Add success styling when complete
+        if (percent >= 100) {
+            progressBar.classList.remove('bg-primary');
+            progressBar.classList.add('bg-success');
+            progressBar.classList.remove('progress-bar-animated');
+            progressDetails.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i>Import completed! Redirecting...';
+        } else if (percent >= 95) {
+            progressDetails.innerHTML = '<strong>Almost done...</strong> Finishing import process...';
+        }
+    }
+
+    // Handle file size validation
+    const fileInput = document.getElementById('id_file');
+    fileInput.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file && file.size > 10 * 1024 * 1024) { // 10MB limit
+            alert('File size too large. Please select a file smaller than 10MB.');
+            this.value = '';
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -63,6 +63,8 @@ from .utils.cache_helpers import clear_tx_cache
 from django.views.generic import TemplateView
 from django.db import transaction as db_tx, connection
 
+# Removed circular import - these views are defined in this same file
+
 
 # ==============================================================================
 # UTILITÁRIOS DE CACHE SEGUROS
@@ -223,7 +225,7 @@ def menu_config(request):
     return JsonResponse({
         "username": request.user.username,
         "links": [
-            {"name": "Dashboard", "url": reverse("transaction_list")},
+            {"name": "Dashboard", "url": reverse("transaction_list_v2")},
             {"name": "New Transaction", "url": reverse("transaction_create")},
             {"name": "Categories", "url": reverse("category_list")},
             {"name": "Account Balances", "url": reverse("account_balance")},
@@ -278,62 +280,26 @@ def account_balances_pivot_json(request):
 # VIEWS DE TRANSAÇÕES
 # ==============================================================================
 
-class TransactionListView(LoginRequiredMixin, ListView):
-    """Lista todas as transações do utilizador atual, paginadas por 50 linhas."""
-    model = Transaction
-    template_name = "core/transaction_list.html"
-    context_object_name = "transactions"
-    paginate_by = 50  # ← evita carregar tudo de uma só vez
-
-    def get_queryset(self):
-        """
-        Retorna o queryset filtrado pelo utilizador corrente,
-        com relações carregadas de forma eficiente.
-        """
-        return (
-            Transaction.objects
-            .filter(user=self.request.user)
-            .select_related("category", "account", "period")
-            .order_by("-date", "-id")
-        )
-
-    def get_context_data(self, **kwargs):
-        """Add additional context for filters."""
-        context = super().get_context_data(**kwargs)
-
-        # Get available periods for the filter dropdown
-        periods = DatePeriod.objects.order_by("-year", "-month")
-        context["period_options"] = [
-            f"{p.year}-{p.month:02d}" for p in periods
-        ]
-
-        # Set current period (current month by default)
-        today = date.today()
-        context["current_period"] = f"{today.year}-{today.month:02d}"
-
-        return context
-
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
     """Criar nova transação com validação de segurança."""
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
-    success_url = reverse_lazy("transaction_list")
+    success_url = reverse_lazy("transaction_list_v2")
 
     def form_valid(self, form):
         """Processar formulário válido e limpar cache."""
         self.object = form.save()
         logger.debug(f'📝 Criado: {self.object}')  # ✅ DEBUG no terminal
 
-        # Limpar cache imediatamente (transação criada)
+        # Limpar cache imediatamente
         clear_tx_cache(self.request.user.id)
 
-        # Set flags for JavaScript to know cache was cleared
+        # Adicionar flag para JavaScript saber que deve recarregar
         self.request.session['transaction_changed'] = True
-        self.request.session['cache_cleared'] = True
 
         if self.request.headers.get("HX-Request") == "true":
-            return JsonResponse({"success": True, "reload_needed": True, "cache_cleared": True})
+            return JsonResponse({"success": True, "reload_needed": True})
 
         messages.success(self.request, "Transação criada com sucesso!")
         return redirect(self.get_success_url())
@@ -361,18 +327,17 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
-    success_url = reverse_lazy("transaction_list")
+    success_url = reverse_lazy("transaction_list_v2")
 
     def get_queryset(self):
         return super().get_queryset().prefetch_related("tags")
 
     def form_valid(self, form):
-        # Limpar cache imediatamente (transação editada)
+        # Limpar cache imediatamente
         clear_tx_cache(self.request.user.id)
 
-        # Set flags for JavaScript to know cache was cleared
+        # Adicionar flag para JavaScript saber que deve recarregar
         self.request.session['transaction_changed'] = True
-        self.request.session['cache_cleared'] = True
 
         messages.success(self.request, "Transação atualizada com sucesso!")
 
@@ -394,7 +359,7 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
     """Eliminar transação com validação de proprietário."""
     model = Transaction
     template_name = "core/confirms/transaction_confirm_delete.html"
-    success_url = reverse_lazy("transaction_list")
+    success_url = reverse_lazy("transaction_list_v2")
 
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -403,19 +368,14 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
         # Delete the transaction
         response = super().delete(request, *args, **kwargs)
 
-        # Clear cache after deletion (transação eliminada)
+        # Clear cache after deletion
         clear_tx_cache(user_id)
-
-        # Set modification flag for frontend
-        request.session['transaction_changed'] = True
-        request.session['cache_cleared'] = True
 
         # Handle AJAX requests
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
             return JsonResponse({
                 'success': True,
-                'message': 'Transação eliminada com sucesso!',
-                'cache_cleared': True
+                'message': 'Transação eliminada com sucesso!'
             })
 
         messages.success(request, "Transação eliminada com sucesso!")
@@ -598,8 +558,8 @@ def transactions_json(request):
     order_dir = request.GET.get("order[0][dir]", "desc")
     ascending = order_dir != "desc"
     column_map = {
-        "0": "id", "1": "period", "2": "date", "3": "type",
-        "4": "amount_float", "5": "category", "6": "account", "7": "tags"
+        "0": "period", "1": "date", "2": "type",
+        "3": "amount_float", "4": "category", "5": "tags", "6": "account"
     }
     sort_col = column_map.get(order_col, "date")
     if sort_col in df.columns:
@@ -608,9 +568,9 @@ def transactions_json(request):
         except Exception:
             pass
 
-    # Formatar montantes (sem duplicar o símbolo da moeda)
+    # Formatar montantes
     df["amount"] = df.apply(
-        lambda r: f"{r['amount_float']:,.2f} {r['currency']}".replace(",", "X").replace(".", ",").replace("X", "."),
+        lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" {r['currency']}",
         axis=1
     )
 
@@ -628,12 +588,7 @@ def transactions_json(request):
     draw = int(request.GET.get("draw", 1))
     start = int(request.GET.get("start", 0))
     length = int(request.GET.get("length", 10))
-
-    # Se length for -1, mostrar todos os registros
-    if length == -1:
-        page_df = df
-    else:
-        page_df = df.iloc[start : start + length]
+    page_df = df.iloc[start : start + length]
 
     return JsonResponse({
         "draw": draw,
@@ -654,7 +609,7 @@ def transactions_json(request):
 @require_POST
 @login_required
 def transaction_bulk_update(request):
-    """Bulk update transactions (mark as cleared, etc.)."""
+    """Bulk update transactions (mark as estimated, etc.)."""
     try:
         data = json.loads(request.body)
         action = data.get('action')
@@ -673,17 +628,19 @@ def transaction_bulk_update(request):
             return JsonResponse({'success': False, 'error': 'Some transactions not found'})
 
         updated = 0
-        if action == 'mark_cleared':
-            updated = transactions.update(is_cleared=True)
-        elif action == 'mark_uncleared':
-            updated = transactions.update(is_cleared=False)
-        elif action == 'mark_estimated':
-            updated = transactions.update(is_estimated=True)
-        else:
-            return JsonResponse({'success': False, 'error': 'Invalid action'})
 
-        # Clear cache after bulk update
+        # Use atomic transaction to ensure all updates happen together
+        with db_transaction.atomic():
+            if action == 'mark_estimated':
+                updated = transactions.update(is_estimated=True)
+            elif action == 'mark_unestimated':
+                updated = transactions.update(is_estimated=False)
+            else:
+                return JsonResponse({'success': False, 'error': 'Invalid action'})
+
+        # Clear cache only AFTER all database operations are complete
         clear_tx_cache(request.user.id)
+        logger.info(f"✅ Bulk update completed: {updated} transactions updated, cache cleared for user {request.user.id}")
 
         return JsonResponse({
             'success': True, 
@@ -711,7 +668,7 @@ def transaction_bulk_duplicate(request):
         transactions = Transaction.objects.filter(
             id__in=transaction_ids,
             user=request.user
-        ).select_related('category', 'account', 'period')
+        ).select_related('category', 'account', 'period').prefetch_related('tags')
 
         if len(transactions) != len(transaction_ids):
             return JsonResponse({'success': False, 'error': 'Some transactions not found'})
@@ -724,7 +681,9 @@ def transaction_bulk_duplicate(request):
             defaults={'label': today.strftime('%B %Y')}
         )
 
+        # Use atomic transaction for all operations
         with db_transaction.atomic():
+            new_transactions = []
             for tx in transactions:
                 # Create duplicate with today's date
                 new_tx = Transaction.objects.create(
@@ -733,21 +692,22 @@ def transaction_bulk_duplicate(request):
                     amount=tx.amount,
                     date=today,
                     notes=f"Duplicate of transaction from {tx.date}",
-                    is_cleared=False,
                     is_estimated=tx.is_estimated,
                     period=current_period,
                     account=tx.account,
                     category=tx.category
                 )
-
-                # Copy tags
-                for tag in tx.tags.all():
-                    new_tx.tags.add(tag)
-
+                new_transactions.append((new_tx, tx.tags.all()))
                 created += 1
 
-        # Clear cache after bulk create
+            # Copy tags for all new transactions
+            for new_tx, original_tags in new_transactions:
+                for tag in original_tags:
+                    new_tx.tags.add(tag)
+
+        # Clear cache only AFTER all database operations are complete
         clear_tx_cache(request.user.id)
+        logger.info(f"✅ Bulk duplicate completed: {created} transactions created, cache cleared for user {request.user.id}")
 
         return JsonResponse({
             'success': True,
@@ -763,7 +723,7 @@ def transaction_bulk_duplicate(request):
 @require_POST
 @login_required
 def transaction_bulk_delete(request):
-    """Bulk delete transactions with optimized performance."""
+    """Bulk delete transactions."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get('transaction_ids', [])
@@ -771,38 +731,25 @@ def transaction_bulk_delete(request):
         if not transaction_ids:
             return JsonResponse({'success': False, 'error': 'No transactions selected'})
 
-        user_id = request.user.id
+        # Validate transactions belong to user
+        transactions = Transaction.objects.filter(
+            id__in=transaction_ids,
+            user=request.user
+        )
 
+        if len(transactions) != len(transaction_ids):
+            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+
+        deleted_count = len(transactions)
+
+        # Use atomic transaction for bulk delete
         with db_transaction.atomic():
-            # Use raw SQL for maximum performance
-            with connection.cursor() as cursor:
-                # First verify all transactions belong to user
-                cursor.execute("""
-                    SELECT COUNT(*) FROM core_transaction 
-                    WHERE id = ANY(%s) AND user_id = %s
-                """, [transaction_ids, user_id])
+            # Delete all transactions in a single operation
+            transactions.delete()
 
-                valid_count = cursor.fetchone()[0]
-
-                if valid_count != len(transaction_ids):
-                    return JsonResponse({'success': False, 'error': 'Some transactions not found'})
-
-                # Delete transaction-tag relationships first (foreign key constraint)
-                cursor.execute("""
-                    DELETE FROM core_transactiontag 
-                    WHERE transaction_id = ANY(%s)
-                """, [transaction_ids])
-
-                # Delete transactions
-                cursor.execute("""
-                    DELETE FROM core_transaction 
-                    WHERE id = ANY(%s) AND user_id = %s
-                """, [transaction_ids, user_id])
-
-                deleted_count = cursor.rowcount
-
-        # Clear cache after bulk delete
-        clear_tx_cache(user_id)
+        # Clear cache only AFTER all database operations are complete
+        clear_tx_cache(request.user.id)
+        logger.info(f"✅ Bulk delete completed: {deleted_count} transactions deleted, cache cleared for user {request.user.id}")
 
         return JsonResponse({
             'success': True,
@@ -815,47 +762,52 @@ def transaction_bulk_delete(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-@require_GET
-@login_required
-def check_cache_status(request):
-    """Check cache status without clearing it."""
-    try:
-        # Just return that cache is OK - no clearing needed
-        return JsonResponse({
-            "cache_cleared": False, 
-            "status": "ok",
-            "message": "Cache status checked - no action needed"
-        })
-    except Exception as e:
-        logger.error(f"Error checking cache status: {e}")
-        return JsonResponse({
-            "cache_cleared": False,
-            "status": "error", 
-            "message": str(e)
-        }, status=500)
-
-
 @require_POST
 @login_required
 def transaction_clear_cache(request):
-    """Atualizar cache de transações preservando dados válidos."""
+    """Limpar cache de transações e retornar status."""
     try:
         user_id = request.user.id
-        
-        # Instead of clearing cache, just log that update was requested
-        # The actual cache will be updated when new data is fetched
-        logger.info(f"Cache update requested for user {user_id} - cache will be refreshed on next data fetch")
-        
+        clear_tx_cache(user_id)
+
+        # Clear all cache keys that might contain user data
+        from django.core.cache import cache
+        import hashlib
+
+        # Get the secret hash used in cache keys
+        secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:8]
+
+        # Clear all possible cache variations for this user
+        cache_patterns = [
+            f"tx_cache_user_{user_id}_",
+            f"account_balance_user_{user_id}_",
+            f"dashboard_data_user_{user_id}",
+        ]
+
+        # Try to clear cache keys that match our patterns
+        try:
+            # This is a more aggressive cache clear
+            cache.clear()  # Clear entire cache as fallback
+        except:
+            # If cache.clear() fails, try individual patterns
+            for pattern in cache_patterns:
+                for i in range(12):  # Clear up to 12 months of data
+                    for j in range(31):  # Clear up to 31 days
+                        cache.delete(f"{pattern}{i}_{j}_{secret_hash}")
+
+        logger.info(f"Cache cleared successfully for user {user_id}")
         return JsonResponse({
-            "status": "ok",
-            "message": "Cache refresh requested - data will be updated on next fetch"
+            "status": "ok", 
+            "message": "Cache limpo com sucesso",
+            "user_id": user_id,
+            "cleared": True
         })
 
     except Exception as e:
-        logger.error(f"Error requesting cache update for user {request.user.id}: {e}")
+        logger.error(f"Error clearing cache for user {request.user.id}: {e}")
         return JsonResponse({
-            "status": "error",
-            "message": str(e)
+            "status": "error", 
+            "message": f"Erro ao limpar cache: {str(e)}"
         }, status=500)
 
 @require_GET
@@ -1166,12 +1118,7 @@ def account_balance_view(request):
     for form in formset:
         if hasattr(form.instance, 'account') and form.instance.account:
             account = form.instance.account
-
-            # Verificações de segurança para account_type e currency
-            account_type_name = account.account_type.name if account.account_type else "Unknown"
-            currency_code = account.currency.code if account.currency else "EUR"
-
-            key = (account_type_name, currency_code)
+            key = (account.account_type.name, account.currency.code)
             grouped_forms.setdefault(key, []).append(form)
 
     for key, forms in grouped_forms.items():
@@ -1546,9 +1493,17 @@ def import_transactions_xlsx(request):
     inserted = 0
     periods, cats, accts, tags = {}, {}, {}, {}
 
+    total_rows = len(df)
+    logger.info(f"📊 Starting import of {total_rows} rows for user {user_id}")
+
     with connection.cursor() as cur, db_tx.atomic():
         for idx, row in df.iterrows():
             row_num = idx + 2
+
+            # Log progress every 50 rows
+            if idx > 0 and idx % 50 == 0:
+                logger.info(f"📈 Progress: {idx}/{total_rows} rows processed ({(idx/total_rows)*100:.1f}%)")
+
             raw_date = row["Date"]
             if pd.isna(raw_date):
                 messages.warning(request, f"⚠️ Line {row_num}: Date empty.")
@@ -1685,12 +1640,13 @@ def import_transactions_xlsx(request):
                 """
                 INSERT INTO core_transaction (
                     user_id, type, amount, date,
-                    notes, is_cleared, is_estimated,
+                    notes, is_estimated,
                     period_id, account_id, category_id,
                     created_at, updated_at
                 )
                 VALUES (
-                    %s, %s, %s, %s                    %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s,
                     %s, %s, %s,
                     %s, %s
                 )
@@ -1698,7 +1654,7 @@ def import_transactions_xlsx(request):
                 """,
                 [
                     user_id, tx_type, amount, date_val,
-                    "", False, False,
+                    "", False,
                     period_id, account_id, category_id,
                     ts, ts,
                 ],
@@ -1723,8 +1679,26 @@ def import_transactions_xlsx(request):
     from core.utils.cache_helpers import clear_tx_cache
     clear_tx_cache(user_id)
 
-    messages.success(request, f"✅ {inserted} transactions imported successfully.")
-    return redirect("transaction_list")
+    # Calculate statistics
+    skipped = total_rows - inserted
+    success_rate = (inserted / total_rows * 100) if total_rows > 0 else 0
+
+    logger.info(f"🎯 Import completed: {inserted} inserted, {skipped} skipped from {total_rows} total rows")
+
+    if inserted > 0:
+        if skipped > 0:
+            messages.success(request, 
+                f"✅ Import completed! {inserted} transactions imported successfully. "
+                f"{skipped} rows were skipped due to validation errors. "
+                f"Success rate: {success_rate:.1f}%")
+        else:
+            messages.success(request, 
+                f"🎉 Perfect import! All {inserted} transactions imported successfully!")
+    else:
+        messages.error(request, 
+            "❌ No transactions were imported. Please check your file format and try again.")
+
+    return redirect("transaction_list_v2")
 
 
 @login_required
@@ -2043,22 +2017,7 @@ def clear_session_flag(request):
     """Limpar flag de mudança de transação da sessão."""
     if 'transaction_changed' in request.session:
         del request.session['transaction_changed']
-    if 'cache_cleared' in request.session:
-        del request.session['cache_cleared']
     return JsonResponse({'success': True})
-
-@login_required
-def check_cache_status(request):
-    """Check if cache was cleared and needs frontend update."""
-    cache_cleared = request.session.get('cache_cleared', False)
-    if cache_cleared:
-        # Clear the flag after checking
-        del request.session['cache_cleared']
-
-    return JsonResponse({
-        'cache_cleared': cache_cleared,
-        'should_reload_cache': cache_cleared
-    })
 
 @login_required
 def dashboard_kpis_json(request):
@@ -2204,3 +2163,500 @@ def account_balance_template_xlsx(request):
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+# Transactions 2.0 views
+@login_required
+def transaction_list_v2(request):
+    """View for Transactions 2.0"""
+    return render(request, "core/transaction_list_v2.html")
+
+@login_required
+def transactions_json_v2(request):
+    """API JSON for Transactions 2.0 with advanced filtering and pagination"""
+    logger.info(f"🚀 [transactions_json_v2] Pedido recebido de user_id={request.user.id}")
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+        logger.info(f"📦 [transactions_json_v2] Dados recebidos: {data}")
+    except (json.JSONDecodeError, AttributeError) as e:
+        logger.warning(f"⚠️ [transactions_json_v2] Erro ao fazer parse do request body: {e}")
+        data = {}
+
+    user_id = request.user.id
+
+    # Extract filters from request
+    date_start = data.get('date_start', '2025-01-01')
+    date_end = data.get('date_end', date.today().isoformat())
+    tx_type = data.get('type', '')
+    account = data.get('account', '')
+    category = data.get('category', '')
+    period = data.get('period', '')
+    amount_min = data.get('amount_min', '')
+    amount_max = data.get('amount_max', '')
+    tags = data.get('tags', '')
+    search = data.get('search', '')
+    page = int(data.get('page', 1))
+    page_size_raw = data.get('page_size', 25)
+
+    # Handle 'all' page size or very large numbers
+    if page_size_raw == 'all' or (isinstance(page_size_raw, str) and page_size_raw.isdigit() and int(page_size_raw) > 1000):
+        page_size = 10000  # Cap at 10k for performance
+    else:
+        page_size = min(int(page_size_raw), 1000)  # Cap individual page size at 1000
+
+    # Parse dates safely
+    start_date = parse_safe_date(date_start, date(2025, 1, 1))
+    end_date = parse_safe_date(date_end, date.today())
+
+    # Generate cache key
+    cache_key = f"tx_v2_{user_id}_{start_date}_{end_date}_{hash(str(data))}"
+    cached_data = cache.get(cache_key)
+
+    if cached_data:
+        return JsonResponse(cached_data)
+
+    with connection.cursor() as cursor:
+        # Base query
+        where_conditions = ["tx.user_id = %s", "tx.date BETWEEN %s AND %s"]
+        params = [user_id, start_date, end_date]
+
+        # Apply filters - map display names to database codes
+        type_mapping = {
+            'Income': 'IN',
+            'Expense': 'EX', 
+            'Investment': 'IV',
+            'Transfer': 'TR'
+        }
+
+        if tx_type:
+            # Convert display name to database code if needed
+            db_type = type_mapping.get(tx_type, tx_type)
+            if db_type in ['IN', 'EX', 'IV', 'TR']:
+                where_conditions.append("tx.type = %s")
+                params.append(db_type)
+
+        if category:
+            where_conditions.append("COALESCE(cat.name, '') ILIKE %s")
+            params.append(f"%{category}%")
+
+        if account:
+            where_conditions.append("COALESCE(acc.name, '') ILIKE %s")
+            params.append(f"%{account}%")
+
+        if period:
+            try:
+                year, month = map(int, period.split('-'))
+                where_conditions.append("dp.year = %s AND dp.month = %s")
+                params.extend([year, month])
+            except ValueError:
+                pass
+
+        if amount_min:
+            try:
+                where_conditions.append("tx.amount >= %s")
+                params.append(float(amount_min))
+            except ValueError:
+                pass
+
+        if amount_max:
+            try:
+                where_conditions.append("tx.amount <= %s")
+                params.append(float(amount_max))
+            except ValueError:
+                pass
+
+        if search:
+            where_conditions.append("""
+                (COALESCE(cat.name, '') ILIKE %s OR 
+                 COALESCE(acc.name, '') ILIKE %s OR 
+                 COALESCE(tx.notes, '') ILIKE %s)
+            """)
+            search_term = f"%{search}%"
+            params.extend([search_term, search_term, search_term])
+
+        where_clause = " AND ".join(where_conditions)
+
+        # First get ALL filtered transaction IDs (without pagination)
+        # This ensures filters apply to ALL matching transactions
+        all_filtered_query = f"""
+            SELECT tx.id
+            FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
+            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
+            WHERE {where_clause}
+            GROUP BY tx.id, tx.date, tx.type, tx.amount, cat.name, acc.name, dp.year, dp.month
+            ORDER BY tx.date DESC, tx.id DESC
+        """
+
+        if tags:  # Only add tag filtering if tags are specified
+            cursor.execute(all_filtered_query, params)
+        else:
+            # Simpler query without tag joins when no tag filter
+            simple_query = f"""
+                SELECT tx.id
+                FROM core_transaction tx
+                LEFT JOIN core_category cat ON tx.category_id = cat.id
+                LEFT JOIN core_account acc ON tx.account_id = acc.id
+                LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+                WHERE {where_clause}
+                ORDER BY tx.date DESC, tx.id DESC
+            """
+            cursor.execute(simple_query, params)
+
+        all_filtered_ids = [row[0] for row in cursor.fetchall()]
+        total_count = len(all_filtered_ids)
+        logger.info(f"🔍 [transactions_json_v2] Total IDs filtrados: {total_count}")
+
+        # Now get paginated subset with full details
+        offset = (page - 1) * page_size
+        paginated_ids = all_filtered_ids[offset:offset + page_size]
+        logger.info(f"📄 [transactions_json_v2] Página {page}, offset {offset}, IDs desta página: {len(paginated_ids)}")
+
+        if not paginated_ids:
+            transactions = []
+        else:
+            # Get full transaction details for current page
+            id_placeholders = ','.join(['%s'] * len(paginated_ids))
+            transactions_query = f"""
+                SELECT 
+                    tx.id, tx.date, tx.type, tx.amount,
+                    COALESCE(cat.name, '') AS category,
+                    COALESCE(acc.name, '') AS account,
+                    CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) AS period,
+                    COALESCE(STRING_AGG(tag.name, ', '), '') AS tags
+                FROM core_transaction tx
+                LEFT JOIN core_category cat ON tx.category_id = cat.id
+                LEFT JOIN core_account acc ON tx.account_id = acc.id
+                LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+                LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
+                LEFT JOIN core_tag tag ON tt.tag_id = tag.id
+                WHERE tx.id IN ({id_placeholders})
+                GROUP BY tx.id, tx.date, tx.type, tx.amount, cat.name, acc.name, dp.year, dp.month
+                ORDER BY tx.date DESC, tx.id DESC
+            """
+            cursor.execute(transactions_query, paginated_ids)
+            transactions = cursor.fetchall()
+
+        # Get filter options from CURRENTLY FILTERED transactions (Excel-style)
+        # Para cada filtro, calculamos as opções considerando TODOS OS OUTROS filtros aplicados
+        filter_options = {
+            'categories': [],
+            'accounts': [],
+            'periods': []
+        }
+
+        if all_filtered_ids:
+            logger.info(f"🔧 [transactions_json_v2] Calculando opções de filtro estilo Excel...")
+
+            # Para categories: aplicar todos os filtros EXCETO category
+            category_filters = []
+            category_params = [user_id, start_date, end_date]
+
+            if tx_type:
+                db_type = type_mapping.get(tx_type, tx_type)
+                if db_type in ['IN', 'EX', 'IV', 'TR']:
+                    category_filters.append("tx.type = %s")
+                    category_params.append(db_type)
+            if account:
+                category_filters.append("COALESCE(acc.name, '') ILIKE %s")
+                category_params.append(f"%{account}%")
+            if period:
+                try:
+                    year, month = map(int, period.split('-'))
+                    category_filters.append("dp.year = %s AND dp.month = %s")
+                    category_params.extend([year, month])
+                except ValueError:
+                    pass
+            if amount_min:
+                try:
+                    category_filters.append("tx.amount >= %s")
+                    category_params.append(float(amount_min))
+                except ValueError:
+                    pass
+            if amount_max:
+                try:
+                    category_filters.append("tx.amount <= %s")
+                    category_params.append(float(amount_max))
+                except ValueError:
+                    pass
+            if search:
+                category_filters.append("(COALESCE(acc.name, '') ILIKE %s OR COALESCE(tx.notes, '') ILIKE %s)")
+                search_term = f"%{search}%"
+                category_params.extend([search_term, search_term])
+
+            category_where = "tx.user_id = %s AND tx.date BETWEEN %s AND %s"
+            if category_filters:
+                category_where += " AND " + " AND ".join(category_filters)
+
+            cursor.execute(f"""
+                SELECT DISTINCT COALESCE(cat.name, '') AS name
+                FROM core_transaction tx
+                LEFT JOIN core_category cat ON tx.category_id = cat.id
+                LEFT JOIN core_account acc ON tx.account_id = acc.id
+                LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+                WHERE {category_where} AND cat.name IS NOT NULL AND cat.name != ''
+                ORDER BY name
+            """, category_params)
+            filter_options['categories'] = [row[0] for row in cursor.fetchall() if row[0]]
+
+            # Para accounts: aplicar todos os filtros EXCETO account
+            account_filters = []
+            account_params = [user_id, start_date, end_date]
+
+            if tx_type:
+                db_type = type_mapping.get(tx_type, tx_type)
+                if db_type in ['IN', 'EX', 'IV', 'TR']:
+                    account_filters.append("tx.type = %s")
+                    account_params.append(db_type)
+            if category:
+                account_filters.append("COALESCE(cat.name, '') ILIKE %s")
+                account_params.append(f"%{category}%")
+            if period:
+                try:
+                    year, month = map(int, period.split('-'))
+                    account_filters.append("dp.year = %s AND dp.month = %s")
+                    account_params.extend([year, month])
+                except ValueError:
+                    pass
+            if amount_min:
+                try:
+                    account_filters.append("tx.amount >= %s")
+                    account_params.append(float(amount_min))
+                except ValueError:
+                    pass
+            if amount_max:
+                try:
+                    account_filters.append("tx.amount <= %s")
+                    account_params.append(float(amount_max))
+                except ValueError:
+                    pass
+            if search:
+                account_filters.append("(COALESCE(cat.name, '') ILIKE %s OR COALESCE(tx.notes, '') ILIKE %s)")
+                search_term = f"%{search}%"
+                account_params.extend([search_term, search_term])
+
+            account_where = "tx.user_id = %s AND tx.date BETWEEN %s AND %s"
+            if account_filters:
+                account_where += " AND " + " AND ".join(account_filters)
+
+            cursor.execute(f"""
+                SELECT DISTINCT COALESCE(acc.name, '') AS name
+                FROM core_transaction tx
+                LEFT JOIN core_category cat ON tx.category_id = cat.id
+                LEFT JOIN core_account acc ON tx.account_id = acc.id
+                LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+                WHERE {account_where} AND acc.name IS NOT NULL AND acc.name != ''
+                ORDER BY name
+            """, account_params)
+            filter_options['accounts'] = [row[0] for row in cursor.fetchall() if row[0]]
+
+            # Para periods: aplicar todos os filtros EXCETO period
+            period_filters = []
+            period_params = [user_id, start_date, end_date]
+
+            if tx_type:
+                db_type = type_mapping.get(tx_type, tx_type)
+                if db_type in ['IN', 'EX', 'IV', 'TR']:
+                    period_filters.append("tx.type = %s")
+                    period_params.append(db_type)
+            if category:
+                period_filters.append("COALESCE(cat.name, '') ILIKE %s")
+                period_params.append(f"%{category}%")
+            if account:
+                period_filters.append("COALESCE(acc.name, '') ILIKE %s")
+                period_params.append(f"%{account}%")
+            if amount_min:
+                try:
+                    period_filters.append("tx.amount >= %s")
+                    period_params.append(float(amount_min))
+                except ValueError:
+                    pass
+            if amount_max:
+                try:
+                    period_filters.append("tx.amount <= %s")
+                    period_params.append(float(amount_max))
+                except ValueError:
+                    pass
+            if search:
+                period_filters.append("(COALESCE(cat.name, '') ILIKE %s OR COALESCE(acc.name, '') ILIKE %s OR COALESCE(tx.notes, '') ILIKE %s)")
+                search_term = f"%{search}%"
+                period_params.extend([search_term, search_term, search_term])
+
+            period_where = "tx.user_id = %s AND tx.date BETWEEN %s AND %s"
+            if period_filters:
+                period_where += " AND " + " AND ".join(period_filters)
+
+            cursor.execute(f"""
+                SELECT DISTINCT CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) AS period
+                FROM core_transaction tx
+                LEFT JOIN core_category cat ON tx.category_id = cat.id
+                LEFT JOIN core_account acc ON tx.account_id = acc.id
+                JOIN core_dateperiod dp ON tx.period_id = dp.id
+                WHERE {period_where}
+                ORDER BY period DESC
+            """, period_params)
+            filter_options['periods'] = [row[0] for row in cursor.fetchall() if row[0]]
+
+            logger.info(f"🔧 [transactions_json_v2] Filtros estilo Excel calculados:")
+            logger.info(f"   - Categories: {len(filter_options['categories'])} opções")
+            logger.info(f"   - Accounts: {len(filter_options['accounts'])} opções") 
+            logger.info(f"   - Periods: {len(filter_options['periods'])} opções")
+
+        else:
+            logger.info(f"🔧 [transactions_json_v2] Sem transações encontradas, filtros vazios")
+
+    # Format transactions
+    formatted_transactions = []
+    for tx in transactions:
+        tx_id, tx_date, tx_type, amount, cat, acc, per, tags = tx
+
+        # Map type codes to display names
+        type_display = dict(Transaction.Type.choices).get(tx_type, tx_type)
+
+        formatted_transactions.append({
+            'id': tx_id,
+            'date': tx_date.strftime('%Y-%m-%d'),
+            'type': type_display,
+            'amount': float(amount),
+            'amount_formatted': f"€ {amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+            'category': cat,
+            'account': acc,
+            'period': per,
+            'tags': tags
+        })
+
+    response_data = {
+        'transactions': formatted_transactions,
+        'total_count': total_count,
+        'current_page': page,
+        'page_size': page_size,
+        'filters': filter_options
+    }
+
+    logger.info(f"📊 [transactions_json_v2] Resposta preparada: {len(formatted_transactions)} transações, página {page}/{(total_count + page_size - 1) // page_size}")
+    logger.info(f"🔧 [transactions_json_v2] Filtros disponíveis: categories={len(filter_options.get('categories', []))}, accounts={len(filter_options.get('accounts', []))}, periods={len(filter_options.get('periods', []))}")
+
+    # Cache the response
+    cache.set(cache_key, response_data, timeout=300)
+    logger.info(f"💾 [transactions_json_v2] Resposta guardada no cache com key: {cache_key}")
+
+    return JsonResponse(response_data)
+
+@login_required
+def transactions_totals_v2(request):
+    """Calculate totals for filtered transactions"""
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, AttributeError):
+        data = {}
+
+    user_id = request.user.id
+
+    # Extract filters (same as main function to apply same filters)
+    date_start = data.get('date_start', '2025-01-01')
+    date_end = data.get('date_end', date.today().isoformat())
+    tx_type = data.get('type', '')
+    account = data.get('account', '')
+    category = data.get('category', '')
+    period = data.get('period', '')
+    amount_min = data.get('amount_min', '')
+    amount_max = data.get('amount_max', '')
+    search = data.get('search', '')
+
+    start_date = parse_safe_date(date_start, date(2025, 1, 1))
+    end_date = parse_safe_date(date_end, date.today())
+
+    # Apply same filters as main query
+    where_conditions = ["tx.user_id = %s", "tx.date BETWEEN %s AND %s"]
+    params = [user_id, start_date, end_date]
+
+    # Type filter with mapping
+    type_mapping = {
+        'Income': 'IN',
+        'Expense': 'EX', 
+        'Investment': 'IV',
+        'Transfer': 'TR'
+    }
+
+    if tx_type:
+        db_type = type_mapping.get(tx_type, tx_type)
+        if db_type in ['IN', 'EX', 'IV', 'TR']:
+            where_conditions.append("tx.type = %s")
+            params.append(db_type)
+
+    if category:
+        where_conditions.append("COALESCE(cat.name, '') ILIKE %s")
+        params.append(f"%{category}%")
+
+    if account:
+        where_conditions.append("COALESCE(acc.name, '') ILIKE %s") 
+        params.append(f"%{account}%")
+
+    if period:
+        try:
+            year, month = map(int, period.split('-'))
+            where_conditions.append("dp.year = %s AND dp.month = %s")
+            params.extend([year, month])
+        except ValueError:
+            pass
+
+    if amount_min:
+        try:
+            where_conditions.append("tx.amount >= %s")
+            params.append(float(amount_min))
+        except ValueError:
+            pass
+
+    if amount_max:
+        try:
+            where_conditions.append("tx.amount <= %s")
+            params.append(float(amount_max))
+        except ValueError:
+            pass
+
+    if search:
+        where_conditions.append("""
+            (COALESCE(cat.name, '') ILIKE %s OR 
+             COALESCE(acc.name, '') ILIKE %s OR 
+             COALESCE(tx.notes, '') ILIKE %s)
+        """)
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term, search_term])
+
+    where_clause = " AND ".join(where_conditions)
+
+    with connection.cursor() as cursor:
+        cursor.execute(f"""
+            SELECT 
+                tx.type,
+                SUM(tx.amount) as total
+            FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+            WHERE {where_clause}
+            GROUP BY tx.type
+        """, params)
+
+        totals_by_type = dict(cursor.fetchall())
+
+    # Calculate totals
+    income = float(totals_by_type.get('IN', 0))
+    expenses = float(totals_by_type.get('EX', 0))
+    investments = float(totals_by_type.get('IV', 0))
+    transfers = float(totals_by_type.get('TR', 0))
+
+    balance = income - expenses + investments + transfers
+
+    return JsonResponse({
+        'income': income,
+        'expenses': expenses,
+        'investments': investments,
+        'transfers': transfers,
+        'balance': balance
+    })
+
+# Removing the TransactionListView class to only use the v2 version.

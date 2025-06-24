@@ -5,13 +5,14 @@ from .views import (
     # Home & Auth
     HomeView, signup, LogoutView,
     # Transactions
-    TransactionListView, TransactionCreateView,
+    TransactionCreateView,
     TransactionUpdateView, TransactionDeleteView,
     transactions_json, import_transactions_xlsx,
     import_transactions_template, transaction_clear_cache,
     export_transactions_xlsx, transaction_bulk_update,
     transaction_bulk_duplicate, transaction_bulk_delete,
-    clear_session_flag, check_cache_status,
+    clear_session_flag, transaction_list_v2, transactions_json_v2,
+    transactions_totals_v2,
     # Categories & Tags
     CategoryListView, CategoryCreateView,
     CategoryUpdateView, CategoryDeleteView,
@@ -46,18 +47,20 @@ urlpatterns = [
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
 
     # Transactions
-    path("transactions/", TransactionListView.as_view(), name="transaction_list"),
+    path("transactions/", transaction_list_v2, name="transaction_list"),  # Alias for backward compatibility
+    path("transactions-v2/", transaction_list_v2, name="transaction_list_v2"),
     path("transactions/new/", TransactionCreateView.as_view(), name="transaction_create"),
     path("transactions/<int:pk>/edit/", TransactionUpdateView.as_view(), name="transaction_update"),
     path("transactions/<int:pk>/delete/", TransactionDeleteView.as_view(), name="transaction_delete"),
     path("transactions/json/", transactions_json, name="transactions_json"),
+    path("transactions/json-v2/", transactions_json_v2, name="transactions_json_v2"),
+    path("transactions/totals-v2/", transactions_totals_v2, name="transactions_totals_v2"),
     path("transactions/export-excel/", export_transactions_xlsx, name="transaction_export_xlsx"),
     path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
-    path("transactions/cache-status/", check_cache_status, name="check_cache_status"),
     path("transactions/clear-session-flag/", clear_session_flag, name="clear_session_flag"),
-
+    
     path("transactions/bulk-update/", transaction_bulk_update, name="transaction_bulk_update"),
     path("transactions/bulk-duplicate/", transaction_bulk_duplicate, name="transaction_bulk_duplicate"),
     path("transactions/bulk-delete/", transaction_bulk_delete, name="transaction_bulk_delete"),

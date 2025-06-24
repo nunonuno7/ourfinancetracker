@@ -26,15 +26,26 @@ def update_transaction_status(sender, instance, created, **kwargs):
     if created and instance.type == Transaction.Type.EXPENSE:
         logger.debug(f"🧾 Nova despesa criada: {instance}")
 
-@receiver([post_save, post_delete], sender=Transaction)
+@receiver(post_save, sender=Transaction)
+@receiver(post_delete, sender=Transaction) 
 def clear_transaction_cache(sender, instance, **kwargs):
-    """
-    Limpa a cache de transações (Django cache) sempre que uma transação
-    é criada, atualizada ou eliminada.
-    """
-    user_id = instance.user_id
-    logger.debug(f"🧹 Sinal ativado — limpando cache para user_id={user_id}")
-    clear_tx_cache(user_id)
+    """Limpar cache quando transações mudam."""
+    # Evitar loop infinito - só limpar se não estamos já a processar
+    if hasattr(clear_transaction_cache, '_processing'):
+        return
+
+    # Skip cache clearing during bulk operations (will be handled by bulk views)
+    from django.db import transaction as db_transaction
+    if db_transaction.get_connection().in_atomic_block:
+        logger.debug(f"🚫 Saltando limpeza de cache durante operação atómica para user_id={instance.user_id}")
+        return
+
+    try:
+        clear_transaction_cache._processing = True
+        logger.debug(f"🧹 Sinal ativado — limpando cache para user_id={instance.user_id}")
+        clear_tx_cache(instance.user_id)
+    finally:
+        delattr(clear_transaction_cache, '_processing')
 
 # Store transaction data before deletion for cash update
 _transaction_data_before_delete = {}
@@ -57,12 +68,12 @@ def update_cash_balance_on_transaction_create(sender, instance, created, **kwarg
     """
     if not created:
         return  # Skip updates for now
-    
+
     try:
         with transaction.atomic():
             # Get or create Cash account
             cash_account = get_or_create_cash_account(instance.user)
-            
+
             # Get the period for this transaction
             period = instance.period
             if not period:
@@ -71,14 +82,14 @@ def update_cash_balance_on_transaction_create(sender, instance, created, **kwarg
                     month=instance.date.month,
                     defaults={'label': instance.date.strftime('%B %Y')}
                 )
-            
+
             # Get current cash balance for this period
             cash_balance, created_balance = AccountBalance.objects.get_or_create(
                 account=cash_account,
                 period=period,
                 defaults={'reported_balance': Decimal('0.00')}
             )
-            
+
             # Update balance based on transaction type
             if instance.type == Transaction.Type.INCOME:
                 cash_balance.reported_balance += instance.amount
@@ -91,9 +102,9 @@ def update_cash_balance_on_transaction_create(sender, instance, created, **kwarg
                 cash_balance.reported_balance -= instance.amount
                 logger.info(f"🔄 Cash -{instance.amount} (Transfer): {cash_balance.reported_balance}")
             # For INVESTMENT, we don't affect cash directly as it might be from another account
-            
+
             cash_balance.save()
-            
+
     except Exception as e:
         logger.error(f"❌ Erro ao atualizar saldo Cash: {e}")
 
@@ -108,7 +119,7 @@ def update_cash_balance_on_transaction_delete(sender, instance, **kwargs):
         if not tx_data:
             logger.warning(f"⚠️ No stored data for deleted transaction {instance.id}")
             return
-            
+
         with transaction.atomic():
             # Get Cash account
             try:
@@ -119,7 +130,7 @@ def update_cash_balance_on_transaction_delete(sender, instance, **kwargs):
             except Account.DoesNotExist:
                 logger.warning(f"⚠️ Cash account not found for user {tx_data['user_id']}")
                 return
-            
+
             # Get the period
             try:
                 period = DatePeriod.objects.get(id=tx_data['period_id'])
@@ -129,7 +140,7 @@ def update_cash_balance_on_transaction_delete(sender, instance, **kwargs):
                     month=tx_data['date'].month,
                     defaults={'label': tx_data['date'].strftime('%B %Y')}
                 )
-            
+
             # Get cash balance for this period
             try:
                 cash_balance = AccountBalance.objects.get(
@@ -139,7 +150,7 @@ def update_cash_balance_on_transaction_delete(sender, instance, **kwargs):
             except AccountBalance.DoesNotExist:
                 logger.warning(f"⚠️ Cash balance not found for period {period}")
                 return
-            
+
             # Reverse the transaction effect
             if tx_data['type'] == Transaction.Type.INCOME:
                 cash_balance.reported_balance -= tx_data['amount']
@@ -150,13 +161,13 @@ def update_cash_balance_on_transaction_delete(sender, instance, **kwargs):
             elif tx_data['type'] == Transaction.Type.TRANSFER:
                 cash_balance.reported_balance += tx_data['amount']
                 logger.info(f"🔄 Cash reversed +{tx_data['amount']} (Transfer deleted): {cash_balance.reported_balance}")
-            
+
             cash_balance.save()
-            
+
         # Clean up stored data
         if instance.id in _transaction_data_before_delete:
             del _transaction_data_before_delete[instance.id]
-            
+
     except Exception as e:
         logger.error(f"❌ Erro ao reverter saldo Cash: {e}")
 
@@ -171,18 +182,18 @@ def get_or_create_cash_account(user):
         account_type = AccountType.objects.filter(name__iexact='Savings').first()
         if not account_type:
             account_type = AccountType.objects.first()
-        
+
         currency = Currency.objects.filter(code='EUR').first()
         if not currency:
             currency = Currency.objects.first()
-        
+
         cash_account = Account.objects.create(
             user=user,
             name='Cash',
             account_type=account_type,
             currency=currency
         )
-        
+
         logger.info(f"✅ Conta Cash criada automaticamente para {user.username}")
         return cash_account
 

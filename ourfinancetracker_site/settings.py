@@ -63,8 +63,15 @@ if ext_host := ENV("RENDER_EXTERNAL_HOSTNAME"):
 if DEBUG:
     ALLOWED_HOSTS += [
         "4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
-        "*",  # Permite todos os hosts em modo DEBUG (útil para Replit)
+        # Permite qualquer subdomínio do replit.dev
+        ".replit.dev",
     ]
+
+# Adiciona suporte dinâmico para hosts do Replit
+import re
+if DEBUG:
+    # Permite todos os hosts que terminam em .replit.dev
+    ALLOWED_HOSTS.append(re.compile(r'.*\.replit\.dev$'))
 
 CSRF_TRUSTED_ORIGINS: List[str] = [
     "https://ourfinancetracker.onrender.com",
@@ -73,8 +80,16 @@ CSRF_TRUSTED_ORIGINS: List[str] = [
 if DEBUG:
     CSRF_TRUSTED_ORIGINS.extend([
         "https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
-        "https://*.replit.dev",  # Permite todos os subdomínios do Replit
+        # Adiciona suporte específico para o domínio atual do Replit
+        "https://6c6096cc-4db3-4fe3-b35f-c0fd62134325-00-opa5nkmzdu6i.riker.replit.dev",
+        "https://*.replit.dev",
+        "http://*.replit.dev",
     ])
+
+# Adiciona configuração específica para CSRF em desenvolvimento
+if DEBUG:
+    CSRF_COOKIE_SECURE = False
+    CSRF_COOKIE_SAMESITE = 'Lax'
 
 # ────────────────────────────────────────────────────
 # Apps & middleware
@@ -256,26 +271,9 @@ LOGGING = {
 }
 
 # ────────────────────────────────────────────────────
-# Configurações CSRF para Replit
+# Segurança extra
 # ────────────────────────────────────────────────────
-CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_HTTPONLY = False
-SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_NAME = 'csrftoken'
-CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
-
-if DEBUG:
-    # Em desenvolvimento, relaxar configurações de segurança
-    CSRF_COOKIE_SECURE = False
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_DOMAIN = None  # Permite qualquer domínio em desenvolvimento
-    CSRF_TRUSTED_ORIGINS.extend([
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://*.replit.dev",  # HTTP também para desenvolvimento
-    ])
-else:
-    # Segurança extra apenas em produção
+if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -285,19 +283,6 @@ else:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
-
-# ────────────────────────────────────────────────────
-# Configurações adicionais de CSRF
-# ────────────────────────────────────────────────────
-CSRF_USE_SESSIONS = False
-CSRF_COOKIE_AGE = 31449600  # 1 ano
-CSRF_TOKEN_COOKIE_NAME = 'csrftoken'
-
-if DEBUG:
-    CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
-    # Adicionar logging extra para debug CSRF
-    import logging
-    logging.getLogger('django.security.csrf').setLevel(logging.DEBUG)
 
 # ────────────────────────────────────────────────────
 # Supabase creds (para RPC)

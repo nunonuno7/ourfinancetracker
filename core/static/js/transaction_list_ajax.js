@@ -1,15 +1,6 @@
 $(document).ready(function () {
   console.log('JavaScript carregado e $(document).ready() executado');
 
-  // Cache management - declare early to avoid initialization errors
-  let currentDateRange = {
-    start: null,
-    end: null
-  };
-
-  // Flag to prevent automatic cache clearing
-  let preventAutoCacheClear = true;
-
   // 🧠 Recuperar filtro guardado do período (se existir)
   const savedPeriod = sessionStorage.getItem("tx_filter_period");
   if (savedPeriod) {
@@ -70,14 +61,15 @@ $(document).ready(function () {
         d.account = clean($('#filter-account').val());
         d.category = clean($('#filter-category').val());
         d.period = clean($('#filter-period').val());
+
+        // Advanced filters
         d.amount_min = $('#filter-amount-min').val();
         d.amount_max = $('#filter-amount-max').val();
         d.tags = $('#filter-tags').val();
       }
     },
-    pageLength: 50,
-    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-    order: [[2, 'desc']], // Order by date column (index 2) in descending order
+    pageLength: 25,
+    order: [[2, 'desc']], // Adjusted for new column order
     responsive: true,
     columns: [
       { 
@@ -98,13 +90,6 @@ $(document).ready(function () {
           if (type === 'display') {
             return `<span class="fw-bold">${data}</span>
                     <br><small class="text-muted d-md-none">${row.period}</small>`;
-          }
-          if (type === 'type' || type === 'sort') {
-            // Convert DD/MM/YYYY to YYYY-MM-DD for proper sorting
-            const parts = data.split('/');
-            if (parts.length === 3) {
-              return `${parts[2]}-${parts[1]}-${parts[0]}`;
-            }
           }
           return data;
         }
@@ -140,7 +125,6 @@ $(document).ready(function () {
         }
       },
       { data: 'category', orderable: true, className: 'd-none d-lg-table-cell' },
-      { data: 'account', orderable: true, className: 'd-none d-md-table-cell' },
       { 
         data: 'tags', 
         orderable: false, 
@@ -152,6 +136,7 @@ $(document).ready(function () {
           ).join('');
         }
       },
+      { data: 'account', orderable: true, className: 'd-none d-md-table-cell' },
       { 
         data: 'actions', 
         orderable: false,
@@ -176,17 +161,6 @@ $(document).ready(function () {
   });
 
   window.transactionTable = table;
-
-  // Initialize date range tracking
-  updateDateRange($('#start-date').val(), $('#end-date').val());
-
-  // Cache status check function (DISABLED - was causing issues)
-  function checkCacheStatus() {
-    console.debug('Cache status check disabled to prevent automatic cache clears');
-    // Function disabled to prevent automatic cache clearing
-  }
-
-  // NO automatic cache checking - completely disabled
 
   // 🔄 Bulk selection functionality
   $('#bulk-select-mode').on('change', function() {
@@ -216,15 +190,15 @@ $(document).ready(function () {
     return $('.row-select:checked').map(function() { return parseInt(this.value); }).get();
   }
 
-  // Bulk mark cleared
-  $('#bulk-mark-cleared').on('click', function() {
+  // Bulk mark as estimated
+  $('#bulk-mark-estimated').on('click', function() {
     const selected = getSelectedTransactions();
     if (selected.length === 0) {
-      alert('Por favor seleciona transações primeiro');
+      alert('Por favor seleciona pelo menos uma transação.');
       return;
     }
 
-    if (confirm(`Marcar ${selected.length} transação(ões) como cleared?`)) {
+    if (confirm(`Marcar ${selected.length} transação(ões) como estimadas?`)) {
       fetch('/transactions/bulk-update/', {
         method: 'POST',
         headers: {
@@ -232,14 +206,14 @@ $(document).ready(function () {
           'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
         },
         body: JSON.stringify({
-          action: 'mark_cleared',
+          action: 'mark_estimated',
           transaction_ids: selected
         })
       })
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          alert(`✅ ${data.updated} transação(ões) marcadas como cleared!`);
+          alert(`✅ ${data.updated} transação(ões) marcadas como estimadas!`);
           clearCacheAndReload(); // Limpar cache e recarregar
           $('#bulk-select-mode').prop('checked', false).trigger('change');
         } else {
@@ -353,12 +327,12 @@ $(document).ready(function () {
     $('#modal-edit-btn').attr('href', `/transactions/${transactionId}/edit/`);
   });
 
-  // Advanced filters with debounce for better performance (no cache clear)
+  // Advanced filters with debounce for better performance
   let filterTimeout;
   $('#filter-amount-min, #filter-amount-max, #filter-tags').on('change input', function() {
     clearTimeout(filterTimeout);
     filterTimeout = setTimeout(() => {
-      console.log('🔍 Advanced filter applied (no cache clear):', {
+      console.log('🔍 Advanced filter applied:', {
         amount_min: $('#filter-amount-min').val(),
         amount_max: $('#filter-amount-max').val(),
         tags: $('#filter-tags').val()
@@ -367,35 +341,19 @@ $(document).ready(function () {
     }, 500); // 500ms debounce
   });
 
-  // 🔄 Recarregar tabela ao mudar datas (com cache inteligente)
-  startFlatpickr.config.onChange.push(() => {
-    const newStart = $('#start-date').val();
-    const newEnd = $('#end-date').val();
+  // 🔄 Recarregar tabela ao mudar datas
+  startFlatpickr.config.onChange.push(() => table.ajax.reload());
+  endFlatpickr.config.onChange.push(() => table.ajax.reload());
 
-    console.log('🔄 Date range changed - updating cache intelligently');
-    updateCacheIntelligently();
-    updateDateRange(newStart, newEnd);
-  });
-
-  endFlatpickr.config.onChange.push(() => {
-    const newStart = $('#start-date').val();
-    const newEnd = $('#end-date').val();
-
-    console.log('🔄 Date range changed - updating cache intelligently');
-    updateCacheIntelligently();
-    updateDateRange(newStart, newEnd);
-  });
-
-  // 🔁 Recarregar tabela ao mudar filtros (sem limpar cache)
+  // 🔁 Recarregar tabela ao mudar filtros
   $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', function () {
     if (this.id === 'filter-period') {
       sessionStorage.setItem("tx_filter_period", $(this).val());
     }
-    console.log('🔄 Filter changed - reloading table without cache clear');
     table.ajax.reload();
   });
 
-// 🧼 Clear Filters
+  // 🧼 Clear Filters
 $('#clear-filters').on('click', function () {
   // Clear dropdown filters
   $('#filter-type').val('');
@@ -415,18 +373,9 @@ $('#clear-filters').on('click', function () {
   table.ajax.reload();
 });
 
-  // 📋 Show all entries
-  $('#show-all-entries').on('click', function() {
-    table.page.len(-1).draw();
-    $(this).html('<i class="fas fa-check"></i> Showing All');
-    setTimeout(() => {
-      $(this).html('<i class="fas fa-list"></i> Show All Entries');
-    }, 2000);
-  });
-
-  // 🧹 Função para limpar cache e recarregar automaticamente (só quando necessário)
+  // 🧹 Função para limpar cache e recarregar automaticamente
   function clearCacheAndReload() {
-    console.log('🔄 Manual cache clear requested...');
+    console.log('🔄 Limpando cache e recarregando lista...');
 
     fetch('/transactions/clear-cache/', {
       method: 'POST',
@@ -440,13 +389,11 @@ $('#clear-filters').on('click', function () {
       if (data.status === 'ok') {
         // Force complete table reload without reset paging
         table.ajax.reload(null, false);
-        console.log('✅ Cache cleared and table reloaded');
+        console.log('✅ Cache limpo e tabela recarregada automaticamente');
       }
     })
     .catch(err => {
-      console.error('Cache clear error:', err);
-      // Fallback: just reload table without clearing cache
-      table.ajax.reload(null, false);
+      console.error('Auto cache clear error:', err);
     });
   }
 
@@ -548,64 +495,42 @@ $(document).on('submit', 'form[action*="/delete/"]', function(e) {
   });
 });
 
-// 🔄 Auto-reload quando regressa de páginas de edição/criação/eliminação (só se transação foi alterada)
+// 🔄 Auto-reload quando regressa de páginas de edição/criação/eliminação
 window.addEventListener('pageshow', function(event) {
   const referrer = document.referrer;
-  const wasTransactionPage = referrer.includes('/delete/') || 
+  const shouldReload = event.persisted || 
+    referrer.includes('/delete/') || 
     referrer.includes('/edit/') || 
     referrer.includes('/new/');
 
-  // Only reload if we actually modified transactions AND there's an explicit flag
-  if (wasTransactionPage && window.transactionTable) {
-    // Check if there's a flag indicating transaction was modified
-    if (sessionStorage.getItem('transaction_modified') === 'true') {
-      console.log('🔄 Transaction was modified - simple reload');
-      window.transactionTable.ajax.reload(null, false);
-      sessionStorage.removeItem('transaction_modified');
-    } else {
-      console.log('🔄 Returned from transaction page - no reload needed');
-      // Do nothing - preserve current state
-    }
+  if (shouldReload && window.transactionTable) {
+    console.log('🔄 Página regressou de operação, limpando cache...');
+    clearCacheAndReload();
   }
 });
 
-// Cache management - only clear when necessary
-function shouldClearCache(newStart, newEnd) {
-  // Don't clear cache on first load or if no date range is set
-  if (!currentDateRange.start || !currentDateRange.end) {
-    return false;
+// 🔄 Auto-reload a cada 30 segundos se houver atividade
+let autoReloadInterval;
+function startAutoReload() {
+  // Clear existing interval
+  if (autoReloadInterval) {
+    clearInterval(autoReloadInterval);
   }
 
-  // Don't clear if dates haven't actually changed
-  if (newStart === currentDateRange.start && newEnd === currentDateRange.end) {
-    return false;
-  }
-
-  // Only clear if new range extends significantly beyond current cached range
-  const startDiff = new Date(currentDateRange.start) - new Date(newStart);
-  const endDiff = new Date(newEnd) - new Date(currentDateRange.end);
-
-  // Clear cache only if extending more than 30 days in either direction
-  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-
-  if (startDiff > thirtyDaysMs || endDiff > thirtyDaysMs) {
-    console.log('📅 Cache clear needed - significant date range extension');
-    return true;
-  }
-
-  console.debug('📅 Date range within cache bounds - no clear needed');
-  return false;
+  // Set up new interval
+  autoReloadInterval = setInterval(() => {
+    console.log('🔄 Auto-reload periódico da lista de transações');
+    clearCacheAndReload();
+  }, 30000); // 30 segundos
 }
 
-// Function to check if we should preserve existing data
-function hasValidCachedData() {
-  return table && table.data && table.data().length > 0;
-}
+// Start auto-reload
+startAutoReload();
 
-function updateDateRange(start, end) {
-  currentDateRange.start = start;
-  currentDateRange.end = end;
-}
+// Reset auto-reload timer on user activity
+$(document).on('click keypress', function() {
+  startAutoReload();
+});
 
   // 💰 Cash auto-update toggle
   $('#cash-auto-update').on('change', function() {
@@ -635,14 +560,4 @@ function updateDateRange(start, end) {
       $(this).prop('checked', !enabled);
       });
     });
-
-    function updateCacheIntelligently() {
-      // Implement your intelligent cache update logic here
-      // This function should analyze the changes in date range
-      // and update the table's data accordingly, instead of clearing the entire cache.
-      // You might need to fetch only the new data and append/prepend it to the existing data.
-      // Remember to handle edge cases and potential performance issues.
-      console.log('Intelligent cache update logic goes here...');
-      table.ajax.reload(); //For now just reload.
-    }
 });

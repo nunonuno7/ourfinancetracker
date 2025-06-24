@@ -1,72 +1,10 @@
 {% extends "base.html" %}
-{% load static %}
-
 {% block content %}
-<div class="container mt-4">
-  <div class="row justify-content-center">
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="text-center mb-0">Login</h3>
-        </div>
-        <div class="card-body">
-          <form method="post" id="login-form">
-            {% csrf_token %}
-            
-            {% if form.non_field_errors %}
-              <div class="alert alert-danger">
-                {{ form.non_field_errors }}
-              </div>
-            {% endif %}
-            
-            <div class="mb-3">
-              <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
-              {{ form.username }}
-              {% if form.username.errors %}
-                <div class="text-danger small">{{ form.username.errors }}</div>
-              {% endif %}
-            </div>
-            
-            <div class="mb-3">
-              <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
-              {{ form.password }}
-              {% if form.password.errors %}
-                <div class="text-danger small">{{ form.password.errors }}</div>
-              {% endif %}
-            </div>
-            
-            <button type="submit" class="btn btn-primary w-100">Sign in</button>
-          </form>
-          
-          <div class="text-center mt-3">
-            <p>No account? <a href="{% url 'signup' %}">Sign up here</a></p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const form = document.getElementById('login-form');
-  const usernameField = document.getElementById('{{ form.username.id_for_label }}');
-  const passwordField = document.getElementById('{{ form.password.id_for_label }}');
-  
-  // Adicionar classes Bootstrap aos campos
-  if (usernameField) {
-    usernameField.className = 'form-control';
-  }
-  if (passwordField) {
-    passwordField.className = 'form-control';
-  }
-  
-  // Debug - verificar se o CSRF token existe
-  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
-  console.log('CSRF token presente:', !!csrfToken);
-  if (csrfToken) {
-    console.log('CSRF token value:', csrfToken.value.substring(0, 10) + '...');
-  }
-});
-</script>
+  <h1>Login</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Sign in</button>
+  </form>
+  <p>No account? <a href="{% url 'signup' %}">Sign up here</a></p>
 {% endblock %}
