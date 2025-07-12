@@ -221,15 +221,33 @@ class FinanceEstimationService:
             next_period = self.get_next_period(period)
             next_balances = self.get_period_balances(next_period) if next_period else {}
             
-            # Get recorded transactions for the period
-            transactions = Transaction.objects.filter(
+            # Get recorded transactions for the period - separated by estimated vs real
+            real_transactions = Transaction.objects.filter(
                 user=self.user,
-                period=period
+                period=period,
+                is_estimated=False
             ).aggregate(
                 income=Sum('amount', filter=Q(type='IN')) or Decimal('0'),
                 expenses=Sum('amount', filter=Q(type='EX')) or Decimal('0'),
                 investments=Sum('amount', filter=Q(type='IV')) or Decimal('0')
             )
+            
+            estimated_transactions = Transaction.objects.filter(
+                user=self.user,
+                period=period,
+                is_estimated=True
+            ).aggregate(
+                income=Sum('amount', filter=Q(type='IN')) or Decimal('0'),
+                expenses=Sum('amount', filter=Q(type='EX')) or Decimal('0'),
+                investments=Sum('amount', filter=Q(type='IV')) or Decimal('0')
+            )
+            
+            # Combined totals for calculations
+            transactions = {
+                'income': (real_transactions['income'] or Decimal('0')) + (estimated_transactions['income'] or Decimal('0')),
+                'expenses': (real_transactions['expenses'] or Decimal('0')) + (estimated_transactions['expenses'] or Decimal('0')),
+                'investments': (real_transactions['investments'] or Decimal('0')) + (estimated_transactions['investments'] or Decimal('0'))
+            }
             
             # Calculate savings difference
             savings_current = current_balances.get('Savings', Decimal('0'))
@@ -287,7 +305,14 @@ class FinanceEstimationService:
                     'savings_next': float(savings_next),
                     'estimated_expenses': float(estimated_expenses),
                     'missing_expenses': float(missing_expenses),
-                    'missing_income': float(missing_income)
+                    'missing_income': float(missing_income),
+                    # Real vs Estimated breakdown
+                    'real_income': float(abs(real_transactions['income'] or Decimal('0'))),
+                    'real_expenses': float(abs(real_transactions['expenses'] or Decimal('0'))),
+                    'real_investments': float(abs(real_transactions['investments'] or Decimal('0'))),
+                    'estimated_income': float(abs(estimated_transactions['income'] or Decimal('0'))),
+                    'estimated_expenses_tx': float(abs(estimated_transactions['expenses'] or Decimal('0'))),
+                    'estimated_investments': float(abs(estimated_transactions['investments'] or Decimal('0')))
                 }
             }
             
@@ -336,6 +361,26 @@ class FinanceEstimationService:
         except DatePeriod.DoesNotExist:
             return None
     
+    def delete_estimated_transaction_by_period(self, period):
+        """Delete estimated transactions for a specific period."""
+        try:
+            # Find and delete estimated transactions for this period and user
+            estimated_transactions = Transaction.objects.filter(
+                user=self.user,
+                period=period,
+                is_estimated=True
+            )
+            
+            deleted_count = estimated_transactions.count()
+            estimated_transactions.delete()
+            
+            logger.info(f"Deleted {deleted_count} estimated transaction(s) for period {period.label}")
+            return deleted_count
+            
+        except Exception as e:
+            logger.error(f"Error deleting estimated transactions for period {period.id}: {e}")
+            raise
+
     def estimate_transaction_for_period(self, period):
         """Create or update estimated transaction for a period."""
         try:
@@ -344,12 +389,8 @@ class FinanceEstimationService:
             if summary['status'] == 'error' or summary['estimated_amount'] <= 10:
                 return None
             
-            # Delete existing estimated transaction
-            Transaction.objects.filter(
-                user=self.user,
-                period=period,
-                is_estimated=True
-            ).delete()
+            # Delete existing estimated transaction using the service method
+            self.delete_estimated_transaction_by_period(period)
             
             # Create new estimated transaction
             from ..models import Category

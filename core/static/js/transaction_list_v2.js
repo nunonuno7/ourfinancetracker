@@ -1,7 +1,7 @@
 // Transactions 2.0 JavaScript - Advanced functionality
 class TransactionManager {
   constructor() {
-    console.log('🚀 [TransactionManager] Initializing Transaction Manager...');
+    console.log("🚀 [TransactionManager] Initializing Transaction Manager...");
     this.currentPage = 1;
     this.pageSize = 25;
     this.totalRecords = 0;
@@ -12,34 +12,34 @@ class TransactionManager {
     this.maxPageSize = 1000; // Maximum safety limit
 
     // Sorting state
-    this.sortField = 'date';
-    this.sortDirection = 'desc'; // 'asc' or 'desc'
+    this.sortField = "date";
+    this.sortDirection = "desc"; // 'asc' or 'desc'
 
-    console.log('⚙️ [TransactionManager] Initial configuration:', {
+    console.log("⚙️ [TransactionManager] Initial configuration:", {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
       cacheSize: this.cache.size,
       sortField: this.sortField,
-      sortDirection: this.sortDirection
+      sortDirection: this.sortDirection,
     });
 
     this.init();
   }
 
   init() {
-    console.log('🔧 [init] Starting complete initialization...');
+    console.log("🔧 [init] Starting complete initialization...");
 
     this.initDatePickers();
-    console.log('📅 [init] Date pickers initialized');
+    console.log("📅 [init] Date pickers initialized");
 
     this.loadPageSizePreference();
-    console.log('📄 [init] Page size loaded from storage');
+    console.log("📄 [init] Page size loaded from storage");
 
     this.loadFiltersFromStorage();
-    console.log('💾 [init] Filters loaded from storage');
+    console.log("💾 [init] Filters loaded from storage");
 
     this.bindEvents();
-    console.log('🔗 [init] Event listeners connected');
+    console.log("🔗 [init] Event listeners connected");
 
     this.loadTransactions();
     this.loadTotals();
@@ -48,21 +48,23 @@ class TransactionManager {
     this.updateSortIndicators();
 
     // Initialize checkbox column as hidden (since bulk mode starts as false)
-    $('#transactions-table thead th:first-child').css('display', 'none');
+    $("#transactions-table thead th:first-child").css("display", "none");
 
-    console.log('✅ [init] Complete initialization finished');
+    console.log("✅ [init] Complete initialization finished");
   }
 
   loadPageSizePreference() {
-    const savedPageSize = localStorage.getItem('transaction_page_size');
+    const savedPageSize = localStorage.getItem("transaction_page_size");
     if (savedPageSize) {
-      $('#page-size-selector').val(savedPageSize);
-      if (savedPageSize === 'all') {
+      $("#page-size-selector").val(savedPageSize);
+      if (savedPageSize === "all") {
         this.pageSize = this.maxPageSize;
       } else {
         this.pageSize = parseInt(savedPageSize);
       }
-      console.log(`📄 [loadPageSizePreference] Page size restaurado: ${savedPageSize} (${this.pageSize})`);
+      console.log(
+        `📄 [loadPageSizePreference] Page size restaurado: ${savedPageSize} (${this.pageSize})`,
+      );
     }
   }
 
@@ -70,51 +72,64 @@ class TransactionManager {
     flatpickr("#date-start", {
       dateFormat: "Y-m-d",
       defaultDate: "2025-01-01",
-      onChange: () => this.onFilterChange()
+      onChange: () => this.onFilterChange(),
     });
 
     flatpickr("#date-end", {
-      dateFormat: "Y-m-d", 
+      dateFormat: "Y-m-d",
       defaultDate: new Date(),
-      onChange: () => this.onFilterChange()
+      onChange: () => this.onFilterChange(),
     });
   }
 
   bindEvents() {
     // Filter changes
-    $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', () => this.onFilterChange());
-    $('#filter-amount-min, #filter-amount-max, #filter-tags').on('input', this.debounce(() => this.onFilterChange(), 500));
-    $('#global-search').on('input', this.debounce(() => this.onFilterChange(), 300));
-    $('#include-system-toggle').on('change', () => {
+    $("#filter-type, #filter-account, #filter-category, #filter-period").on(
+      "change",
+      () => this.onFilterChange(),
+    );
+    $("#filter-amount-min, #filter-amount-max, #filter-tags").on(
+      "input",
+      this.debounce(() => this.onFilterChange(), 500),
+    );
+    $("#global-search").on(
+      "input",
+      this.debounce(() => this.onFilterChange(), 300),
+    );
+    $("#include-system-toggle").on("change", () => {
       this.onFilterChange();
       // Show/hide legend based on toggle
-      $('#synthetic-legend').toggle($('#include-system-toggle').is(':checked'));
+      $("#synthetic-legend").toggle($("#include-system-toggle").is(":checked"));
     });
 
     // Page size selector
-    $('#page-size-selector').on('change', (e) => this.changePageSize(e.target.value));
+    $("#page-size-selector").on("change", (e) =>
+      this.changePageSize(e.target.value),
+    );
 
     // Buttons
-    $('#apply-filters-btn').on('click', () => this.loadTransactions());
-    $('#clear-filters-btn').on('click', () => this.clearFilters());
-    $('#clear-cache-btn').on('click', () => this.clearCache());
-    
-    $('#export-btn').on('click', () => this.exportData());
-    $('#import-btn').on('click', () => this.importData());
+    $("#apply-filters-btn").on("click", () => this.loadTransactions());
+    $("#clear-filters-btn").on("click", () => this.clearFilters());
+    $("#clear-cache-btn").on("click", () => this.clearCache());
+
+    $("#export-btn").on("click", () => this.exportData());
+    $("#import-btn").on("click", () => this.importData());
 
     // Bulk actions
-    $('#bulk-mode-toggle').on('change', (e) => this.toggleBulkMode(e.target.checked));
-    $('#select-all').on('change', (e) => this.selectAll(e.target.checked));
-    $('#bulk-mark-cleared').on('click', () => this.bulkMarkCleared());
-    $('#bulk-duplicate').on('click', () => this.bulkDuplicate());
-    $('#bulk-delete').on('click', () => this.bulkDelete());
+    $("#bulk-mode-toggle").on("change", (e) =>
+      this.toggleBulkMode(e.target.checked),
+    );
+    $("#select-all").on("change", (e) => this.selectAll(e.target.checked));
+    $("#bulk-mark-cleared").on("click", () => this.bulkMarkCleared());
+    $("#bulk-duplicate").on("click", () => this.bulkDuplicate());
+    $("#bulk-delete").on("click", () => this.bulkDelete());
 
     // Row selection
-    $(document).on('change', '.row-select', (e) => this.handleRowSelect(e));
-    $(document).on('click', '.transaction-row', (e) => this.handleRowClick(e));
+    $(document).on("change", ".row-select", (e) => this.handleRowSelect(e));
+    $(document).on("click", ".transaction-row", (e) => this.handleRowClick(e));
 
     // Column sorting
-    $(document).on('click', '.sortable-header', (e) => this.handleSort(e));
+    $(document).on("click", ".sortable-header", (e) => this.handleSort(e));
   }
 
   debounce(func, wait) {
@@ -130,43 +145,46 @@ class TransactionManager {
   }
 
   onFilterChange() {
-    console.group('🔄 [onFilterChange] FILTERS CHANGED');
-    console.log('Timestamp:', new Date().toISOString());
+    console.group("🔄 [onFilterChange] FILTERS CHANGED");
+    console.log("Timestamp:", new Date().toISOString());
     this.currentPage = 1;
 
     const currentFilters = this.getFilters();
-    console.log('🎯 CURRENT FILTERS:');
+    console.log("🎯 CURRENT FILTERS:");
     console.table(currentFilters);
 
-    console.log('🔧 DOM ELEMENT VALUES:');
+    console.log("🔧 DOM ELEMENT VALUES:");
     console.table({
-      dateStart: $('#date-start').val(),
-      dateEnd: $('#date-end').val(),
-      type: $('#filter-type').val(),
-      account: $('#filter-account').val(),
-      category: $('#filter-category').val(),
-      period: $('#filter-period').val(),
-      amountMin: $('#filter-amount-min').val(),
-      amountMax: $('#filter-amount-max').val(),
-      tags: $('#filter-tags').val(),
-      search: $('#global-search').val()
+      dateStart: $("#date-start").val(),
+      dateEnd: $("#date-end").val(),
+      type: $("#filter-type").val(),
+      account: $("#filter-account").val(),
+      category: $("#filter-category").val(),
+      period: $("#filter-period").val(),
+      amountMin: $("#filter-amount-min").val(),
+      amountMax: $("#filter-amount-max").val(),
+      tags: $("#filter-tags").val(),
+      search: $("#global-search").val(),
     });
 
     // Show visual feedback that filters are being applied
     this.showFilterFeedback();
 
     this.saveFiltersToStorage();
-    console.log('💾 Filters saved to session');
+    console.log("💾 Filters saved to session");
 
     // Excel-style: Invalidate cache when filters change
-    console.log('🗑️ Clearing cache (Excel style) - cache size before:', this.cache.size);
+    console.log(
+      "🗑️ Clearing cache (Excel style) - cache size before:",
+      this.cache.size,
+    );
     this.cache.clear();
-    console.log('🗑️ Cache size after:', this.cache.size);
+    console.log("🗑️ Cache size after:", this.cache.size);
 
-    console.log('🚀 Starting loadTransactions...');
+    console.log("🚀 Starting loadTransactions...");
     this.loadTransactions();
 
-    console.log('💰 Starting loadTotals...');
+    console.log("💰 Starting loadTotals...");
     this.loadTotals();
 
     console.groupEnd();
@@ -174,12 +192,14 @@ class TransactionManager {
 
   showFilterFeedback() {
     // Add visual feedback to show filters are active (Excel-style)
-    const activeFilters = Object.values(this.getFilters()).filter(val => val && val !== '').length - 2; // subtract page and page_size
-    const indicator = $('#filter-indicator');
+    const activeFilters =
+      Object.values(this.getFilters()).filter((val) => val && val !== "")
+        .length - 2; // subtract page and page_size
+    const indicator = $("#filter-indicator");
 
     if (activeFilters > 0) {
       if (indicator.length === 0) {
-        $('#filters-row').prepend(`
+        $("#filters-row").prepend(`
           <div id="filter-indicator" class="col-12">
             <div class="alert alert-info alert-sm mb-2">
               <i class="fas fa-filter"></i> <span id="filter-count">${activeFilters}</span> active filter(s) - Only values with transactions are shown
@@ -187,7 +207,7 @@ class TransactionManager {
           </div>
         `);
       } else {
-        $('#filter-count').text(activeFilters);
+        $("#filter-count").text(activeFilters);
       }
     } else {
       indicator.remove();
@@ -196,28 +216,28 @@ class TransactionManager {
 
   getFilters() {
     const filters = {
-      date_start: $('#date-start').val(),
-      date_end: $('#date-end').val(),
-      type: $('#filter-type').val(),
-      account: $('#filter-account').val(),
-      category: $('#filter-category').val(),
-      period: $('#filter-period').val(),
-      amount_min: $('#filter-amount-min').val(),
-      amount_max: $('#filter-amount-max').val(),
-      tags: $('#filter-tags').val(),
-      search: $('#global-search').val(),
+      date_start: $("#date-start").val(),
+      date_end: $("#date-end").val(),
+      type: $("#filter-type").val(),
+      account: $("#filter-account").val(),
+      category: $("#filter-category").val(),
+      period: $("#filter-period").val(),
+      amount_min: $("#filter-amount-min").val(),
+      amount_max: $("#filter-amount-max").val(),
+      tags: $("#filter-tags").val(),
+      search: $("#global-search").val(),
       page: this.currentPage,
       page_size: this.pageSize,
       sort_field: this.sortField,
       sort_direction: this.sortDirection,
-      include_system: $('#include-system-toggle').is(':checked')
+      include_system: $("#include-system-toggle").is(":checked"),
     };
 
     // Filter out empty values to prevent backend filter issues
     const cleanFilters = {};
-    Object.keys(filters).forEach(key => {
+    Object.keys(filters).forEach((key) => {
       const value = filters[key];
-      if (value !== '' && value !== null && value !== undefined) {
+      if (value !== "" && value !== null && value !== undefined) {
         cleanFilters[key] = value;
       }
     });
@@ -227,22 +247,22 @@ class TransactionManager {
     cleanFilters.page_size = this.pageSize;
     cleanFilters.sort_field = this.sortField;
     cleanFilters.sort_direction = this.sortDirection;
-    cleanFilters.include_system = $('#include-system-toggle').is(':checked');
+    cleanFilters.include_system = $("#include-system-toggle").is(":checked");
 
     return cleanFilters;
   }
 
   saveFiltersToStorage() {
     const filters = this.getFilters();
-    sessionStorage.setItem('transaction_filters_v2', JSON.stringify(filters));
+    sessionStorage.setItem("transaction_filters_v2", JSON.stringify(filters));
   }
 
   loadFiltersFromStorage() {
-    const saved = sessionStorage.getItem('transaction_filters_v2');
+    const saved = sessionStorage.getItem("transaction_filters_v2");
     if (saved) {
       const filters = JSON.parse(saved);
-      Object.keys(filters).forEach(key => {
-        const element = $(`#${key.replace('_', '-')}`);
+      Object.keys(filters).forEach((key) => {
+        const element = $(`#${key.replace("_", "-")}`);
         if (element.length && filters[key]) {
           element.val(filters[key]);
         }
@@ -251,12 +271,16 @@ class TransactionManager {
   }
 
   clearFilters() {
-    $('#date-start').val('2025-01-01');
-    $('#date-end').val(new Date().toISOString().split('T')[0]);
-    $('#filter-type, #filter-account, #filter-category, #filter-period').val('');
-    $('#filter-amount-min, #filter-amount-max, #filter-tags, #global-search').val('');
+    $("#date-start").val("2025-01-01");
+    $("#date-end").val(new Date().toISOString().split("T")[0]);
+    $("#filter-type, #filter-account, #filter-category, #filter-period").val(
+      "",
+    );
+    $(
+      "#filter-amount-min, #filter-amount-max, #filter-tags, #global-search",
+    ).val("");
 
-    sessionStorage.removeItem('transaction_filters_v2');
+    sessionStorage.removeItem("transaction_filters_v2");
     this.currentPage = 1;
     this.loadTransactions();
     this.loadTotals();
@@ -266,144 +290,161 @@ class TransactionManager {
     const filters = this.getFilters();
     const key = Object.keys(filters)
       .sort()
-      .map(k => `${k}:${filters[k]}`)
-      .join('|');
+      .map((k) => `${k}:${filters[k]}`)
+      .join("|");
     const cacheKey = `tx_v2_${btoa(key)}`;
-    console.log('🔑 [generateCacheKey] Cache key gerada:', {
+    console.log("🔑 [generateCacheKey] Cache key gerada:", {
       filters: filters,
       keyString: key,
-      finalCacheKey: cacheKey
+      finalCacheKey: cacheKey,
     });
     return cacheKey;
   }
 
   async loadTransactions() {
-        console.log('🔄 [loadTransactions] LOADING START');
+    console.log("🔄 [loadTransactions] LOADING START");
 
-        try {
-            this.showLoader(true);
-
-            const filters = this.getFilters();
-            const params = new URLSearchParams();
-            
-            // Add all filters to params
-            Object.keys(filters).forEach(key => {
-                if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
-                    params.append(key, filters[key]);
-                }
-            });
-
-            const url = `/transactions/json-v2/?${params.toString()}`;
-            console.log('🌐 [loadTransactions] Request URL:', url);
-
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || window.csrfToken || ''
-                }
-            });
-
-            console.log('📡 [loadTransactions] Response status:', response.status);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('❌ HTTP Error Response:', errorText);
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log('📊 [loadTransactions] Full response data:', data);
-
-            if (!data.transactions) {
-                console.log('⚠️ [loadTransactions] No transactions key in response');
-                this.transactions = [];
-                this.totalCount = 0;
-            } else if (data.transactions.length === 0) {
-                console.log('⚠️ [loadTransactions] Empty transactions array');
-                this.transactions = [];
-                this.totalCount = data.total_count || 0;
-            } else {
-                this.transactions = data.transactions;
-                this.totalCount = data.total_count || 0;
-                console.log(`✅ [loadTransactions] Loaded ${this.transactions.length} of ${this.totalCount} transactions`);
-            }
-
-            // Update filters if provided
-            if (data.filters) {
-                this.availableFilters = data.filters;
-                this.updateFilterOptions(data.filters);
-            }
-
-            this.renderTransactions(data);
-            this.updatePagination(data.total_count, data.current_page);
-
-        } catch (error) {
-            console.error('❌ [loadTransactions] Error:', error);
-            this.showError('Failed to load transactions: ' + error.message);
-            this.transactions = [];
-            this.totalCount = 0;
-            this.renderTransactions({transactions: [], total_count: 0, current_page: 1}); // Show empty state
-        } finally {
-            this.showLoader(false);
-        }
-    }
-
-  async loadTotals() {
-    console.log('💰 [loadTotals] Iniciando carregamento de totais...');
     try {
-      const filters = this.getFilters();
-      console.log('🔍 [loadTotals] Filtros para totais:', filters);
+      this.showLoader(true);
 
-      const response = await fetch('/transactions/totals-v2/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': window.csrfToken || $('[name=csrfmiddlewaretoken]').val() || $('meta[name=csrf-token]').attr('content')
-        },
-        body: JSON.stringify(filters)
+      const filters = this.getFilters();
+      const params = new URLSearchParams();
+
+      // Add all filters to params
+      Object.keys(filters).forEach((key) => {
+        if (
+          filters[key] !== "" &&
+          filters[key] !== null &&
+          filters[key] !== undefined
+        ) {
+          params.append(key, filters[key]);
+        }
       });
 
-      console.log('📡 [loadTotals] Resposta dos totais recebida, status:', response.status);
+      const url = `/transactions/json-v2/?${params.toString()}`;
+      console.log("🌐 [loadTransactions] Request URL:", url);
 
-      if (!response.ok) throw new Error('Failed to load totals');
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken":
+            $("[name=csrfmiddlewaretoken]").val() || window.csrfToken || "",
+        },
+      });
+
+      console.log("📡 [loadTransactions] Response status:", response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ HTTP Error Response:", errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log("📊 [loadTransactions] Full response data:", data);
+
+      if (!data.transactions) {
+        console.log("⚠️ [loadTransactions] No transactions key in response");
+        this.transactions = [];
+        this.totalCount = 0;
+      } else if (data.transactions.length === 0) {
+        console.log("⚠️ [loadTransactions] Empty transactions array");
+        this.transactions = [];
+        this.totalCount = data.total_count || 0;
+      } else {
+        this.transactions = data.transactions;
+        this.totalCount = data.total_count || 0;
+        console.log(
+          `✅ [loadTransactions] Loaded ${this.transactions.length} of ${this.totalCount} transactions`,
+        );
+      }
+
+      // Update filters if provided
+      if (data.filters) {
+        this.availableFilters = data.filters;
+        this.updateFilterOptions(data.filters);
+      }
+
+      this.renderTransactions(data);
+      this.updatePagination(data.total_count, data.current_page);
+    } catch (error) {
+      console.error("❌ [loadTransactions] Error:", error);
+      this.showError("Failed to load transactions: " + error.message);
+      this.transactions = [];
+      this.totalCount = 0;
+      this.renderTransactions({
+        transactions: [],
+        total_count: 0,
+        current_page: 1,
+      }); // Show empty state
+    } finally {
+      this.showLoader(false);
+    }
+  }
+
+  async loadTotals() {
+    console.log("💰 [loadTotals] Iniciando carregamento de totais...");
+    try {
+      const filters = this.getFilters();
+      console.log("🔍 [loadTotals] Filtros para totais:", filters);
+
+      const response = await fetch("/transactions/totals-v2/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken":
+            window.csrfToken ||
+            $("[name=csrfmiddlewaretoken]").val() ||
+            $("meta[name=csrf-token]").attr("content"),
+        },
+        body: JSON.stringify(filters),
+      });
+
+      console.log(
+        "📡 [loadTotals] Resposta dos totais recebida, status:",
+        response.status,
+      );
+
+      if (!response.ok) throw new Error("Failed to load totals");
 
       const totals = await response.json();
-      console.log('📊 [loadTotals] Totais recebidos:', totals);
+      console.log("📊 [loadTotals] Totais recebidos:", totals);
 
       this.renderTotals(totals);
-      console.log('✅ [loadTotals] Totais carregados e renderizados com sucesso');
-
+      console.log(
+        "✅ [loadTotals] Totais carregados e renderizados com sucesso",
+      );
     } catch (error) {
-      console.error('❌ [loadTotals] Erro ao carregar totais:', error);
+      console.error("❌ [loadTotals] Erro ao carregar totais:", error);
     }
   }
 
   renderTransactions(data) {
-    console.group('🎨 [renderTransactions] RENDERIZAÇÃO INICIADA');
-    console.log('Timestamp:', new Date().toISOString());
+    console.group("🎨 [renderTransactions] RENDERIZAÇÃO INICIADA");
+    console.log("Timestamp:", new Date().toISOString());
 
-    console.log('📋 VALIDAÇÃO DOS DADOS:');
+    console.log("📋 VALIDAÇÃO DOS DADOS:");
     console.table({
       hasData: !!data,
       hasTransactions: !!(data && data.transactions),
       transactionCount: data?.transactions?.length || 0,
       totalCount: data?.total_count || 0,
       currentPage: data?.current_page || 0,
-      dataKeys: data ? Object.keys(data) : []
+      dataKeys: data ? Object.keys(data) : [],
     });
 
-    const tbody = $('#transactions-tbody');
-    const currentRowCount = tbody.find('tr').length;
-    console.log('🗂️ DOM - Linhas antes de limpar:', currentRowCount);
-    console.log('🗂️ DOM - Element exists:', tbody.length > 0);
+    const tbody = $("#transactions-tbody");
+    const currentRowCount = tbody.find("tr").length;
+    console.log("🗂️ DOM - Linhas antes de limpar:", currentRowCount);
+    console.log("🗂️ DOM - Element exists:", tbody.length > 0);
 
     tbody.empty();
-    console.log('🧹 Tabela limpa');
+    console.log("🧹 Tabela limpa");
 
     if (!data || !data.transactions || data.transactions.length === 0) {
-      console.warn('⚠️ SEM TRANSAÇÕES - Exibindo mensagem vazia');
+      console.warn("⚠️ SEM TRANSAÇÕES - Exibindo mensagem vazia");
       const emptyMessage = `
         <tr>
           <td colspan="9" class="text-center py-4 text-muted">
@@ -414,12 +455,12 @@ class TransactionManager {
       `;
       tbody.append(emptyMessage);
       this.updatePagination(0, 0);
-      $('#total-count').text('No transactions found');
+      $("#total-count").text("No transactions found");
       console.groupEnd();
       return;
     }
 
-    console.log('✏️ CRIANDO', data.transactions.length, 'LINHAS DA TABELA');
+    console.log("✏️ CRIANDO", data.transactions.length, "LINHAS DA TABELA");
 
     // Performance optimization for large datasets
     const batchSize = 50;
@@ -427,7 +468,9 @@ class TransactionManager {
 
     if (transactions.length > batchSize) {
       // Render in batches for better performance
-      console.log(`📊 [renderTransactions] Renderização em lotes: ${transactions.length} transações, lotes de ${batchSize}`);
+      console.log(
+        `📊 [renderTransactions] Renderização em lotes: ${transactions.length} transações, lotes de ${batchSize}`,
+      );
 
       let index = 0;
       const renderBatch = () => {
@@ -439,7 +482,10 @@ class TransactionManager {
             const row = this.createTransactionRow(tx, index + batchIndex);
             tbody.append(row);
           } catch (error) {
-            console.error(`❌ Erro ao criar linha ${index + batchIndex + 1}:`, error);
+            console.error(
+              `❌ Erro ao criar linha ${index + batchIndex + 1}:`,
+              error,
+            );
           }
         });
 
@@ -458,7 +504,8 @@ class TransactionManager {
     } else {
       // Render all at once for smaller datasets
       transactions.forEach((tx, index) => {
-        if (index < 3) { // Only log first 3 for brevity
+        if (index < 3) {
+          // Only log first 3 for brevity
           console.log(`📝 Transaction ${index + 1}:`, tx);
         }
         try {
@@ -477,20 +524,20 @@ class TransactionManager {
   }
 
   finishRendering(data) {
-    const finalRowCount = $('#transactions-tbody tr').length;
-    console.log('📊 DOM - Linhas finais:', finalRowCount);
+    const finalRowCount = $("#transactions-tbody tr").length;
+    console.log("📊 DOM - Linhas finais:", finalRowCount);
 
     this.totalRecords = data.total_count;
     this.updatePagination(data.total_count, data.current_page);
 
     const showingAll = this.pageSize >= data.total_count;
-    const countMessage = showingAll 
+    const countMessage = showingAll
       ? `All ${data.total_count} transactions shown`
       : `${data.total_count} transactions found (showing ${data.transactions.length} on this page)`;
 
-    $('#total-count').text(countMessage);
-    console.log('📊 Count message set:', countMessage);
-    console.log('✅ RENDERIZAÇÃO CONCLUÍDA');
+    $("#total-count").text(countMessage);
+    console.log("📊 Count message set:", countMessage);
+    console.log("✅ RENDERIZAÇÃO CONCLUÍDA");
     console.groupEnd();
   }
 
@@ -502,8 +549,8 @@ class TransactionManager {
 
     // Style for system transactions and adjust type display
     const isSystemRow = tx.is_system;
-    const rowClass = isSystemRow ? 'table-warning' : '';
-    let systemBadge = '';
+    const rowClass = isSystemRow ? "table-warning" : "";
+    let systemBadge = "";
 
     if (isSystemRow) {
       systemBadge = '<span class="badge bg-info ms-1">AUTO</span>';
@@ -513,7 +560,8 @@ class TransactionManager {
     }
 
     // Disable actions for non-editable system transactions
-    const actionsHtml = tx.editable ? `
+    const actionsHtml = tx.editable
+      ? `
       <div class="btn-group btn-group-sm">
         <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit">
           <i class="fas fa-edit"></i>
@@ -522,7 +570,8 @@ class TransactionManager {
           <i class="fas fa-trash"></i>
         </a>
       </div>
-    ` : `
+    `
+      : `
       <div class="btn-group btn-group-sm">
         <button class="btn btn-outline-secondary btn-sm" disabled title="System transaction - read only">
           <i class="fas fa-lock"></i>
@@ -531,11 +580,11 @@ class TransactionManager {
     `;
 
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
-    const checkboxVisibility = this.bulkMode ? '' : 'style="display: none;"';
+    const checkboxVisibility = this.bulkMode ? "" : 'style="display: none;"';
 
     return `
       <tr data-id="${tx.id}" class="${rowClass}">
-        <td ${checkboxVisibility}><input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? 'checked' : ''}></td>
+        <td ${checkboxVisibility}><input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}></td>
         <td>${tx.date}</td>
         <td class="d-none d-md-table-cell">${tx.period}</td>
         <td>${tx.type}${systemBadge}</td>
@@ -550,50 +599,53 @@ class TransactionManager {
 
   getTypeIcon(type) {
     const icons = {
-      'Expense': '💸',
-      'Income': '💰',
-      'Investment': '📈',
-      'Transfer': '🔁',
-      'System adjustment': '🧮'
+      Expense: "💸",
+      Income: "💰",
+      Investment: "📈",
+      Transfer: "🔁",
+      "System adjustment": "🧮",
     };
-    return icons[type] || '📄';
+    return icons[type] || "📄";
   }
 
   getTypeBadgeClass(type) {
     const classes = {
-      'Expense': 'bg-danger',
-      'Income': 'bg-success',
-      'Investment': 'bg-info', 
-      'Transfer': 'bg-warning text-dark',
-      'System adjustment': 'bg-warning text-dark'
+      Expense: "bg-danger",
+      Income: "bg-success",
+      Investment: "bg-info",
+      Transfer: "bg-warning text-dark",
+      "System adjustment": "bg-warning text-dark",
     };
-    return classes[type] || 'bg-secondary';
+    return classes[type] || "bg-secondary";
   }
 
   renderTotals(totals) {
-    console.log('💰 [renderTotals] Renderizando totais:', totals);
+    console.log("💰 [renderTotals] Renderizando totais:", totals);
 
     const income = this.formatCurrency(totals.income || 0);
     const expenses = this.formatCurrency(totals.expenses || 0);
     const investments = this.formatCurrencyPortuguese(totals.investments || 0);
     const balance = this.formatCurrencyPortuguese(totals.balance || 0);
 
-    console.log('💰 [renderTotals] Valores formatados:', {
-      income, expenses, investments, balance
+    console.log("💰 [renderTotals] Valores formatados:", {
+      income,
+      expenses,
+      investments,
+      balance,
     });
 
-    $('#total-income').text(income);
-    $('#total-expenses').text(expenses);
-    $('#total-investments').text(investments);
-    $('#total-balance').text(balance);
+    $("#total-income").text(income);
+    $("#total-expenses").text(expenses);
+    $("#total-investments").text(investments);
+    $("#total-balance").text(balance);
 
-    console.log('✅ [renderTotals] Totais atualizados na interface');
+    console.log("✅ [renderTotals] Totais atualizados na interface");
   }
 
   formatCurrency(amount) {
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: 'EUR'
+    return new Intl.NumberFormat("pt-PT", {
+      style: "currency",
+      currency: "EUR",
     }).format(amount);
   }
 
@@ -603,11 +655,12 @@ class TransactionManager {
     const absAmount = Math.abs(amount);
 
     // Format with Portuguese locale
-    const formatted = absAmount.toFixed(2)
-      .replace('.', ',')  // Decimal separator
-      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');  // Thousands separator
+    const formatted = absAmount
+      .toFixed(2)
+      .replace(".", ",") // Decimal separator
+      .replace(/\B(?=(\d{3})+(?!\d))/g, "."); // Thousands separator
 
-    return `${isNegative ? '-' : ''}${formatted} €`;
+    return `${isNegative ? "-" : ""}${formatted} €`;
   }
 
   formatDisplayAmount(amount) {
@@ -616,38 +669,54 @@ class TransactionManager {
     const absAmount = Math.abs(amount);
 
     // Format with Portuguese locale
-    const formatted = absAmount.toFixed(2)
-      .replace('.', ',')  // Decimal separator
-      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');  // Thousands separator
+    const formatted = absAmount
+      .toFixed(2)
+      .replace(".", ",") // Decimal separator
+      .replace(/\B(?=(\d{3})+(?!\d))/g, "."); // Thousands separator
 
-    return `€ ${isNegative ? '-' : ''}${formatted}`;
+    return `€ ${isNegative ? "-" : ""}${formatted}`;
   }
 
   updateFilterOptions(filters) {
-    console.log('🔧 [updateFilterOptions] Atualizando opções dos filtros (estilo Excel)');
+    console.log(
+      "🔧 [updateFilterOptions] Atualizando opções dos filtros (estilo Excel)",
+    );
     if (!filters) {
-      console.warn('⚠️ [updateFilterOptions] Nenhum dado de filtros recebido');
+      console.warn("⚠️ [updateFilterOptions] Nenhum dado de filtros recebido");
       return;
     }
 
-    console.log('📝 [updateFilterOptions] Filtros disponíveis (apenas com transações):', {
-      categories: filters.categories?.length || 0,
-      accounts: filters.accounts?.length || 0,
-      periods: filters.periods?.length || 0
-    });
+    console.log(
+      "📝 [updateFilterOptions] Filtros disponíveis (apenas com transações):",
+      {
+        categories: filters.categories?.length || 0,
+        accounts: filters.accounts?.length || 0,
+        periods: filters.periods?.length || 0,
+      },
+    );
 
-    console.log('📋 [updateFilterOptions] Detalhes dos filtros:', {
+    console.log("📋 [updateFilterOptions] Detalhes dos filtros:", {
       categoriesList: filters.categories || [],
       accountsList: filters.accounts || [],
-      periodsList: filters.periods || []
+      periodsList: filters.periods || [],
     });
 
     // Update filter options while preserving current selections
-    this.updateSelectOptions('#filter-category', filters.categories || [], 'category');
-    this.updateSelectOptions('#filter-account', filters.accounts || [], 'account');
-    this.updateSelectOptions('#filter-period', filters.periods || [], 'period');
+    this.updateSelectOptions(
+      "#filter-category",
+      filters.categories || [],
+      "category",
+    );
+    this.updateSelectOptions(
+      "#filter-account",
+      filters.accounts || [],
+      "account",
+    );
+    this.updateSelectOptions("#filter-period", filters.periods || [], "period");
 
-    console.log('✅ [updateFilterOptions] Opções de filtros atualizadas (estilo Excel)');
+    console.log(
+      "✅ [updateFilterOptions] Opções de filtros atualizadas (estilo Excel)",
+    );
   }
 
   updateFilterDropdowns() {
@@ -659,43 +728,61 @@ class TransactionManager {
     const select = $(selector);
     const currentValue = select.val();
 
-    console.log(`🔧 [updateSelectOptions] Atualizando ${filterType} - valor atual: '${currentValue}', opções disponíveis:`, options);
+    console.log(
+      `🔧 [updateSelectOptions] Atualizando ${filterType} - valor atual: '${currentValue}', opções disponíveis:`,
+      options,
+    );
 
     // Clear and rebuild options
     select.empty();
-    select.append(`<option value="">All ${filterType ? filterType.charAt(0).toUpperCase() + filterType.slice(1) + 's' : 'Options'}</option>`);
+    select.append(
+      `<option value="">All ${filterType ? filterType.charAt(0).toUpperCase() + filterType.slice(1) + "s" : "Options"}</option>`,
+    );
 
     // Add available options (Excel-style - only those with data in current filter context)
-    options.forEach(option => {
-      const selected = option === currentValue ? ' selected' : '';
+    options.forEach((option) => {
+      const selected = option === currentValue ? " selected" : "";
       select.append(`<option value="${option}"${selected}>${option}</option>`);
     });
 
     // Excel behavior: Keep current selection if it exists in filtered data
     // Only clear if the current value is not in the available options
     if (currentValue && !options.includes(currentValue)) {
-      select.val('');
-      console.log(`🔄 [updateSelectOptions] Filtro ${filterType} resetado - valor '${currentValue}' não existe nos dados filtrados (estilo Excel)`);
+      select.val("");
+      console.log(
+        `🔄 [updateSelectOptions] Filtro ${filterType} resetado - valor '${currentValue}' não existe nos dados filtrados (estilo Excel)`,
+      );
 
       // Trigger change event to update other filters
       setTimeout(() => {
-        console.log(`🔄 [updateSelectOptions] Triggering change event for ${filterType} reset`);
-        select.trigger('change');
+        console.log(
+          `🔄 [updateSelectOptions] Triggering change event for ${filterType} reset`,
+        );
+        select.trigger("change");
       }, 100);
     } else if (currentValue && options.includes(currentValue)) {
-      console.log(`✅ [updateSelectOptions] Filtro ${filterType} mantido - valor '${currentValue}' existe nos dados filtrados`);
+      console.log(
+        `✅ [updateSelectOptions] Filtro ${filterType} mantido - valor '${currentValue}' existe nos dados filtrados`,
+      );
     }
 
-    console.log(`📋 [updateSelectOptions] ${filterType}: ${options.length} opções disponíveis (estilo Excel)`);
+    console.log(
+      `📋 [updateSelectOptions] ${filterType}: ${options.length} opções disponíveis (estilo Excel)`,
+    );
   }
 
   changePageSize(newSize) {
     console.log(`📄 [changePageSize] Alterando page size para: ${newSize}`);
 
-    if (newSize === 'all') {
+    if (newSize === "all") {
       // Para "all", usar um número muito alto mas limitado por segurança
-      this.pageSize = Math.min(this.totalRecords || this.maxPageSize, this.maxPageSize);
-      console.log(`📄 [changePageSize] Page size "all" definido como: ${this.pageSize}`);
+      this.pageSize = Math.min(
+        this.totalRecords || this.maxPageSize,
+        this.maxPageSize,
+      );
+      console.log(
+        `📄 [changePageSize] Page size "all" definido como: ${this.pageSize}`,
+      );
     } else {
       this.pageSize = parseInt(newSize);
       console.log(`📄 [changePageSize] Page size numérico: ${this.pageSize}`);
@@ -706,40 +793,44 @@ class TransactionManager {
 
     // Limpar cache porque mudou a paginação
     this.cache.clear();
-    console.log(`📄 [changePageSize] Cache limpo devido a mudança de page size`);
+    console.log(
+      `📄 [changePageSize] Cache limpo devido a mudança de page size`,
+    );
 
     // Recarregar transações
     this.loadTransactions();
 
     // Guardar preferência no localStorage
-    if (newSize === 'all') {
-      localStorage.setItem('transaction_page_size', 'all');
+    if (newSize === "all") {
+      localStorage.setItem("transaction_page_size", "all");
     } else {
-      localStorage.setItem('transaction_page_size', newSize);
+      localStorage.setItem("transaction_page_size", newSize);
     }
   }
 
   updatePagination(totalRecords, currentPage) {
     const totalPages = Math.ceil(totalRecords / this.pageSize);
-    const paginationUl = $('#pagination-ul');
+    const paginationUl = $("#pagination-ul");
     paginationUl.empty();
 
     // Update page info
-    $('#page-info').text(`Page ${currentPage} of ${totalPages} (${totalRecords} total)`);
+    $("#page-info").text(
+      `Page ${currentPage} of ${totalPages} (${totalRecords} total)`,
+    );
 
     // Se estamos mostrando todas as transações, não mostrar paginação
     if (this.pageSize >= totalRecords) {
-      $('#pagination-nav').hide();
+      $("#pagination-nav").hide();
       return;
     }
 
-    $('#pagination-nav').show();
+    $("#pagination-nav").show();
 
     if (totalPages <= 1) return;
 
     // Previous button
     paginationUl.append(`
-      <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+      <li class="page-item ${currentPage === 1 ? "disabled" : ""}">
         <button class="page-link" onclick="transactionManager.goToPage(${currentPage - 1})">
           <i class="fas fa-chevron-left"></i> Previous
         </button>
@@ -754,7 +845,9 @@ class TransactionManager {
         </li>
       `);
       if (currentPage > 4) {
-        paginationUl.append(`<li class="page-item disabled"><span class="page-link">...</span></li>`);
+        paginationUl.append(
+          `<li class="page-item disabled"><span class="page-link">...</span></li>`,
+        );
       }
     }
 
@@ -764,7 +857,7 @@ class TransactionManager {
 
     for (let i = startPage; i <= endPage; i++) {
       paginationUl.append(`
-        <li class="page-item ${i === currentPage ? 'active' : ''}">
+        <li class="page-item ${i === currentPage ? "active" : ""}">
           <button class="page-link" onclick="transactionManager.goToPage(${i})">${i}</button>
         </li>
       `);
@@ -773,7 +866,9 @@ class TransactionManager {
     // Last page
     if (currentPage < totalPages - 2) {
       if (currentPage < totalPages - 3) {
-        paginationUl.append(`<li class="page-item disabled"><span class="page-link">...</span></li>`);
+        paginationUl.append(
+          `<li class="page-item disabled"><span class="page-link">...</span></li>`,
+        );
       }
       paginationUl.append(`
         <li class="page-item">
@@ -784,7 +879,7 @@ class TransactionManager {
 
     // Next button
     paginationUl.append(`
-      <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+      <li class="page-item ${currentPage === totalPages ? "disabled" : ""}">
         <button class="page-link" onclick="transactionManager.goToPage(${currentPage + 1})">
           Next <i class="fas fa-chevron-right"></i>
         </button>
@@ -800,41 +895,41 @@ class TransactionManager {
 
   toggleBulkMode(enabled) {
     this.bulkMode = enabled;
-    $('#select-all').toggle(enabled);
-    $('#bulk-actions').toggleClass('d-none', !enabled);
+    $("#select-all").toggle(enabled);
+    $("#bulk-actions").toggleClass("d-none", !enabled);
 
     // Mostrar/ocultar a coluna inteira do checkbox no cabeçalho
-    const checkboxHeader = $('#transactions-table thead th:first-child');
+    const checkboxHeader = $("#transactions-table thead th:first-child");
     if (enabled) {
-      checkboxHeader.css('display', '');
+      checkboxHeader.css("display", "");
     } else {
-      checkboxHeader.css('display', 'none');
+      checkboxHeader.css("display", "none");
     }
 
     // Mostrar/ocultar todas as células da primeira coluna no tbody
-    $('#transactions-tbody tr').each(function() {
-      const firstCell = $(this).find('td:first-child');
+    $("#transactions-tbody tr").each(function () {
+      const firstCell = $(this).find("td:first-child");
       if (enabled) {
-        firstCell.css('display', '');
+        firstCell.css("display", "");
       } else {
-        firstCell.css('display', 'none');
+        firstCell.css("display", "none");
       }
     });
 
     if (!enabled) {
       this.selectedRows.clear();
-      $('.row-select').prop('checked', false);
+      $(".row-select").prop("checked", false);
     }
 
     this.loadTransactions(); // Reload to show/hide checkboxes
   }
 
   selectAll(checked) {
-    $('.row-select').prop('checked', checked);
+    $(".row-select").prop("checked", checked);
     this.selectedRows.clear();
 
     if (checked) {
-      $('.row-select').each((i, el) => {
+      $(".row-select").each((i, el) => {
         this.selectedRows.add(parseInt(el.value));
       });
     }
@@ -853,80 +948,90 @@ class TransactionManager {
     this.updateSelectionCount();
 
     // Update select all checkbox
-    const totalVisible = $('.row-select').length;
-    const selectedVisible = $('.row-select:checked').length;
-    $('#select-all').prop('checked', totalVisible === selectedVisible && totalVisible > 0);
+    const totalVisible = $(".row-select").length;
+    const selectedVisible = $(".row-select:checked").length;
+    $("#select-all").prop(
+      "checked",
+      totalVisible === selectedVisible && totalVisible > 0,
+    );
   }
 
   updateSelectionCount() {
-    $('#selection-count').text(`${this.selectedRows.size} selected`);
+    $("#selection-count").text(`${this.selectedRows.size} selected`);
   }
 
   async bulkMarkCleared() {
     if (this.selectedRows.size === 0) {
-      alert('Please select transactions first.');
+      alert("Please select transactions first.");
       return;
     }
 
-    const confirmed = confirm(`Mark ${this.selectedRows.size} transactions as cleared/confirmed?`);
+    const confirmed = confirm(
+      `Mark ${this.selectedRows.size} transactions as cleared/confirmed?`,
+    );
     if (!confirmed) return;
 
     try {
-      const response = await fetch('/transactions/bulk-update/', {
-        method: 'POST',
+      const response = await fetch("/transactions/bulk-update/", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+          "Content-Type": "application/json",
+          "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
         },
         body: JSON.stringify({
-          action: 'mark_estimated',
-          transaction_ids: Array.from(this.selectedRows)
-        })
+          action: "mark_estimated",
+          transaction_ids: Array.from(this.selectedRows),
+        }),
       });
 
       if (response.ok) {
         this.cache.clear();
         this.loadTransactions();
-        this.showSuccess('Transactions marked as cleared');
+        this.showSuccess("Transactions marked as cleared");
       } else {
-        throw new Error('Failed to update transactions');
+        throw new Error("Failed to update transactions");
       }
     } catch (error) {
-      this.showError('Failed to update transactions');
+      this.showError("Failed to update transactions");
     }
   }
 
-
-
   async bulkDuplicate() {
     if (this.selectedRows.size === 0) {
-      alert('Please select transactions first.');
+      alert("Please select transactions first.");
       return;
     }
 
-    const confirmed = confirm(`Duplicate ${this.selectedRows.size} transactions?`);
+    const confirmed = confirm(
+      `Duplicate ${this.selectedRows.size} transactions?`,
+    );
     if (!confirmed) return;
 
     // Show simple loading indicator
     this.showLoading(true);
-    const loadingToast = this.showToast(`Duplicating ${this.selectedRows.size} transactions...`, 'info', 0);
+    const loadingToast = this.showToast(
+      `Duplicating ${this.selectedRows.size} transactions...`,
+      "info",
+      0,
+    );
 
     try {
       const startTime = performance.now();
 
-      const response = await fetch('/transactions/bulk-duplicate/', {
-        method: 'POST',
+      const response = await fetch("/transactions/bulk-duplicate/", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+          "Content-Type": "application/json",
+          "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
         },
-        body: JSON.stringify({          transaction_ids: Array.from(this.selectedRows)
-        })
+        body: JSON.stringify({
+          transaction_ids: Array.from(this.selectedRows),
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to duplicate transactions');
+        throw new Error(errorData.error || "Failed to duplicate transactions");
       }
 
       const result = await response.json();
@@ -935,18 +1040,16 @@ class TransactionManager {
 
       // Clear cache and reload data
       this.cache.clear();
-      await Promise.all([
-        this.loadTransactions(),
-        this.loadTotals()
-      ]);
+      await Promise.all([this.loadTransactions(), this.loadTotals()]);
 
       // Hide loading toast
       if (loadingToast) loadingToast.remove();
 
-      this.showSuccess(`✅ ${result.created} transactions duplicated successfully in ${duration}s`);
-
+      this.showSuccess(
+        `✅ ${result.created} transactions duplicated successfully in ${duration}s`,
+      );
     } catch (error) {
-      console.error('Bulk duplicate error:', error);
+      console.error("Bulk duplicate error:", error);
       if (loadingToast) loadingToast.remove();
       this.showError(`❌ Failed to duplicate transactions: ${error.message}`);
     } finally {
@@ -956,34 +1059,40 @@ class TransactionManager {
 
   async bulkDelete() {
     if (this.selectedRows.size === 0) {
-      alert('Please select transactions first.');
+      alert("Please select transactions first.");
       return;
     }
 
-    const confirmed = confirm(`⚠️ Delete ${this.selectedRows.size} transactions? This action cannot be undone.`);
+    const confirmed = confirm(
+      `⚠️ Delete ${this.selectedRows.size} transactions? This action cannot be undone.`,
+    );
     if (!confirmed) return;
 
     // Show simple loading indicator instead of fake progress
     this.showLoading(true);
-    const loadingToast = this.showToast(`Deleting ${this.selectedRows.size} transactions...`, 'info', 0); // No auto-hide
+    const loadingToast = this.showToast(
+      `Deleting ${this.selectedRows.size} transactions...`,
+      "info",
+      0,
+    ); // No auto-hide
 
     try {
       const startTime = performance.now();
 
-      const response = await fetch('/transactions/bulk-delete/', {
-        method: 'POST',
+      const response = await fetch("/transactions/bulk-delete/", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+          "Content-Type": "application/json",
+          "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
         },
         body: JSON.stringify({
-          transaction_ids: Array.from(this.selectedRows)
-        })
+          transaction_ids: Array.from(this.selectedRows),
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete transactions');
+        throw new Error(errorData.error || "Failed to delete transactions");
       }
 
       const result = await response.json();
@@ -996,18 +1105,16 @@ class TransactionManager {
       this.updateSelectionCount();
 
       // Reload data
-      await Promise.all([
-        this.loadTransactions(),
-        this.loadTotals()
-      ]);
+      await Promise.all([this.loadTransactions(), this.loadTotals()]);
 
       // Hide loading toast
       if (loadingToast) loadingToast.remove();
 
-      this.showSuccess(`✅ ${result.deleted} transactions deleted successfully in ${duration}s`);
-
+      this.showSuccess(
+        `✅ ${result.deleted} transactions deleted successfully in ${duration}s`,
+      );
     } catch (error) {
-      console.error('Bulk delete error:', error);
+      console.error("Bulk delete error:", error);
       if (loadingToast) loadingToast.remove();
       this.showError(`❌ Failed to delete transactions: ${error.message}`);
     } finally {
@@ -1017,77 +1124,75 @@ class TransactionManager {
 
   async clearCache() {
     try {
-      console.log('🧹 [clearCache] Starting cache clear operation...');
+      console.log("🧹 [clearCache] Starting cache clear operation...");
 
-      const response = await fetch('/transactions/clear-cache/', {
-        method: 'GET',
+      const response = await fetch("/transactions/clear-cache/", {
+        method: "GET",
         headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || window.csrfToken || ''
-        }
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken":
+            $("[name=csrfmiddlewaretoken]").val() || window.csrfToken || "",
+        },
       });
 
-      console.log('📡 [clearCache] Response status:', response.status);
+      console.log("📡 [clearCache] Response status:", response.status);
 
       if (response.ok) {
         const result = await response.json();
-        console.log('📋 [clearCache] Server response:', result);
+        console.log("📋 [clearCache] Server response:", result);
 
         if (result.success) {
           // Clear local cache
           this.cache.clear();
-          console.log('🗑️ [clearCache] Local cache cleared');
+          console.log("🗑️ [clearCache] Local cache cleared");
 
           // Reload both transactions and totals to reflect updated estimates
-          await Promise.all([
-            this.loadTransactions(),
-            this.loadTotals()
-          ]);
+          await Promise.all([this.loadTransactions(), this.loadTotals()]);
 
-          this.showSuccess('✅ Cache cleared successfully!');
-          console.log('✅ [clearCache] Operation completed successfully');
+          this.showSuccess("✅ Cache cleared successfully!");
+          console.log("✅ [clearCache] Operation completed successfully");
         } else {
-          throw new Error(result.error || 'Unknown error occurred');
+          throw new Error(result.error || "Unknown error occurred");
         }
       } else {
         const errorData = await response.json();
-        console.error('❌ [clearCache] Server response error:', errorData);
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        console.error("❌ [clearCache] Server response error:", errorData);
+        throw new Error(
+          errorData.error || `HTTP ${response.status}: ${response.statusText}`,
+        );
       }
     } catch (error) {
-      console.error('❌ [clearCache] Error:', error);
+      console.error("❌ [clearCache] Error:", error);
       this.showError(`Failed to clear cache: ${error.message}`);
     }
   }
 
-  
-
   exportData() {
     const filters = this.getFilters();
     const params = new URLSearchParams(filters);
-    window.open(`/transactions/export-excel/?${params}`, '_blank');
+    window.open(`/transactions/export-excel/?${params}`, "_blank");
   }
 
   importData() {
-    window.location.href = '/transactions/import-excel/';
+    window.location.href = "/transactions/import-excel/";
   }
 
   showLoader(show) {
-    $('#loading-spinner').toggleClass('d-none', !show);
-    $('#transactions-table').toggleClass('d-none', show);
+    $("#loading-spinner").toggleClass("d-none", !show);
+    $("#transactions-table").toggleClass("d-none", show);
   }
 
   showLoading(show) {
-    $('#loading-spinner').toggleClass('d-none', !show);
-    $('#transactions-table').toggleClass('d-none', show);
+    $("#loading-spinner").toggleClass("d-none", !show);
+    $("#transactions-table").toggleClass("d-none", show);
   }
 
   showSuccess(message) {
-    this.showToast(message, 'success');
+    this.showToast(message, "success");
   }
 
   showError(message) {
-    this.showToast(message, 'danger');
+    this.showToast(message, "danger");
   }
 
   showToast(message, type, delay = 3000) {
@@ -1100,11 +1205,11 @@ class TransactionManager {
       </div>
     `);
 
-    $('body').append(toast);
+    $("body").append(toast);
 
     if (delay > 0) {
-      toast.toast({ delay: delay }).toast('show');
-      toast.on('hidden.bs.toast', () => toast.remove());
+      toast.toast({ delay: delay }).toast("show");
+      toast.on("hidden.bs.toast", () => toast.remove());
     } else {
       // Persistent toast - won't auto-hide
       toast.show();
@@ -1147,35 +1252,37 @@ class TransactionManager {
     `);
 
     // Remove any existing progress modal
-    $('#progressModal').remove();
+    $("#progressModal").remove();
 
-    $('body').append(modal);
-    modal.modal('show');
+    $("body").append(modal);
+    modal.modal("show");
   }
 
   updateProgress(percent, message) {
-    const progressBar = $('#bulk-progress-bar');
-    const progressText = $('#progress-text');
-    const progressMessage = $('#progress-message');
+    const progressBar = $("#bulk-progress-bar");
+    const progressText = $("#progress-text");
+    const progressMessage = $("#progress-message");
 
     if (progressBar.length) {
-      progressBar.css('width', percent + '%');
-      progressText.text(percent + '%');
+      progressBar.css("width", percent + "%");
+      progressText.text(percent + "%");
       progressMessage.text(message);
 
       // Add success styling when complete
       if (percent >= 100) {
-        progressBar.removeClass('bg-primary').addClass('bg-success');
-        progressBar.removeClass('progress-bar-animated');
-        progressMessage.html('<i class="fas fa-check-circle text-success me-1"></i>' + message);
+        progressBar.removeClass("bg-primary").addClass("bg-success");
+        progressBar.removeClass("progress-bar-animated");
+        progressMessage.html(
+          '<i class="fas fa-check-circle text-success me-1"></i>' + message,
+        );
       }
     }
   }
 
   hideProgressModal() {
-    const modal = $('#progressModal');
+    const modal = $("#progressModal");
     if (modal.length) {
-      modal.modal('hide');
+      modal.modal("hide");
       // Remove modal after animation completes
       setTimeout(() => modal.remove(), 300);
     }
@@ -1183,25 +1290,25 @@ class TransactionManager {
 
   handleSort(e) {
     const header = $(e.currentTarget);
-    const sortField = header.data('sort');
+    const sortField = header.data("sort");
 
-    console.log('🔤 [handleSort] Column clicked:', sortField);
+    console.log("🔤 [handleSort] Column clicked:", sortField);
 
     // Toggle sort direction if same field, otherwise default to desc for most fields, asc for text fields
     if (this.sortField === sortField) {
-      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+      this.sortDirection = this.sortDirection === "asc" ? "desc" : "asc";
     } else {
       // Default sorting directions
-      const textFields = ['type', 'category', 'account', 'tags', 'period'];
-      this.sortDirection = textFields.includes(sortField) ? 'asc' : 'desc';
+      const textFields = ["type", "category", "account", "tags", "period"];
+      this.sortDirection = textFields.includes(sortField) ? "asc" : "desc";
     }
 
     this.sortField = sortField;
     this.currentPage = 1; // Reset to first page when sorting
 
-    console.log('🔤 [handleSort] New sort state:', {
+    console.log("🔤 [handleSort] New sort state:", {
       field: this.sortField,
-      direction: this.sortDirection
+      direction: this.sortDirection,
     });
 
     // Update visual indicators
@@ -1214,24 +1321,30 @@ class TransactionManager {
 
   updateSortIndicators() {
     // Remove all active states and reset icons
-    $('.sortable-header').removeClass('active sort-asc sort-desc');
-    $('.sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
+    $(".sortable-header").removeClass("active sort-asc sort-desc");
+    $(".sort-icon").removeClass("fa-sort-up fa-sort-down").addClass("fa-sort");
 
     // Add active state to current sort column
     const activeHeader = $(`.sortable-header[data-sort="${this.sortField}"]`);
-    activeHeader.addClass('active');
+    activeHeader.addClass("active");
 
-    if (this.sortDirection === 'asc') {
-      activeHeader.addClass('sort-asc');
-      activeHeader.find('.sort-icon').removeClass('fa-sort').addClass('fa-sort-up');
+    if (this.sortDirection === "asc") {
+      activeHeader.addClass("sort-asc");
+      activeHeader
+        .find(".sort-icon")
+        .removeClass("fa-sort")
+        .addClass("fa-sort-up");
     } else {
-      activeHeader.addClass('sort-desc');
-      activeHeader.find('.sort-icon').removeClass('fa-sort').addClass('fa-sort-down');
+      activeHeader.addClass("sort-desc");
+      activeHeader
+        .find(".sort-icon")
+        .removeClass("fa-sort")
+        .addClass("fa-sort-down");
     }
 
-    console.log('🔤 [updateSortIndicators] Visual indicators updated for:', {
+    console.log("🔤 [updateSortIndicators] Visual indicators updated for:", {
       field: this.sortField,
-      direction: this.sortDirection
+      direction: this.sortDirection,
     });
   }
 }
@@ -1244,65 +1357,81 @@ $(document).ready(() => {
 });
 
 async function deleteTransaction(id) {
-  const confirmed = confirm('⚠️ Delete this transaction? This action cannot be undone.');
+  const confirmed = confirm(
+    "⚠️ Delete this transaction? This action cannot be undone.",
+  );
   if (!confirmed) return;
 
   try {
     const response = await fetch(`/transactions/${id}/delete/`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-      }
+        "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
+      },
     });
 
     if (response.ok) {
       transactionManager.cache.clear();
       transactionManager.loadTransactions();
       transactionManager.loadTotals();
-      transactionManager.showSuccess('Transaction deleted successfully');
+      transactionManager.showSuccess("Transaction deleted successfully");
     } else {
-      throw new Error('Failed to delete transaction');
+      throw new Error("Failed to delete transaction");
     }
   } catch (error) {
-    transactionManager.showError('Failed to delete transaction');
+    transactionManager.showError("Failed to delete transaction");
   }
 }
 
 function syncPeriodFields(tr) {
-    const dateInput = tr.querySelector("input[name='date']");
-    const periodInput = tr.querySelector("input[name='period']");
-    const periodDisplay = tr.querySelector("input[name='period_display']");
+  const dateInput = tr.querySelector("input[name='date']");
+  const periodInput = tr.querySelector("input[name='period']");
+  const periodDisplay = tr.querySelector("input[name='period_display']");
 
-    if (!dateInput?.value) return;
+  if (!dateInput?.value) return;
 
-    // Parse da data corretamente
-    const dateParts = dateInput.value.split('-');
-    if (dateParts.length !== 3) return;
+  // Parse da data corretamente
+  const dateParts = dateInput.value.split("-");
+  if (dateParts.length !== 3) return;
 
-    const yyyy = parseInt(dateParts[0]);
-    const mm = String(parseInt(dateParts[1])).padStart(2, "00");
-    const monthIndex = parseInt(dateParts[1]) - 1; // Month index para array (0-11)
+  const yyyy = parseInt(dateParts[0]);
+  const mm = String(parseInt(dateParts[1])).padStart(2, "00");
+  const monthIndex = parseInt(dateParts[1]) - 1; // Month index para array (0-11)
 
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                       'July', 'August', 'September', 'October', 'November', 'December'];
-    const monthName = monthNames[monthIndex];
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const monthName = monthNames[monthIndex];
 
-    if (periodInput) {
-      periodInput.value = `${yyyy}-${mm}`;
-    }
-
-    if (periodDisplay) {
-      periodDisplay.value = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${yyyy}`;
-    }
-
-    console.log(`🔄 syncPeriodFields: Data ${dateInput.value} → Período ${yyyy}-${mm} (${monthName} ${yyyy})`);
+  if (periodInput) {
+    periodInput.value = `${yyyy}-${mm}`;
   }
 
+  if (periodDisplay) {
+    periodDisplay.value = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${yyyy}`;
+  }
+
+  console.log(
+    `🔄 syncPeriodFields: Data ${dateInput.value} → Período ${yyyy}-${mm} (${monthName} ${yyyy})`,
+  );
+}
+
 // Type mapping
-    const typeMapping = {
-        'IN': 'Income',
-        'EX': 'Expense', 
-        'IV': 'Investment',
-        'TR': 'Transfer',
-        'AJ': 'Adjustment'
-    };
+const typeMapping = {
+  IN: "Income",
+  EX: "Expense",
+  IV: "Investment",
+  TR: "Transfer",
+  AJ: "Adjustment",
+};

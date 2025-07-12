@@ -1924,10 +1924,24 @@ def get_estimation_summaries(request):
     from .services.finance_estimation import FinanceEstimationService
     
     try:
+        # Get year filter from request
+        year_filter = request.GET.get('year')
+        
         # Get periods with account balances, properly ordered
-        periods = DatePeriod.objects.filter(
+        periods_qs = DatePeriod.objects.filter(
             account_balances__account__user=request.user
-        ).distinct().order_by('-year', '-month')[:12]
+        ).distinct().order_by('-year', '-month')
+        
+        # Apply year filter if provided
+        if year_filter:
+            try:
+                year = int(year_filter)
+                periods_qs = periods_qs.filter(year=year)
+                logger.debug(f"Applied year filter: {year}")
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid year filter: {year_filter}")
+        
+        periods = periods_qs[:12]
         
         logger.debug(f"Found {periods.count()} periods for user {request.user.id}")
         
@@ -1988,12 +2002,18 @@ def delete_estimated_transaction(request, transaction_id):
     """Delete an estimated transaction."""
     try:
         # Get the transaction and verify it belongs to user and is estimated
-        tx = get_object_or_404(
-            Transaction,
-            id=transaction_id,
-            user=request.user,
-            is_estimated=True
-        )
+        try:
+            tx = Transaction.objects.get(
+                id=transaction_id,
+                user=request.user,
+                is_estimated=True
+            )
+        except Transaction.DoesNotExist:
+            logger.warning(f"Estimated transaction {transaction_id} not found for user {request.user.id}")
+            return JsonResponse({
+                'success': True,
+                'message': 'No estimated transaction found to delete'
+            })
         
         period_label = tx.period.label if tx.period else "Unknown"
         tx.delete()
@@ -2008,6 +2028,77 @@ def delete_estimated_transaction(request, transaction_id):
         
     except Exception as e:
         logger.error(f"Error deleting estimated transaction {transaction_id}: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@require_POST  
+@login_required
+def delete_estimated_transaction_by_period(request, period_id):
+    """Delete estimated transaction for a specific period."""
+    try:
+        # Get the period
+        try:
+            period = DatePeriod.objects.get(id=period_id)
+        except DatePeriod.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Period not found'})
+        
+        # Find and delete estimated transactions for this period and user
+        estimated_transactions = Transaction.objects.filter(
+            user=request.user,
+            period=period,
+            is_estimated=True
+        )
+        
+        deleted_count = estimated_transactions.count()
+        estimated_transactions.delete()
+        
+        logger.info(f"Deleted {deleted_count} estimated transaction(s) for period {period.label}")
+        
+        # Clear cache
+        clear_tx_cache(request.user.id)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Deleted {deleted_count} estimated transaction(s) for {period.label}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting estimated transactions for period {period_id}: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+def get_available_years(request):
+    """Get years that have periods with account balances."""
+    try:
+        # Get distinct years from periods that have account balances for this user
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT dp.year
+                FROM core_dateperiod dp
+                INNER JOIN core_accountbalance ab ON ab.period_id = dp.id
+                INNER JOIN core_account a ON ab.account_id = a.id
+                WHERE a.user_id = %s
+                ORDER BY dp.year DESC
+            """, [request.user.id])
+            
+            years = [row[0] for row in cursor.fetchall()]
+            
+        logger.debug(f"Found {len(years)} years with balance periods for user {request.user.id}: {years}")
+        
+        return JsonResponse({
+            'success': True,
+            'years': years
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting available years for user {request.user.id}: {e}")
         return JsonResponse({
             'success': False,
             'error': str(e)

@@ -1,6 +1,5 @@
 {% extends "base.html" %} {% load static %} {% load filtros %} {% now "Y-m-d" as
-today %} {% block content %}
-{% csrf_token %}
+today %} {% block content %} {% csrf_token %}
 <div class="container-fluid mt-4">
   <!-- CSRF Token -->
   <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
@@ -208,10 +207,15 @@ today %} {% block content %}
       </div>
 
       <!-- Legend for Calculated Transactions -->
-      <div class="d-flex align-items-center gap-2" id="synthetic-legend" style="display: none;">
+      <div
+        class="d-flex align-items-center gap-2"
+        id="synthetic-legend"
+        style="display: none"
+      >
         <small class="text-muted">
           <span class="badge bg-warning text-dark me-1">🧮</span>
-          Automatically calculated transactions using formula: Expenses = Balance(n) - Balance(n+1) + Income - Investments
+          Automatically calculated transactions using formula: Expenses =
+          Balance(n) - Balance(n+1) + Income - Investments
         </small>
       </div>
 
@@ -246,7 +250,10 @@ today %} {% block content %}
             id="include-system-toggle"
             checked
           />
-          <span data-bs-toggle="tooltip" title="Show estimated expenses and unrecorded income calculated automatically">
+          <span
+            data-bs-toggle="tooltip"
+            title="Show estimated expenses and unrecorded income calculated automatically"
+          >
             💰 Show Calculated Transactions
           </span>
         </label>
@@ -278,7 +285,10 @@ today %} {% block content %}
               <th class="sortable-header" data-sort="date">
                 📅 Date <i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="d-none d-md-table-cell sortable-header" data-sort="period">
+              <th
+                class="d-none d-md-table-cell sortable-header"
+                data-sort="period"
+              >
                 📆 Period <i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="sortable-header" data-sort="type">
@@ -287,13 +297,22 @@ today %} {% block content %}
               <th class="sortable-header" data-sort="amount">
                 💰 Amount <i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="d-none d-lg-table-cell sortable-header" data-sort="category">
+              <th
+                class="d-none d-lg-table-cell sortable-header"
+                data-sort="category"
+              >
                 🏷️ Category <i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="d-none d-xl-table-cell sortable-header" data-sort="tags">
+              <th
+                class="d-none d-xl-table-cell sortable-header"
+                data-sort="tags"
+              >
                 🏷️ Tags <i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="d-none d-md-table-cell sortable-header" data-sort="account">
+              <th
+                class="d-none d-md-table-cell sortable-header"
+                data-sort="account"
+              >
                 🏦 Account <i class="fas fa-sort sort-icon"></i>
               </th>
               <th style="width: 120px">⚙️ Actions</th>
@@ -344,8 +363,8 @@ today %} {% block content %}
 </div>
 
 <script>
-// Ensure CSRF token is available for AJAX calls
-window.csrfToken = '{{ csrf_token }}';
+  // Ensure CSRF token is available for AJAX calls
+  window.csrfToken = "{{ csrf_token }}";
 </script>
 
 <!-- Dependencies -->
@@ -528,7 +547,11 @@ window.csrfToken = '{{ csrf_token }}';
   }
 
   .synthetic-transaction {
-    background: linear-gradient(90deg, rgba(255, 193, 7, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+    background: linear-gradient(
+      90deg,
+      rgba(255, 193, 7, 0.05) 0%,
+      rgba(255, 255, 255, 0) 100%
+    );
   }
 </style>
 

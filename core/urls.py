@@ -38,6 +38,7 @@ from .views import (
     get_estimation_summaries,
     estimate_transaction_for_period,
     delete_estimated_transaction,
+    delete_estimated_transaction_by_period,
 )
 
 from .views_reporting import proxy_report_csv_token
@@ -74,11 +75,13 @@ urlpatterns = [
     path('transactions/bulk-duplicate/', transaction_bulk_duplicate, name='transaction_bulk_duplicate'),
     path('transactions/bulk-delete/', transaction_bulk_delete, name='transaction_bulk_delete'),
 
-    # Transaction estimation
-    path('transactions/estimate/', views.estimate_transaction_view, name='estimate_transactions'),
-    path('transactions/estimate/period/', views.estimate_transaction_for_period, name='estimate_transaction_period'),
+    # Estimation endpoints
+    path('transactions/estimate/', views.estimate_transaction_view, name='estimate_transaction'),
+    path('transactions/estimate/period/', views.estimate_transaction_for_period, name='estimate_transaction_for_period'),
     path('transactions/estimate/summaries/', views.get_estimation_summaries, name='get_estimation_summaries'),
+    path('transactions/estimate/years/', views.get_available_years, name='get_available_years'),
     path('transactions/estimate/<int:transaction_id>/delete/', views.delete_estimated_transaction, name='delete_estimated_transaction'),
+    path('transactions/estimate/period/<int:period_id>/delete/', views.delete_estimated_transaction_by_period, name='delete_estimated_transaction_by_period'),
 
     # Categories
     path("categories/", CategoryListView.as_view(), name="category_list"),

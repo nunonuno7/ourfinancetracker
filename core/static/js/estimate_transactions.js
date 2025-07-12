@@ -1,4 +1,3 @@
-
 class EstimationManager {
     constructor() {
         console.log('🧮 [EstimationManager] Initializing...');
@@ -6,16 +5,89 @@ class EstimationManager {
         this.loading = false;
         this.cache = new Map();
         this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
+        this.selectedYear = new Date().getFullYear(); // Current year as default
         this.init();
     }
 
-    init() {
+    async init() {
+        // First load summaries for current year, then setup year filter
+        await this.loadEstimationSummaries();
+        await this.setupYearFilterFromData();
         this.bindEvents();
-        this.loadEstimationSummaries();
         console.log('✅ [EstimationManager] Initialized successfully');
     }
 
+    async setupYearFilterFromData() {
+        const yearSelect = $('#year-filter');
+        const currentYear = new Date().getFullYear();
+
+        try {
+            // Get available years from database periods
+            const response = await fetch('/transactions/estimate/years/', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': window.csrfToken || $('[name=csrfmiddlewaretoken]').val() || ''
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.years) {
+                    const availableYears = data.years.sort((a, b) => b - a); // Sort descending
+
+                    console.log('📅 [setupYearFilterFromData] Available years with balances:', availableYears);
+
+                    // Clear existing options
+                    yearSelect.empty();
+
+                    // Add years that have balance periods
+                    availableYears.forEach(year => {
+                        const option = $(`<option value="${year}">${year}</option>`);
+                        if (year === currentYear) {
+                            option.prop('selected', true);
+                        }
+                        yearSelect.append(option);
+                    });
+
+                    // Set selected year (current year if available, otherwise first available)
+                    if (availableYears.includes(currentYear)) {
+                        this.selectedYear = currentYear;
+                    } else if (availableYears.length > 0) {
+                        this.selectedYear = availableYears[0];
+                        yearSelect.val(this.selectedYear);
+                        // Reload summaries if year changed
+                        await this.loadEstimationSummaries();
+                    } else {
+                        // Fallback: no years available
+                        this.selectedYear = currentYear;
+                        yearSelect.append($(`<option value="${currentYear}">${currentYear}</option>`));
+                    }
+
+                    console.log('✅ [setupYearFilterFromData] Year filter initialized with available years');
+                    return;
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ [setupYearFilterFromData] Failed to load available years:', error);
+        }
+
+        // Fallback: use current year if API fails
+        console.log('🔄 [setupYearFilterFromData] Using fallback: current year only');
+        yearSelect.empty();
+        yearSelect.append($(`<option value="${currentYear}">${currentYear}</option>`));
+        this.selectedYear = currentYear;
+    }
+
     bindEvents() {
+        // Year filter change
+        $('#year-filter').on('change', (e) => {
+            this.selectedYear = parseInt(e.target.value);
+            console.log(`📅 [EstimationManager] Year filter changed to: ${this.selectedYear}`);
+            this.loadEstimationSummaries(true); // Force refresh with new year
+        });
+
         // Refresh button - force refresh
         $('#refresh-summaries-btn').on('click', () => this.loadEstimationSummaries(true));
 
@@ -27,7 +99,7 @@ class EstimationManager {
 
     async loadEstimationSummaries(forceRefresh = false) {
         console.log('📊 [loadEstimationSummaries] Loading estimation summaries...');
-        
+
         // Prevent duplicate requests
         if (this.loading) {
             console.log('⏳ [loadEstimationSummaries] Already loading, skipping...');
@@ -35,7 +107,7 @@ class EstimationManager {
         }
 
         // Check cache first
-        const cacheKey = 'estimation_summaries';
+        const cacheKey = `estimation_summaries_${this.selectedYear}`;
         const cached = this.cache.get(cacheKey);
         if (!forceRefresh && cached && (Date.now() - cached.timestamp < this.cacheTimeout)) {
             console.log('💾 [loadEstimationSummaries] Using cached data');
@@ -43,12 +115,12 @@ class EstimationManager {
             this.renderSummaries();
             return;
         }
-        
+
         try {
             this.loading = true;
             this.showLoading(true);
 
-            const response = await fetch('/transactions/estimate/summaries/', {
+            const response = await fetch(`/transactions/estimate/summaries/?year=${this.selectedYear}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -65,22 +137,27 @@ class EstimationManager {
             console.log('📋 [loadEstimationSummaries] Received data:', data);
 
             if (data.success) {
-                // Sort summaries by period (most recent first)
-                this.summaries = data.summaries.sort((a, b) => {
-                    const parseDate = (periodStr) => {
-                        const parts = periodStr.split(' ');
-                        if (parts.length === 2) {
-                            const months = {
-                                'January': 1, 'February': 2, 'March': 3, 'April': 4,
-                                'May': 5, 'June': 6, 'July': 7, 'August': 8,
-                                'September': 9, 'October': 10, 'November': 11, 'December': 12
-                            };
-                            return new Date(parseInt(parts[1]), months[parts[0]] - 1);
-                        }
-                        return new Date(0);
-                    };
-                    return parseDate(b.period) - parseDate(a.period);
-                });
+                // Filter summaries by selected year and sort by period (most recent first)
+                this.summaries = data.summaries
+                    .filter(summary => {
+                        const parts = summary.period.split(' ');
+                        return parts.length === 2 && parseInt(parts[1]) === this.selectedYear;
+                    })
+                    .sort((a, b) => {
+                        const parseDate = (periodStr) => {
+                            const parts = periodStr.split(' ');
+                            if (parts.length === 2) {
+                                const months = {
+                                    'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                                    'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                                    'September': 9, 'October': 10, 'November': 11, 'December': 12
+                                };
+                                return new Date(parseInt(parts[1]), months[parts[0]] - 1);
+                            }
+                            return new Date(0);
+                        };
+                        return parseDate(b.period) - parseDate(a.period);
+                    });
 
                 // Cache the data
                 this.cache.set(cacheKey, {
@@ -104,7 +181,7 @@ class EstimationManager {
 
     renderSummaries() {
         console.log('🎨 [renderSummaries] Rendering summaries...');
-        
+
         const tbody = $('#estimation-summaries-tbody');
         tbody.empty();
 
@@ -113,8 +190,8 @@ class EstimationManager {
                 <tr>
                     <td colspan="5" class="text-center py-4 text-muted">
                         <i class="fas fa-info-circle fa-2x mb-2"></i><br>
-                        No periods with account balances found.<br>
-                        <small>Go to <a href="/account-balance/" class="text-decoration-none">Account Balances</a> to add balance data first.</small>
+                        No periods with account balances found for ${this.selectedYear}.<br>
+                        <small>Try a different year or go to <a href="/account-balance/" class="text-decoration-none">Account Balances</a> to add balance data.</small>
                     </td>
                 </tr>
             `);
@@ -136,7 +213,7 @@ class EstimationManager {
 
         // Action buttons based on status
         let actionButtons = '';
-        
+
         if (summary.has_estimated_transaction) {
             actionButtons = `
                 <button class="btn btn-outline-danger btn-sm delete-estimated-btn me-1" 
@@ -146,7 +223,7 @@ class EstimationManager {
                 </button>
             `;
         }
-        
+
         actionButtons += `
             <button class="btn btn-outline-primary btn-sm estimate-btn me-1" 
                     data-period-id="${summary.period_id}"
@@ -207,12 +284,33 @@ class EstimationManager {
 
         console.log(`🧮 [handleEstimate] Estimating for period ${periodId} (${periodName})`);
 
-        const confirmed = confirm(`Estimate missing transaction for ${periodName}?\n\nThis will create or update an estimated transaction based on your account balances.`);
+        const confirmed = confirm(`Estimate missing transaction for ${periodName}?\n\nThis action will create/update an estimated transaction based on your account balances.`);
         if (!confirmed) return;
 
         try {
             button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Estimating...');
 
+            // Try to delete any existing estimated transaction first (ignore errors if none exists)
+            try {
+                const deleteResponse = await fetch(`/transactions/estimate/period/${periodId}/delete/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': window.csrfToken || $('[name=csrfmiddlewaretoken]').val() || ''
+                    }
+                });
+
+                if (deleteResponse.ok) {
+                    console.log('✅ [handleEstimate] Deleted existing estimated transaction');
+                } else {
+                    console.log('ℹ️ [handleEstimate] No existing estimated transaction to delete');
+                }
+            } catch (deleteError) {
+                console.log('ℹ️ [handleEstimate] No existing estimated transaction to delete:', deleteError.message);
+                // Continue with estimation even if deletion fails
+            }
+
+            // Proceed to estimate the transaction
             const response = await fetch('/transactions/estimate/period/', {
                 method: 'POST',
                 headers: {
@@ -234,7 +332,7 @@ class EstimationManager {
 
             if (result.success) {
                 this.showSuccess(result.message);
-                
+
                 // Clear cache and reload summaries to reflect changes
                 this.cache.clear();
                 await this.loadEstimationSummaries();
@@ -246,7 +344,7 @@ class EstimationManager {
             console.error('❌ [handleEstimate] Error:', error);
             this.showError('Failed to estimate transaction: ' + error.message);
         } finally {
-            button.prop('disabled', false).html('<i class="fas fa-calculator"></i> Estimate');
+            button.prop('disabled', false).html('<i class="fas fa-calculator"></i> Re-estimate');
         }
     }
 
@@ -281,7 +379,7 @@ class EstimationManager {
 
             if (result.success) {
                 this.showSuccess(result.message);
-                
+
                 // Clear cache and reload summaries to reflect changes
                 this.cache.clear();
                 await this.loadEstimationSummaries();
@@ -305,21 +403,31 @@ class EstimationManager {
 
         // Populate modal
         $('#modal-period-title').text(summary.period);
-        
-        // Recorded transactions
+
+        // Real transactions
+        $('#detail-real-income').text(this.formatCurrency(summary.details.real_income || 0));
+        $('#detail-real-expenses').text(this.formatCurrency(summary.details.real_expenses || 0));
+        $('#detail-real-investments').text(this.formatCurrency(summary.details.real_investments || 0));
+
+        // Estimated transactions
+        $('#detail-estimated-income').text(this.formatCurrency(summary.details.estimated_income || 0));
+        $('#detail-estimated-expenses-tx').text(this.formatCurrency(summary.details.estimated_expenses_tx || 0));
+        $('#detail-estimated-investments').text(this.formatCurrency(summary.details.estimated_investments || 0));
+
+        // Total recorded transactions
         $('#detail-income-inserted').text(this.formatCurrency(summary.details.income_inserted));
         $('#detail-expense-inserted').text(this.formatCurrency(summary.details.expense_inserted));
         $('#detail-investment-inserted').text(this.formatCurrency(summary.details.investment_inserted));
-        
+
         // Account balances
         $('#detail-savings-current').text(this.formatCurrency(summary.details.savings_current));
         $('#detail-savings-next').text(this.formatCurrency(summary.details.savings_next));
-        
+
         const savingsDiff = summary.details.savings_next - summary.details.savings_current;
         $('#detail-savings-diff').text(this.formatCurrency(savingsDiff))
             .removeClass('text-success text-danger')
             .addClass(savingsDiff >= 0 ? 'text-success' : 'text-danger');
-        
+
         // Calculation results
         $('#detail-estimated-expenses').text(this.formatCurrency(summary.details.estimated_expenses));
         $('#detail-missing-expenses').text(this.formatCurrency(summary.details.missing_expenses));
@@ -372,7 +480,7 @@ function initializeEstimationManager() {
         setTimeout(initializeEstimationManager, 100);
         return;
     }
-    
+
     $(document).ready(() => {
         window.estimationManager = new EstimationManager();
     });

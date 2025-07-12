@@ -11,7 +11,13 @@
                     <i class="fas fa-calculator me-2"></i>
                     Transaction Estimation
                 </h2>
-                <div>
+                <div class="d-flex gap-2 align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="year-filter" class="form-label mb-0">Year:</label>
+                        <select id="year-filter" class="form-select form-select-sm" style="width: auto;">
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                    </div>
                     <button id="refresh-summaries-btn" class="btn btn-outline-primary">
                         <i class="fas fa-sync"></i> Refresh
                     </button>
@@ -85,20 +91,59 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <h6>Recorded Transactions</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td>Income Inserted:</td>
-                                            <td class="text-end" id="detail-income-inserted">€ 0.00</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Expenses Inserted:</td>
-                                            <td class="text-end" id="detail-expense-inserted">€ 0.00</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Investments:</td>
-                                            <td class="text-end" id="detail-investment-inserted">€ 0.00</td>
-                                        </tr>
-                                    </table>
+                                    <div class="mb-3">
+                                        <small class="text-muted fw-bold">Real (Manual) Transactions:</small>
+                                        <table class="table table-sm mb-2">
+                                            <tr>
+                                                <td>Income:</td>
+                                                <td class="text-end" id="detail-real-income">€ 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Expenses:</td>
+                                                <td class="text-end" id="detail-real-expenses">€ 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Investments:</td>
+                                                <td class="text-end" id="detail-real-investments">€ 0.00</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <small class="text-muted fw-bold">Estimated Transactions:</small>
+                                        <table class="table table-sm mb-2">
+                                            <tr>
+                                                <td>Income:</td>
+                                                <td class="text-end text-warning" id="detail-estimated-income">€ 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Expenses:</td>
+                                                <td class="text-end text-warning" id="detail-estimated-expenses-tx">€ 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Investments:</td>
+                                                <td class="text-end text-warning" id="detail-estimated-investments">€ 0.00</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    
+                                    <div>
+                                        <small class="text-muted fw-bold">Total Inserted:</small>
+                                        <table class="table table-sm table-bordered">
+                                            <tr class="table-light">
+                                                <td><strong>Income:</strong></td>
+                                                <td class="text-end"><strong id="detail-income-inserted">€ 0.00</strong></td>
+                                            </tr>
+                                            <tr class="table-light">
+                                                <td><strong>Expenses:</strong></td>
+                                                <td class="text-end"><strong id="detail-expense-inserted">€ 0.00</strong></td>
+                                            </tr>
+                                            <tr class="table-light">
+                                                <td><strong>Investments:</strong></td>
+                                                <td class="text-end"><strong id="detail-investment-inserted">€ 0.00</strong></td>
+                                            </tr>
+                                        </table>
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
                                     <h6>Account Balances</h6>
