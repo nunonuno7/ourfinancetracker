@@ -1455,10 +1455,10 @@ def account_balance_view(request):
         month = int(request.GET.get("month", today.month))
 
         if month < 1 or month > 12:
-            messages.error(request, "Mês inválido.")
+            messages.error(request, "Invalid month.")
             month = today.month
     except ValueError:
-        messages.error(request, "Data inválida.")
+        messages.error(request, "Invalid date.")
         year, month = today.year, today.month
 
     # Obter ou criar período correspondente
@@ -1506,12 +1506,12 @@ def account_balance_view(request):
                     # Fundir contas duplicadas por nome
                     _merge_duplicate_accounts(request.user)
 
-                messages.success(request, "Saldos guardados com sucesso!")
+                messages.success(request, "Balances saved successfully!")
                 return redirect(f"{request.path}?year={year}&month={month:02d}")
             except Exception as e:
-                messages.error(request, f"Erro ao guardar os saldos: {str(e)}")
+                messages.error(request, f"Error whilst saving balances: {str(e)}")
         else:
-            messages.error(request, "Erro ao guardar os saldos. Verifica os campos.")
+            messages.error(request, "Error whilst saving balances. Please check the fields.")
     else:
         formset = AccountBalanceFormSet(queryset=qs_base, user=request.user)
 

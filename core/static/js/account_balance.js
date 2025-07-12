@@ -33,7 +33,7 @@ function deleteAccount(balanceId, button) {
       button.closest("tr").remove();
       updateTotalBalance();
     } else {
-      alert("Error deleting balance.");
+      alert("Error whilst deleting balance.");
     }
   });
 }
@@ -70,24 +70,31 @@ function validateForm() {
 
 function copyPreviousMonth() {
   const [year, month] = document.getElementById("selector").value.split("-").map(Number);
-
-  fetch(`/account-balance/copy/?year=${year}&month=${month}`)
+  
+  fetch(`/account-balance/copy/?year=${year}&month=${month}`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+      'Content-Type': 'application/json',
+    },
+  })
     .then(res => res.json())
     .then(data => {
       if (data.success) {
-        alert(`✅ ${data.created} balances copied from previous month.`);
+        alert(`✅ ${data.message || 'Balances copied successfully!'}`);
         location.reload();
       } else {
         alert(data.error || "❌ Could not copy previous balances.");
       }
     })
-    .catch(() => {
-      alert("❌ Network error while copying balances.");
+    .catch((error) => {
+      console.error('Error:', error);
+      alert("❌ Network error whilst copying balances.");
     });
 }
 
 function resetFormChanges() {
-  if (confirm("Are you sure you want to discard all changes?")) {
+  if (confirm("Are you certain you want to discard all changes?")) {
     location.reload();
   }
 }
