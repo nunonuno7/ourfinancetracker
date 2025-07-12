@@ -1,6 +1,7 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
 
+from . import views
 from .views import (
     # Home & Auth
     HomeView, signup, LogoutView,
@@ -27,12 +28,19 @@ from .views import (
     copy_previous_balances_view, account_balance_export_xlsx,
     account_balance_import_xlsx, account_balance_template_xlsx,
     # Dashboard & APIs
-    DashboardView, period_autocomplete,
+    DashboardView, period_autocomplete, menu_config,
     api_jwt_my_transactions, dashboard_data,
     account_balances_pivot_json, dashboard_kpis_json,
+    financial_analysis_json, sync_system_adjustments,
+    clear_transaction_cache_view,
+    # Transaction Estimation
+    estimate_transaction_view,
+    get_estimation_summaries,
+    estimate_transaction_for_period,
+    delete_estimated_transaction,
 )
 
-from core.views_reporting import proxy_report_csv_token
+from .views_reporting import proxy_report_csv_token
 
 urlpatterns = [
     # Home
@@ -60,17 +68,26 @@ urlpatterns = [
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("transactions/clear-session-flag/", clear_session_flag, name="clear_session_flag"),
-    
-    path("transactions/bulk-update/", transaction_bulk_update, name="transaction_bulk_update"),
-    path("transactions/bulk-duplicate/", transaction_bulk_duplicate, name="transaction_bulk_duplicate"),
-    path("transactions/bulk-delete/", transaction_bulk_delete, name="transaction_bulk_delete"),
 
-    # Categories & Tags
+    # Bulk operations
+    path('transactions/bulk-update/', transaction_bulk_update, name='transaction_bulk_update'),
+    path('transactions/bulk-duplicate/', transaction_bulk_duplicate, name='transaction_bulk_duplicate'),
+    path('transactions/bulk-delete/', transaction_bulk_delete, name='transaction_bulk_delete'),
+
+    # Transaction estimation
+    path('transactions/estimate/', views.estimate_transaction_view, name='estimate_transactions'),
+    path('transactions/estimate/period/', views.estimate_transaction_for_period, name='estimate_transaction_period'),
+    path('transactions/estimate/summaries/', views.get_estimation_summaries, name='get_estimation_summaries'),
+    path('transactions/estimate/<int:transaction_id>/delete/', views.delete_estimated_transaction, name='delete_estimated_transaction'),
+
+    # Categories
     path("categories/", CategoryListView.as_view(), name="category_list"),
     path("categories/new/", CategoryCreateView.as_view(), name="category_create"),
     path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_update"),
     path("categories/<int:pk>/delete/", CategoryDeleteView.as_view(), name="category_delete"),
     path("categories/autocomplete/", category_autocomplete, name="category_autocomplete"),
+
+    # Tags
     path("tags/autocomplete/", tag_autocomplete, name="tag_autocomplete"),
 
     # Accounts
@@ -78,25 +95,31 @@ urlpatterns = [
     path("accounts/new/", AccountCreateView.as_view(), name="account_create"),
     path("accounts/<int:pk>/edit/", AccountUpdateView.as_view(), name="account_update"),
     path("accounts/<int:pk>/delete/", AccountDeleteView.as_view(), name="account_delete"),
-    path("accounts/merge/<int:source_pk>/<int:target_pk>/", AccountMergeView.as_view(), name="account_merge"),
+    path("accounts/<int:source_pk>/merge/<int:target_pk>/", AccountMergeView.as_view(), name="account_merge"),
     path("accounts/<int:pk>/up/", move_account_up, name="account_move_up"),
     path("accounts/<int:pk>/down/", move_account_down, name="account_move_down"),
     path("accounts/reorder/", account_reorder, name="account_reorder"),
 
     # Account Balances
     path("account-balance/", account_balance_view, name="account_balance"),
-    path("account-balance/delete/<int:pk>/", delete_account_balance, name="account_balance_delete"),
-    path("account-balance/copy/", copy_previous_balances_view, name="account_balance_copy"),
-    path("account-balance/export/", account_balance_export_xlsx, name="account_balance_export_xlsx"),
-    path("account-balance/import/", account_balance_import_xlsx, name="account_balance_import_xlsx"),
+    path("account-balance/delete/<int:pk>/", delete_account_balance, name="delete_account_balance"),
+    path("account-balance/copy/", copy_previous_balances_view, name="copy_previous_balances"),
+    path("account-balance/export-excel/", account_balance_export_xlsx, name="account_balance_export_xlsx"),
+    path("account-balance/import-excel/", account_balance_import_xlsx, name="account_balance_import_xlsx"),
     path("account-balance/template/", account_balance_template_xlsx, name="account_balance_template_xlsx"),
 
-    # Auxiliary APIs
-    path("periods/autocomplete/", period_autocomplete, name="period_autocomplete"),
+    # API endpoints
+    path("api/periods/autocomplete/", period_autocomplete, name="period_autocomplete"),
+    path("api/menu-config/", menu_config, name="menu_config"),
     path("api/jwt/my-transactions/", api_jwt_my_transactions, name="api_jwt_my_transactions"),
     path("api/dashboard-data/", dashboard_data, name="dashboard_data"),
-    path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
-    path("api/dashboard-kpis/", dashboard_kpis_json, name="dashboard_kpis"),
+    path("api/dashboard-kpis/", dashboard_kpis_json, name="dashboard_kpis_json"),
+    path("api/financial-analysis/", financial_analysis_json, name="financial_analysis_json"),
+    path("api/sync-adjustments/", sync_system_adjustments, name="sync_system_adjustments"),
+    path("account-balances/pivot-json/", account_balances_pivot_json, name="account_balances_pivot_json"),
+
+    # Clear cache
+    path("clear-cache/", clear_transaction_cache_view, name="clear_transaction_cache"),
 
     # Reporting (token-based)
     path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),

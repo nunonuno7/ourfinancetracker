@@ -4,10 +4,17 @@ register = template.Library()
 
 @register.filter
 def formatar_moeda(valor):
-    """Formata valores como '1 234,56 €' (PT-PT)."""
+    """Formata um número para o estilo português: 1.234,56 €"""
     if valor is None:
-        return ''
-    return '{:,.2f} €'.format(valor).replace(',', 'X').replace('.', ',').replace('X', ' ')
+        return "0,00 €"
+
+    # Convert to float if it's a string
+    try:
+        if isinstance(valor, str):
+            valor = float(valor)
+        return '{:,.2f} €'.format(valor).replace(',', 'X').replace('.', ',').replace('X', ' ')
+    except (ValueError, TypeError):
+        return "0,00 €"
 
 @register.filter
 def get_item(dictionary, key):

@@ -1,16 +1,20 @@
 # forms.py - Versão Corrigida
 from __future__ import annotations
-import re
+import logging
 from typing import Any
 from datetime import datetime, date
+from decimal import Decimal, InvalidOperation
+
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from django.forms import BaseModelFormSet, modelformset_factory
-from decimal import Decimal
+from django.db import transaction
+from django.utils.translation import gettext_lazy as _
+from django.db.models import F
 
-from core.models import (
+from .models import (
     Transaction,
     Category,
     Account,
@@ -20,20 +24,6 @@ from core.models import (
     Currency,
     Tag,
 )
-
-# core/forms.py
-
-import logging
-
-from datetime import date
-from decimal import Decimal, InvalidOperation
-from typing import Any
-
-from django import forms
-from django.contrib.auth.models import User
-from django.utils.translation import gettext_lazy as _
-
-from .models import Account, Category, Tag, Transaction, DatePeriod
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +103,11 @@ class TransactionForm(forms.ModelForm):
 
         self.fields["account"].required = False
         self.fields["account"].empty_label = "— No account —"
-        self.fields["type"].choices = Transaction.Type.choices
+        # Filtrar para excluir "System adjustment" (AJ) do formulário
+        self.fields["type"].choices = [
+            (value, label) for value, label in Transaction.Type.choices 
+            if value != "AJ"
+        ]
         self.fields["type"].required = True
 
         if self._user:
@@ -128,6 +122,10 @@ class TransactionForm(forms.ModelForm):
                 self.initial["tags_input"] = ", ".join(self.instance.tags.values_list("name", flat=True))
             if self.instance.period:
                 self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
+
+            # Garantir que a data está no formato correto (YYYY-MM-DD)
+            if self.instance.date:
+                self.initial["date"] = self.instance.date.strftime("%Y-%m-%d")
 
             if self.instance.amount is not None:
                 if self.instance.type == Transaction.Type.INVESTMENT:

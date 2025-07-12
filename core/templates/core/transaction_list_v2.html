@@ -1,5 +1,6 @@
 {% extends "base.html" %} {% load static %} {% load filtros %} {% now "Y-m-d" as
 today %} {% block content %}
+{% csrf_token %}
 <div class="container-fluid mt-4">
   <!-- CSRF Token -->
   <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
@@ -55,7 +56,7 @@ today %} {% block content %}
               id="date-start"
               class="form-control"
               placeholder="Start date"
-              value="2025-01-01"
+              value="2024-01-01"
             />
             <span class="input-group-text">to</span>
             <input
@@ -206,6 +207,14 @@ today %} {% block content %}
         </select>
       </div>
 
+      <!-- Legend for Calculated Transactions -->
+      <div class="d-flex align-items-center gap-2" id="synthetic-legend" style="display: none;">
+        <small class="text-muted">
+          <span class="badge bg-warning text-dark me-1">🧮</span>
+          Automatically calculated transactions using formula: Expenses = Balance(n) - Balance(n+1) + Income - Investments
+        </small>
+      </div>
+
       <!-- Bulk Mode Toggle -->
       <div class="d-flex gap-2 align-items-center">
         <label class="form-check-label">
@@ -226,6 +235,21 @@ today %} {% block content %}
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- System Transactions Toggle -->
+      <div class="d-flex gap-2 align-items-center">
+        <label class="form-check-label">
+          <input
+            type="checkbox"
+            class="form-check-input"
+            id="include-system-toggle"
+            checked
+          />
+          <span data-bs-toggle="tooltip" title="Show estimated expenses and unrecorded income calculated automatically">
+            💰 Show Calculated Transactions
+          </span>
+        </label>
       </div>
     </div>
 
@@ -318,6 +342,11 @@ today %} {% block content %}
     </div>
   </div>
 </div>
+
+<script>
+// Ensure CSRF token is available for AJAX calls
+window.csrfToken = '{{ csrf_token }}';
+</script>
 
 <!-- Dependencies -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -485,6 +514,21 @@ today %} {% block content %}
 
   .sort-desc .sort-icon::before {
     content: "\f0dd"; /* fa-sort-down */
+  }
+
+  /* Synthetic Transactions Styles */
+  .table-warning {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+    border-left: 4px solid #ffc107;
+  }
+
+  .table-warning .transaction-amount {
+    font-weight: 700;
+    text-shadow: 0 0 2px rgba(255, 193, 7, 0.3);
+  }
+
+  .synthetic-transaction {
+    background: linear-gradient(90deg, rgba(255, 193, 7, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
   }
 </style>
 

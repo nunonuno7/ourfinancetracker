@@ -117,7 +117,7 @@ class Account(models.Model):
             if not self.account_type:
                 # Fallback to first account type or create a default one
                 self.account_type = AccountType.objects.first() or AccountType.objects.create(name="Savings")
-        
+
         if not self.currency_id:
             try:
                 # Try to get user's default currency
@@ -126,7 +126,7 @@ class Account(models.Model):
                     self.currency = user_settings.default_currency
                 else:
                     self.currency = get_default_currency()
-                    
+
                 # Final fallback if all else fails
                 if not self.currency:
                     self.currency = Currency.objects.filter(code="EUR").first() or Currency.objects.create(
@@ -136,7 +136,7 @@ class Account(models.Model):
                 self.currency = get_default_currency() or Currency.objects.first() or Currency.objects.create(
                     code="EUR", symbol="€", decimals=2
                 )
-        
+
         super().save(*args, **kwargs)
 
 
@@ -181,7 +181,7 @@ class AccountBalance(models.Model):
         original_value = target.reported_balance
         target.reported_balance += self.reported_balance
         target.save()
-        
+
         logger.info(
             f"Balance {self.pk} (amount {self.reported_balance}) merged into "
             f"{target.pk} (was {original_value}, now {target.reported_balance})."
@@ -246,6 +246,7 @@ class Transaction(models.Model):
         INCOME = "IN", "Income"
         INVESTMENT = "IV", "Investment"
         TRANSFER = "TR", "Transfer"
+        ADJUSTMENT = "AJ", "Adjustment"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
     date = models.DateField()
@@ -285,7 +286,9 @@ class Transaction(models.Model):
     )
 
     notes = models.TextField(blank=True)
-    is_estimated = models.BooleanField(default=False)
+    is_estimated = models.BooleanField(default=False, help_text="Transação estimada/calculada automaticamente")
+    is_system = models.BooleanField(default=False, db_index=True, help_text="Transação automática do sistema (não afeta saldos das contas)")
+    editable = models.BooleanField(default=True, help_text="Se False, transação é só de leitura")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -301,6 +304,11 @@ class Transaction(models.Model):
 
     def save(self, *args, **kwargs):
         """Aplica defaults à transação antes de guardar."""
+
+        # Validação para transações do sistema - permitir bypass administrativo
+        force_save = kwargs.pop('force_save', False)
+        if not self.editable and self.pk and not force_save:
+            raise ValidationError("System transaction is read-only.")
 
         # 🚫 Garante que pelo menos um dos dois está definido
         if not self.date and not self.period:
@@ -321,6 +329,9 @@ class Transaction(models.Model):
         # Tipo default
         if not self.type:
             self.type = self.Type.EXPENSE
+
+        # Note: Adjustment transactions are now created as normal Income/Expense transactions
+        # with is_system=True and category="adjustments"
 
         # Atribui categoria mais usada se não houver
         if not self.pk and not self.category_id:
@@ -465,7 +476,7 @@ class DatePeriod(models.Model):
     year = models.PositiveIntegerField(
         validators=[
             MinValueValidator(1900),
-            MaxValueValidator(timezone.now().year + 20)  # Allow future planning
+            MaxValueValidator(2100)  # Fixed max year to avoid timezone issues at model definition
         ]
     )
     month = models.PositiveIntegerField(
@@ -481,17 +492,26 @@ class DatePeriod(models.Model):
 
     def __str__(self):
         return self.label
+    
+    def get_last_day(self):
+        """Get the last day of this period."""
+        from datetime import date
         
+        if self.month == 12:
+            return date(self.year + 1, 1, 1) - date.resolution
+        else:
+            return date(self.year, self.month + 1, 1) - date.resolution
+
     def clean(self):
         from django.core.exceptions import ValidationError
-        
+
         if self.month < 1 or self.month > 12:
             raise ValidationError({'month': 'Month must be between 1 and 12'})
-            
+
         current_year = timezone.now().year
         if self.year < 1900 or self.year > current_year + 20:
             raise ValidationError({'year': f'Year must be between 1900 and {current_year + 20}'})
-    
+
 
 class Tag(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tags")

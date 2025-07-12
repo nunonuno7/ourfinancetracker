@@ -1,0 +1,162 @@
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="fas fa-calculator me-2"></i>
+                    Transaction Estimation
+                </h2>
+                <div>
+                    <button id="refresh-summaries-btn" class="btn btn-outline-primary">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <a href="{% url 'transaction_list_v2' %}" class="btn btn-secondary">
+                        <i class="fas fa-list"></i> Back to Transactions
+                    </a>
+                </div>
+            </div>
+
+            <!-- Info Panel -->
+            <div class="alert alert-info">
+                <h5><i class="fas fa-info-circle me-2"></i>How Transaction Estimation Works</h5>
+                <p class="mb-1">
+                    The system automatically calculates missing transactions based on your account balance changes and recorded income/investments.
+                </p>
+                <p class="mb-0">
+                    <strong>Green status:</strong> All reconciled | 
+                    <strong>Yellow status:</strong> Missing transactions detected
+                </p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading-estimation" class="text-center py-5 d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading estimation data...</p>
+                <small class="text-muted">This may take a few seconds...</small>
+            </div>
+
+            <!-- Estimation Summary Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Monthly Reconciliation Status
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Status</th>
+                                    <th>Estimated Type</th>
+                                    <th class="text-end">Estimated Amount</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="estimation-summaries-tbody">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Details Modal -->
+            <div class="modal fade" id="estimationDetailsModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-chart-pie me-2"></i>
+                                Estimation Details: <span id="modal-period-title"></span>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Recorded Transactions</h6>
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td>Income Inserted:</td>
+                                            <td class="text-end" id="detail-income-inserted">€ 0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Expenses Inserted:</td>
+                                            <td class="text-end" id="detail-expense-inserted">€ 0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Investments:</td>
+                                            <td class="text-end" id="detail-investment-inserted">€ 0.00</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Account Balances</h6>
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td>Current Month:</td>
+                                            <td class="text-end" id="detail-savings-current">€ 0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Next Month:</td>
+                                            <td class="text-end" id="detail-savings-next">€ 0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Difference:</td>
+                                            <td class="text-end" id="detail-savings-diff">€ 0.00</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="row">
+                                <div class="col-12">
+                                    <h6>Calculation Results</h6>
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td>Estimated Expenses:</td>
+                                            <td class="text-end" id="detail-estimated-expenses">€ 0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Missing Expenses:</td>
+                                            <td class="text-end text-danger" id="detail-missing-expenses">€ 0.00</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Missing Income:</td>
+                                            <td class="text-end text-success" id="detail-missing-income">€ 0.00</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Ensure jQuery is loaded and pass CSRF token to the EstimationManager
+    window.csrfToken = '{{ csrf_token }}';
+</script>
+<script src="{% static 'js/estimate_transactions.js' %}" defer></script>
+{% endblock %}

@@ -1,5 +1,5 @@
-from django.apps import AppConfig
 
+from django.apps import AppConfig
 from django.db.models.signals import post_migrate
 from django.core.management import call_command
 
@@ -9,13 +9,12 @@ class CoreConfig(AppConfig):
     name = 'core'
 
     def ready(self):
+        import core.signals_monthly
         import core.signals  # noqa
-
 
 
 def load_initial_data(sender, **kwargs):
     call_command('loaddata', 'core/fixtures/initial_data.json')
 
-post_migrate.connect(load_initial_data)
 
-
+post_migrate.connect(load_initial_data, sender=CoreConfig)

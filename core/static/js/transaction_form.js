@@ -1,7 +1,7 @@
 function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
   const periodInput = document.getElementById("id_period");
-  const monthSelector = document.getElementById("period-selector");
+  const monthSelector = document.getElementById("id_period");
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
 
@@ -15,22 +15,74 @@ function initTransactionForm() {
     dateInput.value = todayStr;
   }
 
+  // Função para sincronizar período com base na data
+  function syncPeriodFromDate() {
+    if (!dateInput.value) return;
+
+    let date;
+    
+    // Tentar diferentes formatos de data
+    if (dateInput.value.includes('/')) {
+      // Formato DD/MM/YYYY ou MM/DD/YYYY
+      const parts = dateInput.value.split('/');
+      if (parts.length === 3) {
+        // Assumir DD/MM/YYYY (formato português)
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]);
+        const year = parseInt(parts[2]);
+        date = new Date(year, month - 1, day); // month é 0-indexed no JavaScript
+      }
+    } else {
+      // Formato YYYY-MM-DD (ISO)
+      date = new Date(dateInput.value);
+    }
+
+    if (!date || isNaN(date.getTime())) return;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const periodValue = `${year}-${month}`;
+
+    monthSelector.value = periodValue;
+    periodInput.value = periodValue;
+
+    console.log(`📅 Sincronização: Data ${dateInput.value} → Período ${periodValue} (${year}/${month})`);
+  }
+
+  // Flatpickr com sincronização corrigida
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
+  
+  // Converter valor inicial se necessário
+  let initialDate = dateInput.value;
+  if (initialDate && initialDate.includes('/')) {
+    const parts = initialDate.split('/');
+    if (parts.length === 3) {
+      // Converter DD/MM/YYYY para YYYY-MM-DD
+      initialDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      dateInput.value = initialDate; // Atualizar o input com formato correto
+    }
+  }
+  
   flatpickr(dateInput, {
     dateFormat: "Y-m-d",
-    defaultDate: dateInput.value,
+    defaultDate: initialDate,
     altInput: true,
     altFormat: "d/m/Y",
     allowInput: true,
     onChange: function (selectedDates) {
-      const selected = selectedDates[0];
-      if (!selected) return;
-      const year = selected.getFullYear();
-      const month = String(selected.getMonth() + 1).padStart(2, "0");
-      monthSelector.value = `${year}-${month}`;
-      periodInput.value = `${year}-${month}`;
+      if (selectedDates.length > 0) {
+        syncPeriodFromDate();
+      }
     },
+    onReady: function() {
+      // Sincronizar período ao carregar
+      syncPeriodFromDate();
+    }
   });
+
+  // Event listener para mudanças manuais na data
+  dateInput.addEventListener('change', syncPeriodFromDate);
+  dateInput.addEventListener('blur', syncPeriodFromDate);
 
   monthSelector.addEventListener("change", () => {
     const [year, month] = monthSelector.value.split("-");
@@ -40,7 +92,12 @@ function initTransactionForm() {
     if (dateInput._flatpickr) {
       dateInput._flatpickr.setDate(newDate, true);
     }
+
+    console.log(`📅 Month selector change: Período ${monthSelector.value} → Data ${newDate}`);
   });
+
+  // Sincronização inicial
+  syncPeriodFromDate();
 
   prevBtn?.addEventListener("click", () => changeMonth(-1));
   nextBtn?.addEventListener("click", () => changeMonth(1));

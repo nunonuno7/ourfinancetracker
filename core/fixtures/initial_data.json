@@ -42,3 +42,44 @@
     }
   }
 ]
+[
+  {
+    "model": "core.currency",
+    "pk": 1,
+    "fields": {
+      "code": "EUR",
+      "symbol": "€",
+      "decimals": 2
+    }
+  },
+  {
+    "model": "core.currency",
+    "pk": 2,
+    "fields": {
+      "code": "USD",
+      "symbol": "$",
+      "decimals": 2
+    }
+  },
+  {
+    "model": "core.accounttype",
+    "pk": 1,
+    "fields": {
+      "name": "Savings"
+    }
+  },
+  {
+    "model": "core.accounttype",
+    "pk": 2,
+    "fields": {
+      "name": "Checking"
+    }
+  },
+  {
+    "model": "core.accounttype",
+    "pk": 3,
+    "fields": {
+      "name": "Investment"
+    }
+  }
+]

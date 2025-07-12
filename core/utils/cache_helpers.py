@@ -162,3 +162,29 @@ def get_cache_key_for_transactions(user_id: int, start_date: str, end_date: str)
     """
     base_key = f"tx_cache_user_{user_id}_{start_date}_{end_date}"
     return make_key(base_key, key_prefix="ourfinance")
+import hashlib
+from django.core.cache import cache
+from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+def clear_tx_cache(user_id: int) -> None:
+    """Clear all transaction-related cache for a user."""
+    try:
+        # Generate pattern for user's cache keys
+        secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:8]
+        pattern = f"tx_cache_user_{user_id}_*_{secret_hash}"
+        
+        # In production, you'd want to use Redis SCAN for this
+        # For now, we'll clear the entire cache for simplicity
+        cache.clear()
+        
+        logger.debug(f"Cache cleared for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error clearing cache for user {user_id}: {e}")
+
+def get_cache_key(user_id: int, start_date, end_date) -> str:
+    """Generate a cache key for transaction data."""
+    secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:8]
+    return f"tx_cache_user_{user_id}_{start_date}_{end_date}_{secret_hash}"

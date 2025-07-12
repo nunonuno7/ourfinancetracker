@@ -1,7 +1,7 @@
 // Transactions 2.0 JavaScript - Advanced functionality
 class TransactionManager {
   constructor() {
-    console.log('🚀 [TransactionManager] Inicializando Transaction Manager...');
+    console.log('🚀 [TransactionManager] Initializing Transaction Manager...');
     this.currentPage = 1;
     this.pageSize = 25;
     this.totalRecords = 0;
@@ -9,13 +9,13 @@ class TransactionManager {
     this.cache = new Map();
     this.selectedRows = new Set();
     this.bulkMode = false;
-    this.maxPageSize = 1000; // Limite máximo de segurança
-    
+    this.maxPageSize = 1000; // Maximum safety limit
+
     // Sorting state
     this.sortField = 'date';
     this.sortDirection = 'desc'; // 'asc' or 'desc'
 
-    console.log('⚙️ [TransactionManager] Configuração inicial:', {
+    console.log('⚙️ [TransactionManager] Initial configuration:', {
       currentPage: this.currentPage,
       pageSize: this.pageSize,
       cacheSize: this.cache.size,
@@ -27,27 +27,30 @@ class TransactionManager {
   }
 
   init() {
-    console.log('🔧 [init] Iniciando inicialização completa...');
+    console.log('🔧 [init] Starting complete initialization...');
 
     this.initDatePickers();
-    console.log('📅 [init] Date pickers inicializados');
+    console.log('📅 [init] Date pickers initialized');
 
     this.loadPageSizePreference();
-    console.log('📄 [init] Page size carregado do storage');
+    console.log('📄 [init] Page size loaded from storage');
 
     this.loadFiltersFromStorage();
-    console.log('💾 [init] Filtros carregados do storage');
+    console.log('💾 [init] Filters loaded from storage');
 
     this.bindEvents();
-    console.log('🔗 [init] Event listeners conectados');
+    console.log('🔗 [init] Event listeners connected');
 
     this.loadTransactions();
     this.loadTotals();
-    
+
     // Initialize sort indicators
     this.updateSortIndicators();
-    
-    console.log('✅ [init] Inicialização completa finalizada');
+
+    // Initialize checkbox column as hidden (since bulk mode starts as false)
+    $('#transactions-table thead th:first-child').css('display', 'none');
+
+    console.log('✅ [init] Complete initialization finished');
   }
 
   loadPageSizePreference() {
@@ -82,6 +85,11 @@ class TransactionManager {
     $('#filter-type, #filter-account, #filter-category, #filter-period').on('change', () => this.onFilterChange());
     $('#filter-amount-min, #filter-amount-max, #filter-tags').on('input', this.debounce(() => this.onFilterChange(), 500));
     $('#global-search').on('input', this.debounce(() => this.onFilterChange(), 300));
+    $('#include-system-toggle').on('change', () => {
+      this.onFilterChange();
+      // Show/hide legend based on toggle
+      $('#synthetic-legend').toggle($('#include-system-toggle').is(':checked'));
+    });
 
     // Page size selector
     $('#page-size-selector').on('change', (e) => this.changePageSize(e.target.value));
@@ -90,6 +98,7 @@ class TransactionManager {
     $('#apply-filters-btn').on('click', () => this.loadTransactions());
     $('#clear-filters-btn').on('click', () => this.clearFilters());
     $('#clear-cache-btn').on('click', () => this.clearCache());
+    
     $('#export-btn').on('click', () => this.exportData());
     $('#import-btn').on('click', () => this.importData());
 
@@ -121,12 +130,12 @@ class TransactionManager {
   }
 
   onFilterChange() {
-    console.group('🔄 [onFilterChange] FILTROS ALTERADOS');
+    console.group('🔄 [onFilterChange] FILTERS CHANGED');
     console.log('Timestamp:', new Date().toISOString());
     this.currentPage = 1;
 
     const currentFilters = this.getFilters();
-    console.log('🎯 FILTROS ATUAIS:');
+    console.log('🎯 CURRENT FILTERS:');
     console.table(currentFilters);
 
     console.log('🔧 DOM ELEMENT VALUES:');
@@ -147,17 +156,17 @@ class TransactionManager {
     this.showFilterFeedback();
 
     this.saveFiltersToStorage();
-    console.log('💾 Filtros guardados na sessão');
+    console.log('💾 Filters saved to session');
 
     // Excel-style: Invalidate cache when filters change
-    console.log('🗑️ Limpando cache (estilo Excel) - cache size antes:', this.cache.size);
+    console.log('🗑️ Clearing cache (Excel style) - cache size before:', this.cache.size);
     this.cache.clear();
-    console.log('🗑️ Cache size depois:', this.cache.size);
+    console.log('🗑️ Cache size after:', this.cache.size);
 
-    console.log('🚀 Iniciando loadTransactions...');
+    console.log('🚀 Starting loadTransactions...');
     this.loadTransactions();
 
-    console.log('💰 Iniciando loadTotals...');
+    console.log('💰 Starting loadTotals...');
     this.loadTotals();
 
     console.groupEnd();
@@ -173,7 +182,7 @@ class TransactionManager {
         $('#filters-row').prepend(`
           <div id="filter-indicator" class="col-12">
             <div class="alert alert-info alert-sm mb-2">
-              <i class="fas fa-filter"></i> <span id="filter-count">${activeFilters}</span> filtro(s) ativo(s) - Apenas valores com transações são mostrados
+              <i class="fas fa-filter"></i> <span id="filter-count">${activeFilters}</span> active filter(s) - Only values with transactions are shown
             </div>
           </div>
         `);
@@ -186,7 +195,7 @@ class TransactionManager {
   }
 
   getFilters() {
-    return {
+    const filters = {
       date_start: $('#date-start').val(),
       date_end: $('#date-end').val(),
       type: $('#filter-type').val(),
@@ -200,8 +209,27 @@ class TransactionManager {
       page: this.currentPage,
       page_size: this.pageSize,
       sort_field: this.sortField,
-      sort_direction: this.sortDirection
+      sort_direction: this.sortDirection,
+      include_system: $('#include-system-toggle').is(':checked')
     };
+
+    // Filter out empty values to prevent backend filter issues
+    const cleanFilters = {};
+    Object.keys(filters).forEach(key => {
+      const value = filters[key];
+      if (value !== '' && value !== null && value !== undefined) {
+        cleanFilters[key] = value;
+      }
+    });
+
+    // Always include required pagination and sorting params
+    cleanFilters.page = this.currentPage;
+    cleanFilters.page_size = this.pageSize;
+    cleanFilters.sort_field = this.sortField;
+    cleanFilters.sort_direction = this.sortDirection;
+    cleanFilters.include_system = $('#include-system-toggle').is(':checked');
+
+    return cleanFilters;
   }
 
   saveFiltersToStorage() {
@@ -250,88 +278,77 @@ class TransactionManager {
   }
 
   async loadTransactions() {
-    console.group('🔄 [loadTransactions] INÍCIO DO CARREGAMENTO');
-    console.log('Timestamp:', new Date().toISOString());
+        console.log('🔄 [loadTransactions] LOADING START');
 
-    const cacheKey = this.generateCacheKey();
-    console.log('🗝️ Cache key gerada:', cacheKey);
+        try {
+            this.showLoader(true);
 
-    // Check cache first
-    if (this.cache.has(cacheKey)) {
-      console.log('✅ CACHE HIT - usando dados do cache');
-      console.groupEnd();
-      this.renderTransactions(this.cache.get(cacheKey));
-      return;
+            const filters = this.getFilters();
+            const params = new URLSearchParams();
+            
+            // Add all filters to params
+            Object.keys(filters).forEach(key => {
+                if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
+                    params.append(key, filters[key]);
+                }
+            });
+
+            const url = `/transactions/json-v2/?${params.toString()}`;
+            console.log('🌐 [loadTransactions] Request URL:', url);
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || window.csrfToken || ''
+                }
+            });
+
+            console.log('📡 [loadTransactions] Response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ HTTP Error Response:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('📊 [loadTransactions] Full response data:', data);
+
+            if (!data.transactions) {
+                console.log('⚠️ [loadTransactions] No transactions key in response');
+                this.transactions = [];
+                this.totalCount = 0;
+            } else if (data.transactions.length === 0) {
+                console.log('⚠️ [loadTransactions] Empty transactions array');
+                this.transactions = [];
+                this.totalCount = data.total_count || 0;
+            } else {
+                this.transactions = data.transactions;
+                this.totalCount = data.total_count || 0;
+                console.log(`✅ [loadTransactions] Loaded ${this.transactions.length} of ${this.totalCount} transactions`);
+            }
+
+            // Update filters if provided
+            if (data.filters) {
+                this.availableFilters = data.filters;
+                this.updateFilterOptions(data.filters);
+            }
+
+            this.renderTransactions(data);
+            this.updatePagination(data.total_count, data.current_page);
+
+        } catch (error) {
+            console.error('❌ [loadTransactions] Error:', error);
+            this.showError('Failed to load transactions: ' + error.message);
+            this.transactions = [];
+            this.totalCount = 0;
+            this.renderTransactions({transactions: [], total_count: 0, current_page: 1}); // Show empty state
+        } finally {
+            this.showLoader(false);
+        }
     }
-
-    console.log('🌐 CACHE MISS - fazendo pedido à API');
-    this.showLoading(true);
-
-    try {
-      const filters = this.getFilters();
-      console.table(filters);
-
-      console.log('📤 Enviando request para /transactions/json-v2/');
-      const response = await fetch('/transactions/json-v2/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-        },
-        body: JSON.stringify(filters)
-      });
-
-      console.log('📡 Response status:', response.status, response.statusText);
-      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('🚨 HTTP Error Response:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('📊 RAW API RESPONSE:');
-      console.log(JSON.stringify(data, null, 2));
-
-      console.log('📊 SUMMARY:', {
-        transactionCount: data.transactions?.length || 0,
-        totalCount: data.total_count,
-        currentPage: data.current_page,
-        pageSize: data.page_size,
-        hasFilters: !!data.filters,
-        filtersCount: data.filters ? Object.keys(data.filters).length : 0
-      });
-
-      if (data.transactions && data.transactions.length > 0) {
-        console.log('📝 PRIMEIRA TRANSAÇÃO:');
-        console.table([data.transactions[0]]);
-      } else {
-        console.warn('⚠️ NENHUMA TRANSAÇÃO RETORNADA!');
-      }
-
-      // Cache the result
-      this.cache.set(cacheKey, data);
-      console.log('💾 Dados guardados no cache');
-
-      // Update filter options
-      this.updateFilterOptions(data.filters);
-
-      this.renderTransactions(data);
-
-    } catch (error) {
-      console.group('❌ ERRO NO CARREGAMENTO');
-      console.error('Error object:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      console.groupEnd();
-      this.showError('Failed to load transactions. Please try again.');
-    } finally {
-      this.showLoading(false);
-      console.log('✅ PROCESSO FINALIZADO');
-      console.groupEnd();
-    }
-  }
 
   async loadTotals() {
     console.log('💰 [loadTotals] Iniciando carregamento de totais...');
@@ -343,7 +360,7 @@ class TransactionManager {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+          'X-CSRFToken': window.csrfToken || $('[name=csrfmiddlewaretoken]').val() || $('meta[name=csrf-token]').attr('content')
         },
         body: JSON.stringify(filters)
       });
@@ -442,13 +459,13 @@ class TransactionManager {
       // Render all at once for smaller datasets
       transactions.forEach((tx, index) => {
         if (index < 3) { // Only log first 3 for brevity
-          console.log(`📝 Transação ${index + 1}:`, tx);
+          console.log(`📝 Transaction ${index + 1}:`, tx);
         }
         try {
           const row = this.createTransactionRow(tx, index);
           tbody.append(row);
           if (index < 3) {
-            console.log(`✅ Linha ${index + 1} adicionada com sucesso`);
+            console.log(`✅ Row ${index + 1} added successfully`);
           }
         } catch (error) {
           console.error(`❌ Erro ao criar linha ${index + 1}:`, error);
@@ -478,67 +495,55 @@ class TransactionManager {
   }
 
   createTransactionRow(tx, index) {
-    // Display expenses as negative values
-    const displayAmount = tx.type === 'Expense' ? -Math.abs(tx.amount) : tx.amount;
-    const amountClass = displayAmount >= 0 ? 'amount-positive' : 'amount-negative';
-    const typeIcon = this.getTypeIcon(tx.type);
-    
-    // Create type display with investment flow
-    let typeDisplay = `${typeIcon} ${tx.type}`;
-    if (tx.type === 'Investment' && tx.investment_flow) {
-      const flowIcon = tx.investment_flow === 'Withdrawal' ? '📤' : '💰';
-      typeDisplay = `${typeIcon} Investment<br><small class="d-block">${flowIcon} ${tx.investment_flow}</small>`;
+    const isSelected = this.selectedRows.has(tx.id);
+
+    // Format type display
+    let typeDisplay = tx.type;
+
+    // Style for system transactions and adjust type display
+    const isSystemRow = tx.is_system;
+    const rowClass = isSystemRow ? 'table-warning' : '';
+    let systemBadge = '';
+
+    if (isSystemRow) {
+      systemBadge = '<span class="badge bg-info ms-1">AUTO</span>';
+
+      // Keep the type display as received from backend, don't modify it
+      // The backend already maps 'AJ' -> 'Adjustment' correctly
     }
-    
-    // Format amount for display (expenses show negative)
-    const formattedAmount = tx.type === 'Expense' ? 
-      this.formatDisplayAmount(displayAmount) : tx.amount_formatted;
+
+    // Disable actions for non-editable system transactions
+    const actionsHtml = tx.editable ? `
+      <div class="btn-group btn-group-sm">
+        <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit">
+          <i class="fas fa-edit"></i>
+        </a>
+        <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete">
+          <i class="fas fa-trash"></i>
+        </a>
+      </div>
+    ` : `
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary btn-sm" disabled title="System transaction - read only">
+          <i class="fas fa-lock"></i>
+        </button>
+      </div>
+    `;
+
+    // Sempre criar a coluna do checkbox, mas controlar visibilidade
+    const checkboxVisibility = this.bulkMode ? '' : 'style="display: none;"';
 
     return `
-      <tr class="transaction-row" data-id="${tx.id}">
-        <td>
-          ${this.bulkMode ? 
-            `<input type="checkbox" class="form-check-input row-select" value="${tx.id}">` : 
-            index + 1 + (this.currentPage - 1) * this.pageSize
-          }
-        </td>
-        <td>
-          <span class="fw-bold">${tx.date}</span>
-        </td>
-        <td class="d-none d-md-table-cell">
-          <span class="badge bg-secondary">${tx.period}</span>
-        </td>
-        <td>
-          <span class="badge ${this.getTypeBadgeClass(tx.type)}">
-            ${typeDisplay}
-          </span>
-        </td>
-        <td>
-          <span class="transaction-amount ${amountClass}">
-            ${formattedAmount}
-          </span>
-        </td>
-        <td class="d-none d-lg-table-cell">
-          <span class="badge bg-light text-dark">${tx.category || 'Uncategorized'}</span>
-        </td>
-        <td class="d-none d-xl-table-cell">
-          ${tx.tags ? tx.tags.split(',').map(tag => 
-            `<span class="badge bg-info me-1">${tag.trim()}</span>`
-          ).join('') : ''}
-        </td>
-        <td class="d-none d-md-table-cell">
-          <span class="text-muted">${tx.account || 'No account'}</span>
-        </td>
-        <td>
-          <div class="btn-group btn-group-sm">
-            <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm">
-              <i class="fas fa-edit"></i>
-            </a>
-            <button class="btn btn-outline-danger btn-sm" onclick="deleteTransaction(${tx.id})">
-              <i class="fas fa-trash"></i>
-            </button>
-          </div>
-        </td>
+      <tr data-id="${tx.id}" class="${rowClass}">
+        <td ${checkboxVisibility}><input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? 'checked' : ''}></td>
+        <td>${tx.date}</td>
+        <td class="d-none d-md-table-cell">${tx.period}</td>
+        <td>${tx.type}${systemBadge}</td>
+        <td class="text-end">${tx.amount_formatted}</td>
+        <td class="d-none d-lg-table-cell">${tx.category}</td>
+        <td class="d-none d-xl-table-cell">${tx.tags}</td>
+        <td class="d-none d-md-table-cell">${tx.account}</td>
+        <td class="text-end">${actionsHtml}</td>
       </tr>
     `;
   }
@@ -548,7 +553,8 @@ class TransactionManager {
       'Expense': '💸',
       'Income': '💰',
       'Investment': '📈',
-      'Transfer': '🔁'
+      'Transfer': '🔁',
+      'System adjustment': '🧮'
     };
     return icons[type] || '📄';
   }
@@ -558,7 +564,8 @@ class TransactionManager {
       'Expense': 'bg-danger',
       'Income': 'bg-success',
       'Investment': 'bg-info', 
-      'Transfer': 'bg-warning text-dark'
+      'Transfer': 'bg-warning text-dark',
+      'System adjustment': 'bg-warning text-dark'
     };
     return classes[type] || 'bg-secondary';
   }
@@ -594,12 +601,12 @@ class TransactionManager {
     // Format number in Portuguese style: -1.234,56 €
     const isNegative = amount < 0;
     const absAmount = Math.abs(amount);
-    
+
     // Format with Portuguese locale
     const formatted = absAmount.toFixed(2)
       .replace('.', ',')  // Decimal separator
       .replace(/\B(?=(\d{3})+(?!\d))/g, '.');  // Thousands separator
-    
+
     return `${isNegative ? '-' : ''}${formatted} €`;
   }
 
@@ -607,12 +614,12 @@ class TransactionManager {
     // Format amount for display in table
     const isNegative = amount < 0;
     const absAmount = Math.abs(amount);
-    
+
     // Format with Portuguese locale
     const formatted = absAmount.toFixed(2)
       .replace('.', ',')  // Decimal separator
       .replace(/\B(?=(\d{3})+(?!\d))/g, '.');  // Thousands separator
-    
+
     return `€ ${isNegative ? '-' : ''}${formatted}`;
   }
 
@@ -641,6 +648,11 @@ class TransactionManager {
     this.updateSelectOptions('#filter-period', filters.periods || [], 'period');
 
     console.log('✅ [updateFilterOptions] Opções de filtros atualizadas (estilo Excel)');
+  }
+
+  updateFilterDropdowns() {
+    // Alias for updateFilterOptions for compatibility
+    this.updateFilterOptions(this.availableFilters);
   }
 
   updateSelectOptions(selector, options, filterType) {
@@ -791,6 +803,24 @@ class TransactionManager {
     $('#select-all').toggle(enabled);
     $('#bulk-actions').toggleClass('d-none', !enabled);
 
+    // Mostrar/ocultar a coluna inteira do checkbox no cabeçalho
+    const checkboxHeader = $('#transactions-table thead th:first-child');
+    if (enabled) {
+      checkboxHeader.css('display', '');
+    } else {
+      checkboxHeader.css('display', 'none');
+    }
+
+    // Mostrar/ocultar todas as células da primeira coluna no tbody
+    $('#transactions-tbody tr').each(function() {
+      const firstCell = $(this).find('td:first-child');
+      if (enabled) {
+        firstCell.css('display', '');
+      } else {
+        firstCell.css('display', 'none');
+      }
+    });
+
     if (!enabled) {
       this.selectedRows.clear();
       $('.row-select').prop('checked', false);
@@ -832,13 +862,13 @@ class TransactionManager {
     $('#selection-count').text(`${this.selectedRows.size} selected`);
   }
 
-  async bulkMarkEstimated() {
+  async bulkMarkCleared() {
     if (this.selectedRows.size === 0) {
       alert('Please select transactions first.');
       return;
     }
 
-    const confirmed = confirm(`Mark ${this.selectedRows.size} transactions as estimated?`);
+    const confirmed = confirm(`Mark ${this.selectedRows.size} transactions as cleared/confirmed?`);
     if (!confirmed) return;
 
     try {
@@ -857,7 +887,7 @@ class TransactionManager {
       if (response.ok) {
         this.cache.clear();
         this.loadTransactions();
-        this.showSuccess('Transactions marked as estimated');
+        this.showSuccess('Transactions marked as cleared');
       } else {
         throw new Error('Failed to update transactions');
       }
@@ -866,7 +896,7 @@ class TransactionManager {
     }
   }
 
-  
+
 
   async bulkDuplicate() {
     if (this.selectedRows.size === 0) {
@@ -890,8 +920,7 @@ class TransactionManager {
           'Content-Type': 'application/json',
           'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
         },
-        body: JSON.stringify({
-          transaction_ids: Array.from(this.selectedRows)
+        body: JSON.stringify({          transaction_ids: Array.from(this.selectedRows)
         })
       });
 
@@ -988,22 +1017,50 @@ class TransactionManager {
 
   async clearCache() {
     try {
+      console.log('🧹 [clearCache] Starting cache clear operation...');
+
       const response = await fetch('/transactions/clear-cache/', {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || window.csrfToken || ''
         }
       });
 
+      console.log('📡 [clearCache] Response status:', response.status);
+
       if (response.ok) {
-        this.cache.clear();
-        this.loadTransactions();
-        this.showSuccess('Cache cleared successfully');
+        const result = await response.json();
+        console.log('📋 [clearCache] Server response:', result);
+
+        if (result.success) {
+          // Clear local cache
+          this.cache.clear();
+          console.log('🗑️ [clearCache] Local cache cleared');
+
+          // Reload both transactions and totals to reflect updated estimates
+          await Promise.all([
+            this.loadTransactions(),
+            this.loadTotals()
+          ]);
+
+          this.showSuccess('✅ Cache cleared successfully!');
+          console.log('✅ [clearCache] Operation completed successfully');
+        } else {
+          throw new Error(result.error || 'Unknown error occurred');
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('❌ [clearCache] Server response error:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
-      this.showError('Failed to clear cache');
+      console.error('❌ [clearCache] Error:', error);
+      this.showError(`Failed to clear cache: ${error.message}`);
     }
   }
+
+  
 
   exportData() {
     const filters = this.getFilters();
@@ -1013,6 +1070,11 @@ class TransactionManager {
 
   importData() {
     window.location.href = '/transactions/import-excel/';
+  }
+
+  showLoader(show) {
+    $('#loading-spinner').toggleClass('d-none', !show);
+    $('#transactions-table').toggleClass('d-none', show);
   }
 
   showLoading(show) {
@@ -1039,7 +1101,7 @@ class TransactionManager {
     `);
 
     $('body').append(toast);
-    
+
     if (delay > 0) {
       toast.toast({ delay: delay }).toast('show');
       toast.on('hidden.bs.toast', () => toast.remove());
@@ -1122,9 +1184,9 @@ class TransactionManager {
   handleSort(e) {
     const header = $(e.currentTarget);
     const sortField = header.data('sort');
-    
+
     console.log('🔤 [handleSort] Column clicked:', sortField);
-    
+
     // Toggle sort direction if same field, otherwise default to desc for most fields, asc for text fields
     if (this.sortField === sortField) {
       this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -1133,18 +1195,18 @@ class TransactionManager {
       const textFields = ['type', 'category', 'account', 'tags', 'period'];
       this.sortDirection = textFields.includes(sortField) ? 'asc' : 'desc';
     }
-    
+
     this.sortField = sortField;
     this.currentPage = 1; // Reset to first page when sorting
-    
+
     console.log('🔤 [handleSort] New sort state:', {
       field: this.sortField,
       direction: this.sortDirection
     });
-    
+
     // Update visual indicators
     this.updateSortIndicators();
-    
+
     // Clear cache and reload data
     this.cache.clear();
     this.loadTransactions();
@@ -1154,11 +1216,11 @@ class TransactionManager {
     // Remove all active states and reset icons
     $('.sortable-header').removeClass('active sort-asc sort-desc');
     $('.sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
-    
+
     // Add active state to current sort column
     const activeHeader = $(`.sortable-header[data-sort="${this.sortField}"]`);
     activeHeader.addClass('active');
-    
+
     if (this.sortDirection === 'asc') {
       activeHeader.addClass('sort-asc');
       activeHeader.find('.sort-icon').removeClass('fa-sort').addClass('fa-sort-up');
@@ -1166,7 +1228,7 @@ class TransactionManager {
       activeHeader.addClass('sort-desc');
       activeHeader.find('.sort-icon').removeClass('fa-sort').addClass('fa-sort-down');
     }
-    
+
     console.log('🔤 [updateSortIndicators] Visual indicators updated for:', {
       field: this.sortField,
       direction: this.sortDirection
@@ -1205,3 +1267,42 @@ async function deleteTransaction(id) {
     transactionManager.showError('Failed to delete transaction');
   }
 }
+
+function syncPeriodFields(tr) {
+    const dateInput = tr.querySelector("input[name='date']");
+    const periodInput = tr.querySelector("input[name='period']");
+    const periodDisplay = tr.querySelector("input[name='period_display']");
+
+    if (!dateInput?.value) return;
+
+    // Parse da data corretamente
+    const dateParts = dateInput.value.split('-');
+    if (dateParts.length !== 3) return;
+
+    const yyyy = parseInt(dateParts[0]);
+    const mm = String(parseInt(dateParts[1])).padStart(2, "00");
+    const monthIndex = parseInt(dateParts[1]) - 1; // Month index para array (0-11)
+
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthName = monthNames[monthIndex];
+
+    if (periodInput) {
+      periodInput.value = `${yyyy}-${mm}`;
+    }
+
+    if (periodDisplay) {
+      periodDisplay.value = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${yyyy}`;
+    }
+
+    console.log(`🔄 syncPeriodFields: Data ${dateInput.value} → Período ${yyyy}-${mm} (${monthName} ${yyyy})`);
+  }
+
+// Type mapping
+    const typeMapping = {
+        'IN': 'Income',
+        'EX': 'Expense', 
+        'IV': 'Investment',
+        'TR': 'Transfer',
+        'AJ': 'Adjustment'
+    };
