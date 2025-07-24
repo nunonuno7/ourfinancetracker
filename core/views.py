@@ -17,6 +17,7 @@ PRINCIPAIS CORREÇÕES IMPLEMENTADAS:
 
 import json
 import logging
+from calendar import monthrange
 from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
@@ -152,7 +153,19 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
             raise PermissionDenied("User must be authenticated")
 
         qs = super().get_queryset()
-        return qs.filter(user=self.request.user)
+        filtered_qs = qs.filter(user=self.request.user)
+        
+        # Otimizar queries com relacionamentos
+        model_name = getattr(self, 'model', None)
+        if model_name:
+            if hasattr(model_name, 'account'):
+                filtered_qs = filtered_qs.select_related('account', 'account__currency', 'account__account_type')
+            if hasattr(model_name, 'category'):
+                filtered_qs = filtered_qs.select_related('category')
+            if hasattr(model_name, 'period'):
+                filtered_qs = filtered_qs.select_related('period')
+                
+        return filtered_qs
 
     def get_object(self, queryset=None):
         """Garante que o objeto pertence ao utilizador atual."""
@@ -586,10 +599,15 @@ def transactions_json(request):
 
 
 
-    # Filtros únicos dinâmicos
-    available_types = sorted(
-        [t for t in df_for_type["type"].dropna().unique() if t]
-    )
+    # Filtros únicos dinâmicos - map backend types to display names for frontend
+    backend_types = sorted([t for t in df_for_type["type"].dropna().unique() if t])
+    available_types = []
+    type_mapping = {
+        'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
+    }
+    for backend_type in backend_types:
+        display_type = type_mapping.get(backend_type, backend_type)
+        available_types.append(display_type)
 
     available_categories = sorted(
         [c for c in df_for_category["category"].dropna().unique() if c]
@@ -1022,7 +1040,7 @@ def transaction_list_v2(request):
 
 @login_required
 def transactions_json_v2(request):
-    """Enhanced JSON API for transactions v2."""
+    """Enhanced JSON API for transactions v2 with Excel-style cascading filters."""
     user_id = request.user.id
     logger.debug(f"🔍 [transactions_json_v2] Request from user {user_id}: {request.method}")
 
@@ -1118,62 +1136,188 @@ def transactions_json_v2(request):
         logger.debug(f"📋 [transactions_json_v2] DataFrame created with {len(df)} rows")
         cache.set(cache_key, df.copy(), timeout=300)
 
-    # Apply filters - convert empty strings to None
-    tx_type = data.get("type", "").strip() or None
-    category = data.get("category", "").strip() or None
-    account = data.get("account", "").strip() or None
-    period = data.get("period", "").strip() or None
-    search = data.get("search", "").strip() or None
-    amount_min = data.get("amount_min", "").strip() or None
-    amount_max = data.get("amount_max", "").strip() or None
-    tags_filter = data.get("tags", "").strip() or None
-    include_system = data.get("include_system", False)
-
-    # Store original for filter options
+    # ✅ EXCEL-STYLE CASCADING FILTERS IMPLEMENTATION
+    # Store original data for calculating available filter options
     df_original = df.copy()
+    
+    # Parse filters from request - convert empty strings to None
+    active_filters = {}
+    if data.get("type", "").strip():
+        active_filters["type"] = data.get("type").strip()
+    if data.get("category", "").strip():
+        active_filters["category"] = data.get("category").strip()
+    if data.get("account", "").strip():
+        active_filters["account"] = data.get("account").strip()
+    if data.get("period", "").strip():
+        active_filters["period"] = data.get("period").strip()
+    if data.get("search", "").strip():
+        active_filters["search"] = data.get("search").strip()
+    if data.get("amount_min", "").strip():
+        active_filters["amount_min"] = data.get("amount_min").strip()
+    if data.get("amount_max", "").strip():
+        active_filters["amount_max"] = data.get("amount_max").strip()
+    if data.get("tags", "").strip():
+        active_filters["tags"] = data.get("tags").strip()
+    
+    include_system = data.get("include_system", False)
+    
+    logger.debug(f"📋 [Excel Filters] Active filters: {active_filters}")
 
-    # Apply filters only if values are not None/empty
-    if tx_type:
-        df = df[df["type"] == tx_type]
-        logger.debug(f"Applied type filter '{tx_type}', remaining rows: {len(df)}")
-    if category:
-        df = df[df["category"].str.contains(category, case=False, na=False)]
-        logger.debug(f"Applied category filter '{category}', remaining rows: {len(df)}")
-    if account:
-        df = df[df["account"].str.contains(account, case=False, na=False)]
-        logger.debug(f"Applied account filter '{account}', remaining rows: {len(df)}")
-    if period:
-        df = df[df["period"] == period]
-        logger.debug(f"Applied period filter '{period}', remaining rows: {len(df)}")
-    if search:
-        df = df[
-            df["category"].str.contains(search, case=False, na=False) |
-            df["account"].str.contains(search, case=False, na=False) |
-            df["tags"].str.contains(search, case=False, na=False)
-        ]
-        logger.debug(f"Applied search filter '{search}', remaining rows: {len(df)}")
-    if amount_min:
-        try:
-            min_val = float(amount_min)
-            df = df[df["amount"] >= min_val]
-            logger.debug(f"Applied amount_min filter: {min_val}, remaining rows: {len(df)}")
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid amount_min value: {amount_min}")
-    if amount_max:
-        try:
-            max_val = float(amount_max)
-            df = df[df["amount"] <= max_val]
-            logger.debug(f"Applied amount_max filter: {max_val}, remaining rows: {len(df)}")
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid amount_max value: {amount_max}")
-    if tags_filter:
-        tag_list = [t.strip().lower() for t in tags_filter.split(",") if t.strip()]
-        if tag_list:
-            tag_pattern = '|'.join(tag_list)
-            df = df[df["tags"].str.contains(tag_pattern, case=False, na=False)]
-            logger.debug(f"Applied tags filter: {tag_list}, remaining rows: {len(df)}")
+    # Apply filters in cascade - each filter operates on the result of previous filters
+    df_filtered = df.copy()
+    
+    # System filter first (if not included)
     if not include_system:
-        df = df[df["is_system"] != True]
+        df_filtered = df_filtered[df_filtered["is_system"] != True]
+        logger.debug(f"🔽 [Excel Filter] System filter applied, remaining rows: {len(df_filtered)}")
+
+    # Apply each filter sequentially (Excel-style)
+    filter_order = ["type", "category", "account", "period", "search", "amount_min", "amount_max", "tags"]
+    
+    for filter_name in filter_order:
+        if filter_name in active_filters:
+            filter_value = active_filters[filter_name]
+            df_before = len(df_filtered)
+            
+            if filter_name == "type":
+                # Filter by the raw type from database (IN, EX, IV, TR, AJ)
+                df_filtered = df_filtered[df_filtered["type"] == filter_value]
+                
+            elif filter_name == "category":
+                df_filtered = df_filtered[df_filtered["category"].str.contains(filter_value, case=False, na=False)]
+                
+            elif filter_name == "account":
+                df_filtered = df_filtered[df_filtered["account"].str.contains(filter_value, case=False, na=False)]
+                
+            elif filter_name == "period":
+                df_filtered = df_filtered[df_filtered["period"] == filter_value]
+                
+            elif filter_name == "search":
+                # Create mapped type column for search
+                df_search = df_filtered.copy()
+                df_search["type_display"] = df_search["type"].map({
+                    'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
+                }).fillna(df_search["type"])
+                
+                search_mask = (
+                    df_search["category"].str.contains(filter_value, case=False, na=False) |
+                    df_search["account"].str.contains(filter_value, case=False, na=False) |
+                    df_search["type_display"].str.contains(filter_value, case=False, na=False) |
+                    df_search["tags"].str.contains(filter_value, case=False, na=False)
+                )
+                df_filtered = df_filtered[search_mask]
+                
+            elif filter_name == "amount_min":
+                try:
+                    min_val = float(filter_value)
+                    df_filtered = df_filtered[df_filtered["amount"] >= min_val]
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid amount_min value: {filter_value}")
+                    
+            elif filter_name == "amount_max":
+                try:
+                    max_val = float(filter_value)
+                    df_filtered = df_filtered[df_filtered["amount"] <= max_val]
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid amount_max value: {filter_value}")
+                    
+            elif filter_name == "tags":
+                tag_list = [t.strip().lower() for t in filter_value.split(",") if t.strip()]
+                if tag_list:
+                    tag_pattern = '|'.join(tag_list)
+                    df_filtered = df_filtered[df_filtered["tags"].str.contains(tag_pattern, case=False, na=False)]
+            
+            logger.debug(f"🔽 [Excel Filter] {filter_name}='{filter_value}' applied: {df_before} → {len(df_filtered)} rows")
+
+    # 📊 CALCULATE AVAILABLE FILTER OPTIONS (Excel-style)
+    # For each filter, calculate what values are available based on OTHER active filters
+    
+    def get_available_options_for_filter(target_filter):
+        """Get available options for a specific filter based on other active filters."""
+        temp_df = df.copy()
+        
+        # System filter first (if not included)
+        if not include_system:
+            temp_df = temp_df[temp_df["is_system"] != True]
+        
+        # Apply all OTHER filters (not the target filter)
+        for filter_name in filter_order:
+            if filter_name != target_filter and filter_name in active_filters:
+                filter_value = active_filters[filter_name]
+                
+                if filter_name == "type":
+                    temp_df = temp_df[temp_df["type"] == filter_value]
+                elif filter_name == "category":
+                    temp_df = temp_df[temp_df["category"].str.contains(filter_value, case=False, na=False)]
+                elif filter_name == "account":
+                    temp_df = temp_df[temp_df["account"].str.contains(filter_value, case=False, na=False)]
+                elif filter_name == "period":
+                    temp_df = temp_df[temp_df["period"] == filter_value]
+                elif filter_name == "search":
+                    temp_search = temp_df.copy()
+                    temp_search["type_display"] = temp_search["type"].map({
+                        'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
+                    }).fillna(temp_search["type"])
+                    
+                    search_mask = (
+                        temp_search["category"].str.contains(filter_value, case=False, na=False) |
+                        temp_search["account"].str.contains(filter_value, case=False, na=False) |
+                        temp_search["type_display"].str.contains(filter_value, case=False, na=False) |
+                        temp_search["tags"].str.contains(filter_value, case=False, na=False)
+                    )
+                    temp_df = temp_df[search_mask]
+                elif filter_name == "amount_min":
+                    try:
+                        min_val = float(filter_value)
+                        temp_df = temp_df[temp_df["amount"] >= min_val]
+                    except (ValueError, TypeError):
+                        pass
+                elif filter_name == "amount_max":
+                    try:
+                        max_val = float(filter_value)
+                        temp_df = temp_df[temp_df["amount"] <= max_val]
+                    except (ValueError, TypeError):
+                        pass
+                elif filter_name == "tags":
+                    tag_list = [t.strip().lower() for t in filter_value.split(",") if t.strip()]
+                    if tag_list:
+                        tag_pattern = '|'.join(tag_list)
+                        temp_df = temp_df[temp_df["tags"].str.contains(tag_pattern, case=False, na=False)]
+        
+        return temp_df
+
+    # Calculate available options for each filter
+    available_types = []
+    available_categories = []
+    available_accounts = []
+    available_periods = []
+
+    # Types
+    type_df = get_available_options_for_filter("type")
+    available_types = sorted(type_df["type"].map({
+        'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
+    }).dropna().unique())
+
+    # Categories
+    category_df = get_available_options_for_filter("category")
+    available_categories = sorted([c for c in category_df["category"].dropna().unique() if c])
+
+    # Accounts
+    account_df = get_available_options_for_filter("account")
+    available_accounts = sorted([a for a in account_df["account"].dropna().unique() if a])
+
+    # Periods
+    period_df = get_available_options_for_filter("period")
+    available_periods = sorted(period_df["period"].dropna().unique(), reverse=True)
+
+    logger.debug(f"📊 [Excel Filters] Available options calculated:")
+    logger.debug(f"  Types: {len(available_types)} options")
+    logger.debug(f"  Categories: {len(available_categories)} options")
+    logger.debug(f"  Accounts: {len(available_accounts)} options")
+    logger.debug(f"  Periods: {len(available_periods)} options")
+
+    # Use filtered data for pagination and response
+    df = df_filtered
 
     # Pagination
     total_count = len(df)
@@ -1197,23 +1341,22 @@ def transactions_json_v2(request):
         axis=1
     )
 
-    # Build response
+    # Build response with Excel-style filtered options
     response_data = {
         "transactions": page_df.to_dict(orient="records"),
         "total_count": total_count,
         "current_page": current_page,
         "page_size": page_size,
         "filters": {
-            "types": sorted(df_original["type"].map({
-                'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
-            }).dropna().unique()),
-            "categories": sorted([c for c in df_original["category"].dropna().unique() if c]),
-            "accounts": sorted([a for a in df_original["account"].dropna().unique() if a]),
-            "periods": sorted(df_original["period"].dropna().unique(), reverse=True)
+            "types": available_types,
+            "categories": available_categories,
+            "accounts": available_accounts,
+            "periods": available_periods
         }
     }
 
     logger.debug(f"📤 [transactions_json_v2] Final response: {len(response_data['transactions'])} transactions, total_count: {total_count}")
+    logger.debug(f"✅ [Excel Filters] Filter options returned based on visible data only")
 
     # Log if no transactions found
     if total_count == 0:
@@ -1225,8 +1368,9 @@ def transactions_json_v2(request):
 
 @login_required
 def transactions_totals_v2(request):
-    """Get totals for transactions v2."""
+    """Get totals for transactions v2 with proper filter application."""
     user_id = request.user.id
+    logger.debug(f"💰 [transactions_totals_v2] Request from user {user_id}: {request.method}")
 
     # Parse request data (handles both GET and POST)
     if request.method == 'POST':
@@ -1237,28 +1381,115 @@ def transactions_totals_v2(request):
     else:
         data = request.GET.dict()
 
-    # Get filters
-    start_date = parse_safe_date(data.get('date_start', request.GET.get("date_start")), date(date.today().year, 1, 1))
-    end_date = parse_safe_date(data.get('date_end', request.GET.get("date_end")), date.today())
-    include_system = data.get("include_system", False)
+    logger.debug(f"📋 [transactions_totals_v2] Request data: {data}")
 
-    # Build WHERE clause
-    where_clause = "tx.user_id = %s AND tx.date BETWEEN %s AND %s"
+    # Get date range with wider defaults if not provided
+    raw_start = data.get('date_start', request.GET.get("date_start"))
+    raw_end = data.get('date_end', request.GET.get("date_end"))
+
+    if not raw_start and not raw_end:
+        start_date = date(2020, 1, 1)
+        end_date = date(2030, 12, 31)
+    else:
+        start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
+        end_date = parse_safe_date(raw_end, date.today())
+
+    logger.debug(f"📅 [transactions_totals_v2] Date range: {start_date} to {end_date}")
+
+    # Build complex query with all filters (same as transactions_json_v2)
+    where_conditions = ["tx.user_id = %s", "tx.date BETWEEN %s AND %s"]
     params = [user_id, start_date, end_date]
 
+    # Apply all filters exactly like in transactions_json_v2
+    include_system = data.get("include_system", False)
     if not include_system:
-        where_clause += " AND (tx.is_system IS NULL OR tx.is_system = FALSE)"
+        where_conditions.append("(tx.is_system IS NULL OR tx.is_system = FALSE)")
+
+    # Type filter
+    if data.get("type", "").strip():
+        where_conditions.append("tx.type = %s")
+        params.append(data.get("type").strip())
+
+    # Category filter
+    if data.get("category", "").strip():
+        where_conditions.append("COALESCE(cat.name, '') ILIKE %s")
+        params.append(f"%{data.get('category').strip()}%")
+
+    # Account filter
+    if data.get("account", "").strip():
+        where_conditions.append("COALESCE(acc.name, '') ILIKE %s")
+        params.append(f"%{data.get('account').strip()}%")
+
+    # Period filter
+    if data.get("period", "").strip():
+        try:
+            year, month = data.get("period").strip().split("-")
+            where_conditions.append("dp.year = %s AND dp.month = %s")
+            params.extend([int(year), int(month)])
+        except (ValueError, AttributeError):
+            pass
+
+    # Amount range filters
+    if data.get("amount_min", "").strip():
+        try:
+            min_val = float(data.get("amount_min").strip())
+            where_conditions.append("tx.amount >= %s")
+            params.append(min_val)
+        except (ValueError, TypeError):
+            pass
+
+    if data.get("amount_max", "").strip():
+        try:
+            max_val = float(data.get("amount_max").strip())
+            where_conditions.append("tx.amount <= %s")
+            params.append(max_val)
+        except (ValueError, TypeError):
+            pass
+
+    # Search filter
+    if data.get("search", "").strip():
+        search_term = f"%{data.get('search').strip()}%"
+        where_conditions.append("""(
+            COALESCE(cat.name, '') ILIKE %s OR
+            COALESCE(acc.name, '') ILIKE %s OR
+            COALESCE(STRING_AGG(tag.name, ', '), '') ILIKE %s
+        )""")
+        params.extend([search_term, search_term, search_term])
+
+    # Tags filter
+    if data.get("tags", "").strip():
+        tag_list = [t.strip().lower() for t in data.get("tags").split(",") if t.strip()]
+        if tag_list:
+            tag_pattern = '|'.join(tag_list)
+            where_conditions.append("COALESCE(STRING_AGG(tag.name, ', '), '') ~* %s")
+            params.append(tag_pattern)
+
+    where_clause = " AND ".join(where_conditions)
+
+    logger.debug(f"🔍 [transactions_totals_v2] WHERE clause: {where_clause}")
+    logger.debug(f"🔍 [transactions_totals_v2] Parameters: {params}")
 
     with connection.cursor() as cursor:
-        cursor.execute(f"""
+        # Complex query with JOINs to support all filters
+        query = f"""
             SELECT 
                 tx.type,
                 SUM(tx.amount) as total
             FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
+            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
             WHERE {where_clause}
             GROUP BY tx.type
-        """, params)
+        """
+        
+        logger.debug(f"📝 [transactions_totals_v2] SQL Query: {query}")
+        cursor.execute(query, params)
         rows = cursor.fetchall()
+
+    logger.debug(f"📊 [transactions_totals_v2] Raw results: {rows}")
 
     totals = {
         'income': 0,
@@ -1280,6 +1511,7 @@ def transactions_totals_v2(request):
 
     totals['balance'] = totals['income'] - abs(totals['expenses'])
 
+    logger.debug(f"📊 [transactions_totals_v2] Final totals: {totals}")
     return JsonResponse(totals)
 
 
@@ -2141,75 +2373,186 @@ def dashboard_data(request):
 
 @login_required
 def dashboard_kpis_json(request):
-    """Dashboard KPIs JSON API."""
+    """Dashboard KPIs JSON API with proper period filtering."""
     try:
         user_id = request.user.id
+        logger.debug(f"📊 [dashboard_kpis_json] Request from user {user_id}: {request.GET}")
 
-        # Get period filters
+        # Get period filters from request
         start_period = request.GET.get('start_period')
         end_period = request.GET.get('end_period')
 
+        logger.debug(f"📅 [dashboard_kpis_json] Period filters: {start_period} -> {end_period}")
+
         # Base query for transactions
         tx_query = Transaction.objects.filter(user_id=user_id)
+        balance_periods = []
 
         # Apply period filters if provided
         if start_period and end_period:
             try:
+                # Parse periods (format: YYYY-MM)
                 start_year, start_month = map(int, start_period.split('-'))
                 end_year, end_month = map(int, end_period.split('-'))
 
+                # Calculate date range
+                from calendar import monthrange
                 start_date = date(start_year, start_month, 1)
-                # Calculate end date (last day of end month)
-                if end_month == 12:
-                    end_date = date(end_year + 1, 1, 1) - date(end_year, 12, 31).replace(day=1)
-                else:
-                    end_date = date(end_year, end_month + 1, 1) - date(end_year, end_month, 1).replace(day=1)
+                _, last_day = monthrange(end_year, end_month)
+                end_date = date(end_year, end_month, last_day)
 
+                logger.debug(f"📅 [dashboard_kpis_json] Date range: {start_date} -> {end_date}")
+
+                # Filter transactions by date range
                 tx_query = tx_query.filter(date__gte=start_date, date__lte=end_date)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid period format: {start_period} - {end_period}")
 
-        # Get aggregated stats
+                # Get corresponding periods for balance calculation
+                balance_periods = list(DatePeriod.objects.filter(
+                    year__gte=start_year,
+                    year__lte=end_year,
+                    month__gte=start_month if start_year == end_year else 1,
+                    month__lte=end_month if start_year == end_year else 12
+                ).values_list('id', flat=True))
+
+                if start_year != end_year:
+                    # Handle multi-year ranges
+                    balance_periods = list(DatePeriod.objects.filter(
+                        models.Q(year=start_year, month__gte=start_month) |
+                        models.Q(year__gt=start_year, year__lt=end_year) |
+                        models.Q(year=end_year, month__lte=end_month)
+                    ).values_list('id', flat=True))
+
+                logger.debug(f"📊 [dashboard_kpis_json] Found {len(balance_periods)} periods for balance calculation")
+
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid period format: {start_period} - {end_period}: {e}")
+                # Fallback to no period filter
+                start_period = end_period = None
+
+        # Get aggregated transaction stats
         stats = tx_query.aggregate(
             total_income=models.Sum('amount', filter=models.Q(type='IN')) or 0,
             total_expenses=models.Sum('amount', filter=models.Q(type='EX')) or 0,
             total_investments=models.Sum('amount', filter=models.Q(type='IV')) or 0,
-            total_count=models.Count('id')
+            total_count=models.Count('id'),
+            categorized_count=models.Count('id', filter=models.Q(category__isnull=False))
         )
 
         total_income = float(stats['total_income'] or 0)
-        total_expenses = float(stats['total_expenses'] or 0)
-        total_investments = float(stats['total_investments'] or 0)
+        total_expenses = float(abs(stats['total_expenses'] or 0))  # Make positive
+        total_investments = float(abs(stats['total_investments'] or 0))  # Make positive  
         total_transactions = stats['total_count']
+        categorized_transactions = stats['categorized_count']
 
-        # Calculate averages (avoid division by zero)
-        num_months = max(1, total_transactions // 10)  # Rough estimate
+        logger.debug(f"💰 [dashboard_kpis_json] Transaction stats: income={total_income}, expenses={total_expenses}, investments={total_investments}, total={total_transactions}")
+
+        # Calculate number of months in the filtered period
+        if start_period and end_period:
+            try:
+                start_year, start_month = map(int, start_period.split('-'))
+                end_year, end_month = map(int, end_period.split('-'))
+                num_months = (end_year - start_year) * 12 + (end_month - start_month) + 1
+            except:
+                num_months = 1
+        else:
+            # Estimate months based on data span
+            date_range = tx_query.aggregate(
+                min_date=models.Min('date'),
+                max_date=models.Max('date')
+            )
+            if date_range['min_date'] and date_range['max_date']:
+                delta = date_range['max_date'] - date_range['min_date']
+                num_months = max(1, delta.days // 30)
+            else:
+                num_months = 1
+
+        logger.debug(f"📅 [dashboard_kpis_json] Calculated {num_months} months for averaging")
+
+        # Calculate averages
         receita_media = total_income / max(num_months, 1)
-        despesa_media = abs(total_expenses) / max(num_months, 1)
+        despesa_media = total_expenses / max(num_months, 1)
 
-        # Get latest account balances for patrimonio
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT COALESCE(SUM(ab.reported_balance), 0)
-                FROM core_accountbalance ab
-                INNER JOIN core_account a ON ab.account_id = a.id
-                WHERE a.user_id = %s
-                AND ab.period_id = (
-                    SELECT dp.id FROM core_dateperiod dp 
-                    ORDER BY dp.year DESC, dp.month DESC 
-                    LIMIT 1
-                )
-            """, [user_id])
-            patrimonio_total = float(cursor.fetchone()[0] or 0)
+        # Calculate savings rate
+        savings_rate = ((total_income - total_expenses) / total_income * 100) if total_income > 0 else 0
+
+        # Calculate categorized percentage
+        categorized_percentage = (categorized_transactions / total_transactions * 100) if total_transactions > 0 else 0
+
+        # Get patrimonio from filtered periods or latest available
+        if balance_periods:
+            # Use filtered periods
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT COALESCE(SUM(ab.reported_balance), 0)
+                    FROM core_accountbalance ab
+                    INNER JOIN core_account a ON ab.account_id = a.id
+                    WHERE a.user_id = %s
+                    AND ab.period_id = ANY(%s)
+                    AND ab.period_id = (
+                        SELECT MAX(ab2.period_id) 
+                        FROM core_accountbalance ab2 
+                        INNER JOIN core_account a2 ON ab2.account_id = a2.id
+                        WHERE a2.user_id = %s 
+                        AND ab2.period_id = ANY(%s)
+                    )
+                """, [user_id, balance_periods, user_id, balance_periods])
+                patrimonio_total = float(cursor.fetchone()[0] or 0)
+        else:
+            # Use latest available balance
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT COALESCE(SUM(ab.reported_balance), 0)
+                    FROM core_accountbalance ab
+                    INNER JOIN core_account a ON ab.account_id = a.id
+                    WHERE a.user_id = %s
+                    AND ab.period_id = (
+                        SELECT dp.id FROM core_dateperiod dp 
+                        ORDER BY dp.year DESC, dp.month DESC 
+                        LIMIT 1
+                    )
+                """, [user_id])
+                patrimonio_total = float(cursor.fetchone()[0] or 0)
+
+        logger.debug(f"💎 [dashboard_kpis_json] Calculated patrimonio: {patrimonio_total}")
+
+        # Calculate additional metrics
+        investment_rate = (total_investments / total_income * 100) if total_income > 0 else 0
+        avg_transaction = total_income / total_transactions if total_transactions > 0 else 0
+
+        # Calculate financial health score (simple algorithm)
+        health_score = (
+            min(savings_rate, 30) +  # Max 30 points for savings rate
+            min(categorized_percentage, 20) +  # Max 20 points for categorization
+            min(investment_rate, 25) +  # Max 25 points for investment rate
+            (25 if patrimonio_total > 10000 else patrimonio_total / 10000 * 25)  # Max 25 points for net worth
+        )
 
         return JsonResponse({
             'patrimonio_total': f"{patrimonio_total:,.0f} €",
             'receita_media': f"{receita_media:,.0f} €",
             'despesa_estimada_media': f"{despesa_media:,.0f} €",
-            'valor_investido_total': f"{abs(total_investments):,.0f} €",
-            'rentabilidade_mensal_media': "+0.0%",
+            'valor_investido_total': f"{total_investments:,.0f} €",
+            'despesas_justificadas_pct': f"{categorized_percentage:.0f}%",
+            'taxa_poupanca': f"{savings_rate:.1f}%",
+            'rentabilidade_mensal_media': "+0.0%",  # Placeholder for now
+            'investment_rate': f"{investment_rate:.1f}%",
+            'wealth_growth': "+0.0%",  # Placeholder for now
+            'avg_transaction': f"{avg_transaction:.0f} €",
+            'total_transactions': total_transactions,
             'num_meses': num_months,
-            'metodo_calculo': "Enhanced calculation with period filters",
+            'financial_health_score': health_score,
+            'account_breakdown': {
+                'savings': 0,  # Placeholder
+                'investments': 0,  # Placeholder
+                'checking': 0  # Placeholder
+            },
+            'metodo_calculo': "Enhanced calculation with comprehensive metrics",
+            'period_info': {
+                'months_analyzed': num_months,
+                'period_filter': bool(start_period and end_period),
+                'start_period': start_period,
+                'end_period': end_period
+            },
             'status': 'success',
             'debug_info': {
                 'total_income': total_income,
@@ -2217,6 +2560,9 @@ def dashboard_kpis_json(request):
                 'total_investments': total_investments,
                 'total_transactions': total_transactions,
                 'patrimonio_total': patrimonio_total,
+                'previous_patrimonio': 0,  # Placeholder
+                'savings_rate': savings_rate,
+                'categorized_percentage': categorized_percentage
             }
         })
 
@@ -2229,9 +2575,18 @@ def dashboard_kpis_json(request):
             'receita_media': "0 €",
             'despesa_estimada_media': "0 €",
             'valor_investido_total': "0 €",
+            'despesas_justificadas_pct': "0%",
+            'taxa_poupanca': "0.0%",
             'rentabilidade_mensal_media': "+0.0%",
+            'investment_rate': "0.0%",
+            'wealth_growth': "+0.0%",
+            'avg_transaction': "0 €",
+            'total_transactions': 0,
             'num_meses': 0,
+            'financial_health_score': 0,
+            'account_breakdown': {'savings': 0, 'investments': 0, 'checking': 0},
             'metodo_calculo': "Error fallback",
+            'period_info': {'months_analyzed': 0, 'period_filter': False}
         }, status=500)
 
 
@@ -2252,6 +2607,288 @@ def sync_system_adjustments(request):
         'status': 'success',
         'message': 'System adjustments synced'
     })
+
+
+@login_required
+def dashboard_goals_json(request):
+    """Dashboard Goals JSON API."""
+    try:
+        user_id = request.user.id
+        logger.debug(f"🎯 [dashboard_goals_json] Request from user {user_id}")
+
+        # Get current month's data for goal calculations
+        today = date.today()
+        current_period = DatePeriod.objects.filter(
+            year=today.year, 
+            month=today.month
+        ).first()
+
+        # Calculate monthly savings goal (target: €2000)
+        savings_target = 2000
+        current_savings = 0
+        
+        if current_period:
+            # Get current month transactions
+            current_income = Transaction.objects.filter(
+                user_id=user_id,
+                period=current_period,
+                type='IN'
+            ).aggregate(total=models.Sum('amount'))['total'] or 0
+            
+            current_expenses = abs(Transaction.objects.filter(
+                user_id=user_id,
+                period=current_period,
+                type='EX'
+            ).aggregate(total=models.Sum('amount'))['total'] or 0)
+            
+            current_savings = float(current_income) - float(current_expenses)
+        
+        savings_progress = min(100, max(0, (current_savings / savings_target) * 100))
+        
+        # Calculate investment target (target: €10000 total)
+        investment_target = 10000
+        total_investments = float(Transaction.objects.filter(
+            user_id=user_id,
+            type='IV'
+        ).aggregate(total=models.Sum('amount'))['total'] or 0)
+        
+        investment_progress = min(100, max(0, (abs(total_investments) / investment_target) * 100))
+        
+        # Calculate spending reduction goal (target: save €500 vs average)
+        # Get last 3 months average expenses
+        last_3_months = DatePeriod.objects.filter(
+            year__gte=today.year - 1
+        ).order_by('-year', '-month')[:3]
+        
+        avg_expenses = 0
+        current_month_expenses = 0
+        reduction_target = 500
+        
+        if last_3_months.count() >= 2:
+            # Average of previous months (excluding current)
+            previous_periods = last_3_months[1:]
+            avg_expenses = float(Transaction.objects.filter(
+                user_id=user_id,
+                period__in=previous_periods,
+                type='EX'
+            ).aggregate(total=models.Sum('amount'))['total'] or 0) / len(previous_periods)
+            
+            # Current month expenses
+            if current_period:
+                current_month_expenses = float(Transaction.objects.filter(
+                    user_id=user_id,
+                    period=current_period,
+                    type='EX'
+                ).aggregate(total=models.Sum('amount'))['total'] or 0)
+        
+        actual_reduction = max(0, abs(avg_expenses) - abs(current_month_expenses))
+        reduction_progress = min(100, max(0, (actual_reduction / reduction_target) * 100))
+
+        goals = [
+            {
+                'name': 'Monthly Savings Goal',
+                'progress': round(savings_progress, 1),
+                'current': round(current_savings, 0),
+                'target': savings_target,
+                'color': 'success' if savings_progress >= 80 else 'warning' if savings_progress >= 50 else 'danger'
+            },
+            {
+                'name': 'Investment Target', 
+                'progress': round(investment_progress, 1),
+                'current': round(abs(total_investments), 0),
+                'target': investment_target,
+                'color': 'success' if investment_progress >= 80 else 'warning' if investment_progress >= 50 else 'info'
+            },
+            {
+                'name': 'Spending Reduction',
+                'progress': round(reduction_progress, 1),
+                'current': round(actual_reduction, 0),
+                'target': reduction_target,
+                'color': 'info' if reduction_progress >= 80 else 'warning' if reduction_progress >= 50 else 'secondary'
+            }
+        ]
+
+        return JsonResponse({
+            'status': 'success',
+            'goals': goals
+        })
+
+    except Exception as e:
+        logger.error(f"Error in dashboard_goals_json for user {request.user.id}: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'goals': []
+        }, status=500)
+
+
+@login_required  
+def dashboard_insights_json(request):
+    """Dashboard Insights JSON API."""
+    try:
+        user_id = request.user.id
+        logger.debug(f"🧠 [dashboard_insights_json] Request from user {user_id}")
+
+        insights = []
+        
+        # Get user's financial data for analysis
+        total_transactions = Transaction.objects.filter(user_id=user_id).count()
+        
+        if total_transactions == 0:
+            insights.append({
+                'type': 'info',
+                'title': '📈 Start Your Financial Journey',
+                'text': 'Add your first transactions to begin receiving personalized insights.'
+            })
+            return JsonResponse({'status': 'success', 'insights': insights})
+
+        # Get recent data (last 3 months)
+        recent_periods = DatePeriod.objects.order_by('-year', '-month')[:3]
+        
+        # Calculate monthly averages
+        recent_income = Transaction.objects.filter(
+            user_id=user_id,
+            period__in=recent_periods,
+            type='IN'
+        ).aggregate(total=models.Sum('amount'))['total'] or 0
+        
+        recent_expenses = abs(Transaction.objects.filter(
+            user_id=user_id,
+            period__in=recent_periods,
+            type='EX'
+        ).aggregate(total=models.Sum('amount'))['total'] or 0)
+        
+        recent_investments = abs(Transaction.objects.filter(
+            user_id=user_id,
+            period__in=recent_periods,
+            type='IV'
+        ).aggregate(total=models.Sum('amount'))['total'] or 0)
+        
+        months_count = max(1, recent_periods.count())
+        avg_income = float(recent_income) / months_count
+        avg_expenses = float(recent_expenses) / months_count
+        avg_investments = float(recent_investments) / months_count
+        
+        # Savings rate analysis
+        savings_rate = ((avg_income - avg_expenses) / avg_income * 100) if avg_income > 0 else 0
+        
+        if savings_rate > 30:
+            insights.append({
+                'type': 'positive',
+                'title': '💎 Excellent Saver',
+                'text': f'Your savings rate of {savings_rate:.1f}% is outstanding! You\'re on track for financial independence.'
+            })
+        elif savings_rate > 15:
+            insights.append({
+                'type': 'warning', 
+                'title': '👍 Good Savings Habits',
+                'text': f'Savings rate of {savings_rate:.1f}% is solid. Try to reach 20-30% to accelerate your goals.'
+            })
+        elif savings_rate > 0:
+            insights.append({
+                'type': 'negative',
+                'title': '🎯 Savings Opportunity',
+                'text': f'Savings rate: {savings_rate:.1f}%. Focus on reducing expenses or increasing income.'
+            })
+        else:
+            insights.append({
+                'type': 'negative',
+                'title': '⚠️ Spending Alert',
+                'text': 'You\'re spending more than you earn. Review your budget urgently.'
+            })
+        
+        # Investment analysis
+        investment_rate = (avg_investments / avg_income * 100) if avg_income > 0 else 0
+        
+        if investment_rate > 15:
+            insights.append({
+                'type': 'positive',
+                'title': '🚀 Investment Champion',
+                'text': f'Investing {investment_rate:.1f}% of income is excellent for long-term wealth building.'
+            })
+        elif investment_rate > 5:
+            insights.append({
+                'type': 'warning',
+                'title': '📈 Building Wealth',
+                'text': f'You\'re investing {investment_rate:.1f}% of income. Consider increasing to 15-20% for faster growth.'
+            })
+        elif investment_rate > 0:
+            insights.append({
+                'type': 'info',
+                'title': '🌱 Investment Starter',
+                'text': f'Great start with {investment_rate:.1f}% invested. Gradually increase your investment rate.'
+            })
+        
+        # Transaction categorization insight
+        categorized_count = Transaction.objects.filter(
+            user_id=user_id,
+            category__isnull=False
+        ).count()
+        
+        categorization_rate = (categorized_count / total_transactions * 100) if total_transactions > 0 else 0
+        
+        if categorization_rate < 80:
+            insights.append({
+                'type': 'info',
+                'title': '🏷️ Organize Your Finances',
+                'text': f'Only {categorization_rate:.0f}% of transactions are categorized. Better categorization provides deeper insights.'
+            })
+        
+        # Seasonal spending insight
+        current_month = date.today().month
+        if current_month in [11, 12, 1]:  # Nov, Dec, Jan
+            insights.append({
+                'type': 'warning',
+                'title': '🎄 Holiday Season Alert',
+                'text': 'Holiday spending can impact budgets. Track expenses carefully and stick to your financial goals.'
+            })
+        elif current_month in [6, 7, 8]:  # Summer months
+            insights.append({
+                'type': 'info',
+                'title': '☀️ Summer Spending',
+                'text': 'Summer often brings vacation and leisure expenses. Plan ahead to maintain your savings goals.'
+            })
+        
+        # Account balance insight
+        latest_period = DatePeriod.objects.order_by('-year', '-month').first()
+        if latest_period:
+            total_balance = AccountBalance.objects.filter(
+                account__user_id=user_id,
+                period=latest_period
+            ).aggregate(total=models.Sum('reported_balance'))['total'] or 0
+            
+            if float(total_balance) > 50000:
+                insights.append({
+                    'type': 'positive',
+                    'title': '💰 Strong Financial Position',
+                    'text': 'Your net worth is growing well. Consider diversifying investments for optimal returns.'
+                })
+        
+        # If no specific insights, add encouragement
+        if len(insights) == 0:
+            insights.append({
+                'type': 'info',
+                'title': '📊 Keep Building Data',
+                'text': 'Continue adding transactions and balances for more personalized financial insights.'
+            })
+        
+        # Limit to 4 most relevant insights
+        insights = insights[:4]
+        
+        return JsonResponse({
+            'status': 'success',
+            'insights': insights
+        })
+
+    except Exception as e:
+        logger.error(f"Error in dashboard_insights_json for user {request.user.id}: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'insights': [{
+                'type': 'info',
+                'title': '📈 Keep Adding Data',
+                'text': 'The more data you add, the more personalized insights we can provide.'
+            }]
+        }, status=500)
 
 
 

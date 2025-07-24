@@ -153,11 +153,20 @@ class TransactionManager {
     console.log("🎯 CURRENT FILTERS:");
     console.table(currentFilters);
 
+    const typeMapping = {
+      'Income': 'IN',
+      'Expense': 'EX', 
+      'Investment': 'IV',
+      'Transfer': 'TR',
+      'Adjustment': 'AJ'
+    };
+    
     console.log("🔧 DOM ELEMENT VALUES:");
     console.table({
       dateStart: $("#date-start").val(),
       dateEnd: $("#date-end").val(),
       type: $("#filter-type").val(),
+      typeMapped: typeMapping[$("#filter-type").val()] || $("#filter-type").val(),
       account: $("#filter-account").val(),
       category: $("#filter-category").val(),
       period: $("#filter-period").val(),
@@ -192,22 +201,35 @@ class TransactionManager {
 
   showFilterFeedback() {
     // Add visual feedback to show filters are active (Excel-style)
-    const activeFilters =
-      Object.values(this.getFilters()).filter((val) => val && val !== "")
-        .length - 2; // subtract page and page_size
+    const filters = this.getFilters();
+    const activeFilters = Object.keys(filters).filter((key) => {
+      // Exclude pagination and system params
+      const excludeKeys = ['page', 'page_size', 'sort_field', 'sort_direction', 'include_system'];
+      return !excludeKeys.includes(key) && filters[key] && filters[key] !== "";
+    });
+    
     const indicator = $("#filter-indicator");
 
-    if (activeFilters > 0) {
+    if (activeFilters.length > 0) {
+      // Build detailed filter description
+      const filterDescriptions = activeFilters.map(key => {
+        const value = filters[key];
+        const displayKey = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return `${displayKey}: ${value}`;
+      }).join(', ');
+
       if (indicator.length === 0) {
         $("#filters-row").prepend(`
           <div id="filter-indicator" class="col-12">
             <div class="alert alert-info alert-sm mb-2">
-              <i class="fas fa-filter"></i> <span id="filter-count">${activeFilters}</span> active filter(s) - Only values with transactions are shown
+              <i class="fas fa-filter"></i> <span id="filter-count">${activeFilters.length}</span> active filter(s) - Excel-style cascading
+              <small class="d-block mt-1" id="filter-details">${filterDescriptions}</small>
             </div>
           </div>
         `);
       } else {
-        $("#filter-count").text(activeFilters);
+        $("#filter-count").text(activeFilters.length);
+        $("#filter-details").text(filterDescriptions);
       }
     } else {
       indicator.remove();
@@ -215,10 +237,22 @@ class TransactionManager {
   }
 
   getFilters() {
+    // Map frontend display values to backend enum values
+    const typeMapping = {
+      'Income': 'IN',
+      'Expense': 'EX', 
+      'Investment': 'IV',
+      'Transfer': 'TR',
+      'Adjustment': 'AJ'
+    };
+
+    const selectedType = $("#filter-type").val();
+    const mappedType = typeMapping[selectedType] || selectedType;
+
     const filters = {
       date_start: $("#date-start").val(),
       date_end: $("#date-end").val(),
-      type: $("#filter-type").val(),
+      type: mappedType, // Use mapped type
       account: $("#filter-account").val(),
       category: $("#filter-category").val(),
       period: $("#filter-period").val(),
@@ -271,17 +305,15 @@ class TransactionManager {
   }
 
   clearFilters() {
-    $("#date-start").val("2025-01-01");
+    $("#date-start").val("2024-01-01");
     $("#date-end").val(new Date().toISOString().split("T")[0]);
-    $("#filter-type, #filter-account, #filter-category, #filter-period").val(
-      "",
-    );
-    $(
-      "#filter-amount-min, #filter-amount-max, #filter-tags, #global-search",
-    ).val("");
+    $("#filter-type, #filter-account, #filter-category, #filter-period").val("");
+    $("#filter-amount-min, #filter-amount-max, #filter-tags, #global-search").val("");
+    $("#include-system-toggle").prop("checked", true);
 
     sessionStorage.removeItem("transaction_filters_v2");
     this.currentPage = 1;
+    this.cache.clear(); // Clear cache when clearing filters
     this.loadTransactions();
     this.loadTotals();
   }
@@ -388,7 +420,15 @@ class TransactionManager {
     console.log("💰 [loadTotals] Iniciando carregamento de totais...");
     try {
       const filters = this.getFilters();
-      console.log("🔍 [loadTotals] Filtros para totais:", filters);
+      
+      // Remove pagination and sorting params for totals calculation
+      const totalsFilters = { ...filters };
+      delete totalsFilters.page;
+      delete totalsFilters.page_size;
+      delete totalsFilters.sort_field;
+      delete totalsFilters.sort_direction;
+      
+      console.log("🔍 [loadTotals] Filtros para totais (limpos):", totalsFilters);
 
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
@@ -399,7 +439,7 @@ class TransactionManager {
             $("[name=csrfmiddlewaretoken]").val() ||
             $("meta[name=csrf-token]").attr("content"),
         },
-        body: JSON.stringify(filters),
+        body: JSON.stringify(totalsFilters),
       });
 
       console.log(
@@ -687,8 +727,9 @@ class TransactionManager {
     }
 
     console.log(
-      "📝 [updateFilterOptions] Filtros disponíveis (apenas com transações):",
+      "📝 [updateFilterOptions] Filtros disponíveis (apenas com transações visíveis):",
       {
+        types: filters.types?.length || 0,
         categories: filters.categories?.length || 0,
         accounts: filters.accounts?.length || 0,
         periods: filters.periods?.length || 0,
@@ -696,12 +737,18 @@ class TransactionManager {
     );
 
     console.log("📋 [updateFilterOptions] Detalhes dos filtros:", {
+      typesList: filters.types || [],
       categoriesList: filters.categories || [],
       accountsList: filters.accounts || [],
       periodsList: filters.periods || [],
     });
 
-    // Update filter options while preserving current selections
+    // Update filter options while preserving current selections (Excel-style)
+    this.updateSelectOptions(
+      "#filter-type",
+      filters.types || [],
+      "type",
+    );
     this.updateSelectOptions(
       "#filter-category",
       filters.categories || [],

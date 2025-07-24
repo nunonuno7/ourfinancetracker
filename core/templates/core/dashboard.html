@@ -26,71 +26,42 @@
   <!-- Advanced Filters Panel -->
   <div class="collapse mb-4" id="filterPanel">
     <div class="card shadow-sm">
-      <div class="card-header bg-light">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="fas fa-sliders-h"></i> Smart Filters</h5>
+        <button class="btn btn-outline-secondary btn-sm" id="reset-filters">
+          <i class="fas fa-undo"></i> Reset All
+        </button>
       </div>
       <div class="card-body">
-        <div class="row g-3">
-          <div class="col-lg-3 col-md-6">
-            <label class="form-label fw-bold">📅 Years</label>
+        <!-- Primeira linha: Controles de navegação de anos -->
+        <div class="row g-3 mb-4">
+          <div class="col-lg-6 col-md-12">
+            <label class="form-label fw-bold">📅 Years Range</label>
+            <div class="year-controls mb-2">
+              <div class="btn-group btn-group-sm w-100" role="group">
+                <button type="button" class="btn btn-outline-primary" id="prev-year">
+                  <i class="fas fa-chevron-left"></i>
+                </button>
+                <button type="button" class="btn btn-outline-primary flex-fill" id="reset-years">
+                  Current Range
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="next-year">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
             <div id="year-range"></div>
-            <div class="d-flex justify-content-between mt-2">
-              <small id="year-start-label" class="text-muted"></small>
-              <small id="year-end-label" class="text-muted"></small>
+            
+            <label class="form-label fw-bold mt-3">📅 Quick Period Selection</label>
+            <div class="btn-group btn-group-sm w-100 mb-3" role="group">
+              <button type="button" class="btn btn-outline-info" id="last-3m">3M</button>
+              <button type="button" class="btn btn-outline-info" id="last-6m">6M</button>
+              <button type="button" class="btn btn-outline-info" id="last-12m">12M</button>
+              <button type="button" class="btn btn-outline-info" id="all-periods">All</button>
             </div>
-          </div>
-          <div class="col-lg-3 col-md-6">
-            <label class="form-label fw-bold">📅 Analysis Period</label>
+            
+            <label class="form-label fw-bold">📅 Period Selection</label>
             <div id="period-range"></div>
-            <div class="d-flex justify-content-between mt-2">
-              <small id="period-start-label" class="text-muted"></small>
-              <small id="period-end-label" class="text-muted"></small>
-            </div>
-          </div>
-          <div class="col-lg-2 col-md-6">
-            <label class="form-label fw-bold">💰 Account Types</label>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="include-savings" checked>
-              <label class="form-check-label" for="include-savings">
-                <i class="fas fa-piggy-bank text-success"></i> Savings
-              </label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="include-investments" checked>
-              <label class="form-check-label" for="include-investments">
-                <i class="fas fa-chart-line text-primary"></i> Investments
-              </label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="include-current" checked>
-              <label class="form-check-label" for="include-current">
-                <i class="fas fa-credit-card text-info"></i> Current Account
-              </label>
-            </div>
-          </div>
-          <div class="col-lg-2 col-md-6">
-            <label class="form-label fw-bold">📈 Temporal Analysis</label>
-            <select id="analysis-period" class="form-select">
-              <option value="monthly">Monthly (Default)</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="yearly">Annual</option>
-              <option value="ytd">Year to Date</option>
-            </select>
-            <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="show-trends">
-              <label class="form-check-label" for="show-trends">
-                Show Trends
-              </label>
-            </div>
-          </div>
-          <div class="col-lg-2 col-md-6 d-flex flex-column">
-            <label class="form-label fw-bold">⚙️ Actions</label>
-            <button class="btn btn-primary mb-2" id="apply-filters">
-              <i class="fas fa-search"></i> Apply Filters
-            </button>
-            <button class="btn btn-outline-secondary" id="reset-filters">
-              <i class="fas fa-undo"></i> Clear
-            </button>
           </div>
         </div>
       </div>
@@ -251,65 +222,7 @@
     </div>
   </div>
 
-  <!-- New Analytics Row -->
-  <div class="row mb-4">
-    <div class="col-lg-6 mb-3">
-      <div class="card shadow-sm">
-        <div class="card-header bg-light">
-          <h5 class="mb-0"><i class="fas fa-brain"></i> Automatic Insights</h5>
-        </div>
-        <div class="card-body">
-          <div id="insights-container">
-            <div class="text-center text-muted">
-              <i class="fas fa-spinner fa-spin"></i> Analysing patterns...
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-6 mb-3">
-      <div class="card shadow-sm">
-        <div class="card-header bg-light">
-          <h5 class="mb-0"><i class="fas fa-target"></i> Goals and Targets</h5>
-        </div>
-        <div class="card-body">
-          <div id="goals-container">
-            <!-- Goals will be populated by JavaScript -->
-            <div class="goal-item mb-3">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="fw-bold">Monthly Savings Goal</span>
-                <span class="badge bg-success">85%</span>
-              </div>
-              <div class="progress" style="height: 8px;">
-                <div class="progress-bar bg-success" style="width: 85%"></div>
-              </div>
-              <small class="text-muted">€ 1,700 of € 2,000</small>
-            </div>
-            <div class="goal-item mb-3">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="fw-bold">Investment Target</span>
-                <span class="badge bg-warning">65%</span>
-              </div>
-              <div class="progress" style="height: 8px;">
-                <div class="progress-bar bg-warning" style="width: 65%"></div>
-              </div>
-              <small class="text-muted">€ 6,500 of € 10,000</small>
-            </div>
-            <div class="goal-item">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="fw-bold">Spending Reduction</span>
-                <span class="badge bg-info">40%</span>
-              </div>
-              <div class="progress" style="height: 8px;">
-                <div class="progress-bar bg-info" style="width: 40%"></div>
-              </div>
-              <small class="text-muted">€ 200 saved of € 500</small>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  
 
   <!-- Enhanced Balance Table -->
   <div class="row">
@@ -458,8 +371,186 @@
     border-radius: 0.25rem;
   }
 
-  #period-range {
+  #period-range, #year-range {
     margin: 10px 0;
+    min-height: 20px;
+  }
+
+  .year-controls, .period-controls {
+    margin-bottom: 0.5rem;
+  }
+
+  .year-controls .btn, .period-controls .btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+  }
+
+  .period-controls .btn-group {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .noUi-target {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .noUi-handle {
+    border: 2px solid #007bff;
+    border-radius: 50%;
+    background: #fff;
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    width: 20px;
+    height: 20px;
+  }
+
+  .noUi-handle:active {
+    cursor: grabbing;
+    transform: scale(1.1);
+  }
+
+  .noUi-connect {
+    background: linear-gradient(90deg, #007bff, #0056b3);
+  }
+
+  .noUi-tooltip {
+    font-size: 0.75rem;
+    background: #333;
+    color: white;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+
+  /* Hide tooltips on pips (extremities), show only on handles */
+  .noUi-pips .noUi-tooltip {
+    display: none !important;
+  }
+
+  /* Ensure tooltips show only on handles */
+  .noUi-handle .noUi-tooltip {
+    display: block !important;
+  }
+
+  /* Show pips and values but hide tooltips */
+  .noUi-pips {
+    font-size: 0.7rem;
+    color: #666;
+  }
+
+  .noUi-marker-horizontal.noUi-marker {
+    background: #ddd;
+    height: 8px;
+  }
+
+  .noUi-marker-horizontal.noUi-marker-large {
+    background: #999;
+    height: 12px;
+  }
+
+  /* Enhanced button styling */
+  .btn-group .btn {
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .btn-group .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .btn-outline-info.active {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+    color: white;
+  }
+
+  /* Enhanced filter panel spacing */
+  .card-body .row {
+    margin-bottom: 0;
+  }
+
+  .card-body .row + .row {
+    border-top: 1px solid #e9ecef;
+    padding-top: 1rem;
+    margin-top: 1rem;
+  }
+
+  /* Better button spacing */
+  .year-controls, .period-controls {
+    margin-bottom: 0.75rem;
+  }
+
+  .year-controls .btn, .period-controls .btn {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+  }
+
+  /* Enhanced slider containers */
+  #period-range, #year-range {
+    margin: 20px 0 25px 0;
+    min-height: 40px;
+    padding: 10px 0;
+    position: relative;
+  }
+
+  /* Better form control spacing */
+  .form-check {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+    border: 1px solid #dee2e6;
+  }
+
+  .form-check-label {
+    font-size: 0.875rem;
+    margin-left: 0.25rem;
+  }
+
+  /* Action buttons styling */
+  .col-lg-3.d-flex.flex-column .btn {
+    min-height: 38px;
+    font-weight: 500;
+  }
+
+  /* Responsive improvements */
+  @media (max-width: 992px) {
+    .year-controls .btn, .period-controls .btn {
+      font-size: 0.65rem;
+      padding: 0.25rem 0.4rem;
+    }
+
+    .card-body .row + .row {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .period-controls .btn-group {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .period-controls .btn {
+      border-radius: 0.25rem !important;
+      margin-bottom: 2px;
+      width: 100%;
+    }
+
+    .card-body .row + .row {
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+    }
+
+    /* Stack filter sections vertically on mobile */
+    .col-lg-6, .col-lg-3 {
+      margin-bottom: 1rem;
+    }
   }
 
   /* Fix canvas sizing issues */

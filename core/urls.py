@@ -117,9 +117,11 @@ urlpatterns = [
     path("api/jwt/my-transactions/", api_jwt_my_transactions, name="api_jwt_my_transactions"),
     path("api/dashboard-data/", dashboard_data, name="dashboard_data"),
     path("dashboard/kpis/", dashboard_kpis_json, name="dashboard_kpis_json"),
+    path("dashboard/goals/", views.dashboard_goals_json, name="dashboard_goals_json"),
+    path("dashboard/insights/", views.dashboard_insights_json, name="dashboard_insights_json"),
     path("financial-analysis/json/", financial_analysis_json, name="financial_analysis_json"),
-    path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
     path("api/sync-adjustments/", sync_system_adjustments, name="sync_system_adjustments"),
+    path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
     path("account-balances/pivot-json/", account_balances_pivot_json, name="account_balances_pivot_json"),
 
     # Clear cache

@@ -13,11 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // DOM elements
   const yearSlider = document.getElementById("year-range");
-  const yearStartLbl = document.getElementById("year-start-label");
-  const yearEndLbl = document.getElementById("year-end-label");
+  // Label elements removed from HTML
   const periodSlider = document.getElementById("period-range");
-  const periodStartLbl = document.getElementById("period-start-label");
-  const periodEndLbl = document.getElementById("period-end-label");
 
   // Enhanced utility functions
   const parsePeriod = (p) => {
@@ -254,6 +251,102 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
+
+    // Create returns chart (initially hidden)
+    const returnsCanvas = document.createElement('canvas');
+    returnsCanvas.id = 'returns-chart';
+    returnsCanvas.style.display = 'none';
+    document.getElementById('evolution-chart').parentNode.appendChild(returnsCanvas);
+
+    charts.returns = new Chart(returnsCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Portfolio Return (%)',
+          data: [],
+          borderColor: '#6f42c1',
+          backgroundColor: 'rgba(111, 66, 193, 0.1)',
+          tension: 0.4,
+          fill: true
+        }, {
+          label: 'Cumulative Return (%)',
+          data: [],
+          borderColor: '#17a2b8',
+          backgroundColor: 'rgba(23, 162, 184, 0.1)',
+          tension: 0.4,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2,
+        resizeDelay: 0,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Investment Returns Over Time'
+          }
+        },
+        scales: {
+          y: {
+            ticks: {
+              callback: function(value) {
+                return value + '%';
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Create expenses chart (initially hidden)
+    const expensesCanvas = document.createElement('canvas');
+    expensesCanvas.id = 'expenses-chart';
+    expensesCanvas.style.display = 'none';
+    document.getElementById('evolution-chart').parentNode.appendChild(expensesCanvas);
+
+    charts.expenses = new Chart(expensesCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          backgroundColor: [
+            '#dc3545', '#fd7e14', '#ffc107', '#28a745', 
+            '#20c997', '#17a2b8', '#6f42c1', '#e83e8c'
+          ],
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 1,
+        resizeDelay: 0,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Spending by Category'
+          },
+          legend: {
+            position: 'right'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const value = context.parsed;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = ((value / total) * 100).toFixed(1);
+                return `${context.label}: ${formatCurrency(value)} (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
   };
 
   // Enhanced data loading functions with request control
@@ -322,7 +415,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentMonth = new Date().getMonth() + 1;
     const mockColumns = ['type', 'currency'];
     const mockPeriods = [];
-    
+
     // Generate last 6 months
     for (let i = 5; i >= 0; i--) {
       let year = currentYear;
@@ -334,14 +427,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       mockPeriods.push(`${monthNames[month - 1]}/${year.toString().slice(-2)}`);
     }
-    
+
     mockColumns.push(...mockPeriods);
-    
+
     const mockRows = [
       { type: 'Savings', currency: 'EUR', ...Object.fromEntries(mockPeriods.map((p, i) => [p, 1000 + i * 200])) },
       { type: 'Investment', currency: 'EUR', ...Object.fromEntries(mockPeriods.map((p, i) => [p, 5000 + i * 500])) }
     ];
-    
+
     return { columns: mockColumns, rows: mockRows };
   };
 
@@ -624,9 +717,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
 
       // Get filter settings
-      const includeSavings = document.getElementById('include-savings')?.checked ?? true;
-      const includeInvestments = document.getElementById('include-investments')?.checked ?? true;
-      const includeCurrent = document.getElementById('include-current')?.checked ?? true;
+      const includeSavings = true; // Always include savings
+      const includeInvestments = true; // Always include investments
+      const includeCurrent = true; // Always include current accounts
       const showTrends = document.getElementById('show-trends')?.checked ?? false;
 
       // Prepare data for charts
@@ -656,7 +749,7 @@ document.addEventListener("DOMContentLoaded", () => {
         totalData.push(savings + investments);
       });
 
-      // Update evolution chart with filtered data
+      // Update charts based on current type
       if (currentChartType === 'evolution') {
         const datasets = [];
 
@@ -683,7 +776,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         datasets.push({
-          label: 'Total Net Worth',
+          label: 'Total Net Worth',  
           data: totalData,
           borderColor: '#6f42c1',
           backgroundColor: 'rgba(111, 66, 193, 0.1)',
@@ -695,6 +788,12 @@ document.addEventListener("DOMContentLoaded", () => {
         charts.evolution.data.labels = visiblePeriods;
         charts.evolution.data.datasets = datasets;
         charts.evolution.update('none');
+      } else if (currentChartType === 'flows') {
+        updateFlowsChart(analysisData);
+      } else if (currentChartType === 'returns') {
+        updateReturnsChart();
+      } else if (currentChartType === 'expenses') {
+        updateExpensesChart();
       }
 
       // Update allocation chart (use latest values)
@@ -724,33 +823,161 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const updateFlowsChart = (analysisData) => {
-    if (!charts.flows || !analysisData.data) return;
+    if (!charts.flows) return;
 
-    const data = analysisData.data.slice(-12); // Last 12 months
-    const labels = data.map(d => d.period);
-    const income = data.map(d => d.income || 0);
-    const expenses = data.map(d => d.expense_estimated || 0);
-    const investments = data.map(d => d.investment_flow || 0);
+    // Use real transaction data if available, otherwise generate from account balances
+    if (analysisData && analysisData.data && analysisData.data.length > 0) {
+      const data = analysisData.data.slice(-12); // Last 12 months
+      const labels = data.map(d => d.period);
+      const income = data.map(d => d.income || 0);
+      const expenses = data.map(d => d.expense_estimated || 0);  
+      const investments = data.map(d => d.investment_flow || 0);
 
-    charts.flows.data.labels = labels;
-    charts.flows.data.datasets[0].data = income;
-    charts.flows.data.datasets[1].data = expenses;
-    charts.flows.data.datasets[2].data = investments;
+      charts.flows.data.labels = labels;
+      charts.flows.data.datasets[0].data = income;
+      charts.flows.data.datasets[1].data = expenses;
+      charts.flows.data.datasets[2].data = investments;
+    } else {
+      // Generate from current visible periods
+      const [start, end] = periodSlider.noUiSlider.get();
+      const iStart = allPeriods.indexOf(start);
+      const iEnd = allPeriods.indexOf(end);
+      const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+
+      // Calculate estimated flows based on balance changes
+      const incomeData = [];
+      const expenseData = [];
+      const investmentData = [];
+
+      visiblePeriods.forEach((period, index) => {
+        // Simulate income (average based on savings growth)
+        const baseIncome = 2000 + (Math.random() * 1000);
+        incomeData.push(baseIncome);
+
+        // Simulate expenses (portion of income)
+        const baseExpense = baseIncome * (0.3 + Math.random() * 0.4);
+        expenseData.push(baseExpense);
+
+        // Get actual investment flow if available
+        let investments = 0;
+        rows.forEach(row => {
+          const value = parseFloat(row[period]) || 0;
+          const rowType = (row.type || '').toLowerCase();
+          if (rowType.includes('investment')) {
+            investments += Math.abs(value * 0.1); // Estimate monthly investment flow
+          }
+        });
+        investmentData.push(investments || 200);
+      });
+
+      charts.flows.data.labels = visiblePeriods;
+      charts.flows.data.datasets[0].data = incomeData;
+      charts.flows.data.datasets[1].data = expenseData;
+      charts.flows.data.datasets[2].data = investmentData;
+    }
+    
     charts.flows.update('none');
   };
 
+  const updateReturnsChart = () => {
+    if (!charts.returns || !periodSlider) return;
+
+    const [start, end] = periodSlider.noUiSlider.get();
+    const iStart = allPeriods.indexOf(start);
+    const iEnd = allPeriods.indexOf(end);
+    const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+
+    const monthlyReturns = [];
+    const cumulativeReturns = [];
+    let cumulativeReturn = 0;
+
+    visiblePeriods.forEach((period, index) => {
+      let currentValue = 0;
+      let previousValue = 0;
+
+      rows.forEach(row => {
+        const value = parseFloat(row[period]) || 0;
+        const rowType = (row.type || '').toLowerCase();
+        if (rowType.includes('investment')) {
+          currentValue += value;
+        }
+      });
+
+      if (index > 0) {
+        const prevPeriod = visiblePeriods[index - 1];
+        rows.forEach(row => {
+          const value = parseFloat(row[prevPeriod]) || 0;
+          const rowType = (row.type || '').toLowerCase();
+          if (rowType.includes('investment')) {
+            previousValue += value;
+          }
+        });
+
+        const monthlyReturn = previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : 0;
+        monthlyReturns.push(monthlyReturn);
+        cumulativeReturn += monthlyReturn;
+        cumulativeReturns.push(cumulativeReturn);
+      } else {
+        monthlyReturns.push(0);
+        cumulativeReturns.push(0);
+      }
+    });
+
+    charts.returns.data.labels = visiblePeriods;
+    charts.returns.data.datasets[0].data = monthlyReturns;
+    charts.returns.data.datasets[1].data = cumulativeReturns;
+    charts.returns.update('none');
+  };
+
+  const updateExpensesChart = () => {
+    if (!charts.expenses) return;
+
+    // For now, create mock expense categories based on typical spending patterns
+    // In a real implementation, this would come from categorized transactions
+    const expenseCategories = [
+      { name: 'Food & Dining', amount: 600 },
+      { name: 'Transportation', amount: 200 },
+      { name: 'Shopping', amount: 300 },
+      { name: 'Entertainment', amount: 150 },
+      { name: 'Bills & Utilities', amount: 400 },
+      { name: 'Healthcare', amount: 100 },
+      { name: 'Travel', amount: 250 },
+      { name: 'Other', amount: 100 }
+    ];
+
+    const labels = expenseCategories.map(cat => cat.name);
+    const data = expenseCategories.map(cat => cat.amount);
+
+    charts.expenses.data.labels = labels;
+    charts.expenses.data.datasets[0].data = data;
+    charts.expenses.update('none');
+  };
+
   const switchChart = (chartType) => {
+    // Hide all charts first
     const evolutionCanvas = document.getElementById('evolution-chart');
     const flowsCanvas = document.getElementById('flows-chart');
+    const returnsCanvas = document.getElementById('returns-chart');
+    const expensesCanvas = document.getElementById('expenses-chart');
 
-    if (chartType === 'evolution') {
+    [evolutionCanvas, flowsCanvas, returnsCanvas, expensesCanvas].forEach(canvas => {
+      if (canvas) canvas.style.display = 'none';
+    });
+
+    // Show selected chart and update current type
+    currentChartType = chartType;
+    
+    if (chartType === 'evolution' && evolutionCanvas) {
       evolutionCanvas.style.display = 'block';
-      flowsCanvas.style.display = 'none';
-      currentChartType = 'evolution';
-    } else if (chartType === 'flows') {
-      evolutionCanvas.style.display = 'none';
+    } else if (chartType === 'flows' && flowsCanvas) {
       flowsCanvas.style.display = 'block';
-      currentChartType = 'flows';
+      updateFlowsChart(analysisData);
+    } else if (chartType === 'returns' && returnsCanvas) {
+      returnsCanvas.style.display = 'block';
+      updateReturnsChart();
+    } else if (chartType === 'expenses' && expensesCanvas) {
+      expensesCanvas.style.display = 'block';
+      updateExpensesChart();
     }
   };
 
@@ -834,7 +1061,7 @@ document.addEventListener("DOMContentLoaded", () => {
     `).join('');
   };
 
-  // Slider initialization functions (keeping the existing ones)
+  // Enhanced slider initialization functions with better UX
   const initYearSlider = (years) => {
     if (yearSlider && yearSlider.noUiSlider) yearSlider.noUiSlider.destroy();
     if (!yearSlider) return;
@@ -848,16 +1075,19 @@ document.addEventListener("DOMContentLoaded", () => {
         to: value => Math.round(value),
         from: value => parseInt(value),
       },
+      tooltips: [true, true],
+      pips: {
+        mode: 'count',
+        values: Math.min(5, years.length),
+        density: 4,
+        stepped: true
+      }
     });
 
     const [s, e] = yearSlider.noUiSlider.get();
-    if (yearStartLbl) yearStartLbl.textContent = s;
-    if (yearEndLbl) yearEndLbl.textContent = e;
     selectedYearRange = [+s, +e];
 
     yearSlider.noUiSlider.on("update", (values) => {
-      if (yearStartLbl) yearStartLbl.textContent = values[0];
-      if (yearEndLbl) yearEndLbl.textContent = values[1];
       selectedYearRange = values.map(v => parseInt(v));
     });
 
@@ -868,6 +1098,32 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       initPeriodSlider(fullPeriods, true, 12);
       updateDashboard(); // Update dashboard when year range changes
+    });
+
+    // Add year navigation controls
+    initYearNavigationControls(years);
+  };
+
+  const initYearNavigationControls = (years) => {
+    // Previous year button
+    document.getElementById('prev-year')?.addEventListener('click', () => {
+      const current = yearSlider.noUiSlider.get();
+      const newStart = Math.max(years[0], parseInt(current[0]) - 1);
+      const newEnd = Math.max(years[0], parseInt(current[1]) - 1);
+      yearSlider.noUiSlider.set([newStart, newEnd]);
+    });
+
+    // Next year button
+    document.getElementById('next-year')?.addEventListener('click', () => {
+      const current = yearSlider.noUiSlider.get();
+      const newStart = Math.min(years[years.length - 1], parseInt(current[0]) + 1);
+      const newEnd = Math.min(years[years.length - 1], parseInt(current[1]) + 1);
+      yearSlider.noUiSlider.set([newStart, newEnd]);
+    });
+
+    // Reset to full range
+    document.getElementById('reset-years')?.addEventListener('click', () => {
+      yearSlider.noUiSlider.set([years[0], years[years.length - 1]]);
     });
   };
 
@@ -891,6 +1147,21 @@ document.addEventListener("DOMContentLoaded", () => {
         to: value => periods[Math.round(value)] || '',
         from: val => periods.indexOf(val),
       },
+      tooltips: [true, true],
+      pips: {
+        mode: 'steps',
+        density: Math.max(2, Math.floor(100 / periods.length)),
+        filter: (value) => {
+          // Show every 3rd tick for better readability
+          return value % 3 === 0 ? 1 : 0;
+        },
+        format: {
+          to: (value) => {
+            const period = periods[Math.round(value)];
+            return period ? period.split('/')[0] : '';
+          }
+        }
+      }
     });
 
     if (periods.length > 0) {
@@ -898,23 +1169,62 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     periodSlider.noUiSlider.on("update", (values) => {
-      if (periodStartLbl) periodStartLbl.textContent = values[0];
-      if (periodEndLbl) periodEndLbl.textContent = values[1];
+      updatePeriodCount(values[0], values[1]);
     });
 
     periodSlider.noUiSlider.on("set", updateDashboard);
     periodSlider.noUiSlider.on("change", updateDashboard);
 
-    // Add event listeners for real-time updates
-    periodSlider.noUiSlider.on("update", debounce(() => {
-      if (periodStartLbl && periodEndLbl) {
-        const [start, end] = periodSlider.noUiSlider.get();
-        periodStartLbl.textContent = start;
-        periodEndLbl.textContent = end;
-      }
-    }, 100));
+    // Add enhanced period navigation controls
+    initPeriodNavigationControls(periods);
 
     updateDashboard(); // Initial render
+  };
+
+  const updatePeriodCount = (start, end) => {
+    const startIdx = allPeriods.indexOf(start);
+    const endIdx = allPeriods.indexOf(end);
+    const count = endIdx - startIdx + 1;
+    const countElement = document.getElementById('period-count');
+    if (countElement) {
+      countElement.textContent = count;
+      countElement.parentElement.className = count > 18 ? 'text-warning' : count > 12 ? 'text-info' : 'text-success';
+    }
+  };
+
+  const initPeriodNavigationControls = (periods) => {
+    // Quick selection buttons
+    document.getElementById('last-3m')?.addEventListener('click', () => {
+      if (periods.length >= 3) {
+        const endIdx = periods.length - 1;
+        const startIdx = Math.max(0, endIdx - 2);
+        periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
+      }
+    });
+
+    document.getElementById('last-6m')?.addEventListener('click', () => {
+      if (periods.length >= 6) {
+        const endIdx = periods.length - 1;
+        const startIdx = Math.max(0, endIdx - 5);
+        periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
+      }
+    });
+
+    document.getElementById('last-12m')?.addEventListener('click', () => {
+      if (periods.length >= 12) {
+        const endIdx = periods.length - 1;
+        const startIdx = Math.max(0, endIdx - 11);
+        periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
+      }
+    });
+
+    document.getElementById('all-periods')?.addEventListener('click', () => {
+      if (periods.length > 0) {
+        periodSlider.noUiSlider.set([periods[0], periods[periods.length - 1]]);
+      }
+    });
+
+
   };
 
   // Table update function (keeping existing but enhanced)
@@ -1033,10 +1343,6 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const updateYearRangeDisplay = () => {
-    if (yearStartLbl && yearEndLbl && selectedYearRange.length === 2) {
-      yearStartLbl.textContent = selectedYearRange[0];
-      yearEndLbl.textContent = selectedYearRange[1];
-    }
   };
 
   // Main update function - now recalculates all data based on filters
@@ -1096,7 +1402,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Connect all filter inputs to update dashboard immediately
   const filterInputs = [
-    'include-savings', 'include-investments', 'include-current',
     'analysis-period', 'show-trends'
   ];
 
@@ -1110,18 +1415,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Add specific listeners for the checkboxes that affect charts and tables
-  ['include-savings', 'include-investments', 'include-current'].forEach(id => {
-    const checkbox = document.getElementById(id);
-    if (checkbox) {
-      checkbox.addEventListener('change', () => {
-        console.log(`💡 [${id}] Atualizando gráficos e aguardando KPIs do backend...`);
-        // Mostrar loading e aguardar backend
-        showKPILoadingState();
-        updateDashboard(); // Isso irá buscar os KPIs corretos do backend
-      });
-    }
-  });
+
 
   // Connect slider events to update dashboard with increased debounce
   const updateDashboardDebounced = debounce(updateDashboard, 800);
@@ -1152,9 +1446,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById('reset-filters')?.addEventListener('click', () => {
-    document.getElementById('include-savings').checked = true;
-    document.getElementById('include-investments').checked = true;
-    document.getElementById('include-current').checked = true;
     document.getElementById('analysis-period').value = 'monthly';
     document.getElementById('show-trends').checked = false;
 
@@ -1196,6 +1487,8 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = '/transactions/export-excel/';
   });
 
+  
+
   // Initialize dashboard
   const init = async () => {
     console.log('🚀 Inicializando dashboard avançado...');
@@ -1210,22 +1503,24 @@ document.addEventListener("DOMContentLoaded", () => {
     // Load data with better error handling and fallbacks
     try {
       console.log('📊 Carregando dados do dashboard...');
-      
+
       // Try to load each component independently
       const balanceData = await loadAccountBalances().catch(err => {
         console.warn('⚠️ Falha ao carregar saldos, usando dados mock');
         return generateMockBalanceData();
       });
-      
+
       const kpiData = await loadFinancialKPIs().catch(err => {
         console.warn('⚠️ Falha ao carregar KPIs, usando dados mock');
         return generateMockKPIs();
       });
-      
+
       const analysisData = await loadFinancialAnalysis().catch(err => {
         console.warn('⚠️ Falha ao carregar análise, usando dados simulados');
         return generateSimulatedAnalysis();
       });
+
+      
 
       console.log('✅ Dados carregados:', { 
         balances: !!balanceData, 
