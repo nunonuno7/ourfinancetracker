@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let charts = {};
   let analysisData = {};
   let currentChartType = 'evolution';
+  let lastKPITime = 0;
+  let isInitialized = false;
 
   // DOM elements
   const yearSlider = document.getElementById("year-range");
@@ -349,11 +351,50 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  // Enhanced data loading functions with request control
+  // Enhanced data loading functions with aggressive caching and optimizations
   let isLoadingKPIs = false;
+  let isLoadingBalances = false;
   let lastKPIParams = null;
+  let balanceCache = null;
+  let balanceCacheTime = 0;
+  let kpiCache = new Map();
+  const CACHE_DURATION = 120000; // 2 minutes for better performance
+  const KPI_CACHE_DURATION = 60000; // 1 minute for KPIs
 
-  const loadAccountBalances = async () => {
+  const loadAccountBalances = async (useCache = true) => {
+    // Check cache first - extended cache duration
+    if (useCache && balanceCache && (Date.now() - balanceCacheTime) < CACHE_DURATION) {
+      console.log('🚀 Using cached balance data');
+
+      // Quick setup from cache without re-processing
+      columns = balanceCache.columns || [];
+      rows = balanceCache.rows || [];
+
+      const periods = columns.slice(2);
+      allPeriods = periods.sort((a, b) => parsePeriod(a) - parsePeriod(b));
+      allYears = [...new Set(allPeriods.map(p => 2000 + parseInt(p.split("/")[1])))]
+        .sort((a, b) => a - b);
+
+      fullPeriods = allPeriods;
+
+      return balanceCache;
+    }
+
+    if (isLoadingBalances) {
+      console.log('🔄 Balance loading already in progress, waiting...');
+      // Wait for existing request instead of creating mock data
+      return new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (!isLoadingBalances && balanceCache) {
+            clearInterval(checkInterval);
+            resolve(balanceCache);
+          }
+        }, 100);
+      });
+    }
+
+    isLoadingBalances = true;
+
     try {
       const response = await fetch('/account-balances/json/');
       if (!response.ok) {
@@ -362,21 +403,23 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const data = await response.json();
-      console.log('🔍 Dados de saldos recebidos:', data);
+      console.log('🔍 Dados de saldos carregados da API');
 
+      // Pre-process and cache the data
       columns = data.columns || [];
       rows = data.rows || [];
 
-      // Convert string numbers to actual numbers
-      columns.slice(2).forEach(period =>
-        rows.forEach(row => {
+      // Optimized number conversion - do it once and cache
+      const periods = columns.slice(2);
+      rows.forEach(row => {
+        periods.forEach(period => {
           if (row[period] !== null && row[period] !== undefined) {
             row[period] = parseFloat(row[period]);
           }
-        })
-      );
+        });
+      });
 
-      allPeriods = columns.slice(2).sort((a, b) => parsePeriod(a) - parsePeriod(b));
+      allPeriods = periods.sort((a, b) => parsePeriod(a) - parsePeriod(b));
       allYears = [...new Set(allPeriods.map(p => 2000 + parseInt(p.split("/")[1])))]
         .sort((a, b) => a - b);
 
@@ -386,15 +429,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
       fullPeriods = allPeriods;
 
-      if (allYears.length > 0) {
-        initYearSlider(allYears);
-        initPeriodSlider(fullPeriods, true, 12);
-        updateYearRangeDisplay();
-      } else {
-        // Initialize with current year if no data
-        const currentYear = new Date().getFullYear();
-        initYearSlider([currentYear]);
-        initPeriodSlider([`Jan/${currentYear.toString().slice(-2)}`], true, 12);
+      // Cache the processed data
+      balanceCache = {
+        ...data,
+        columns,
+        rows,
+        allPeriods,
+        allYears,
+        fullPeriods
+      };
+      balanceCacheTime = Date.now();
+
+      // Only initialize sliders once
+      if (!yearSlider.noUiSlider) {
+        if (allYears.length > 0) {
+          initYearSlider(allYears);
+          initPeriodSlider(fullPeriods, true, 12);
+          updateYearRangeDisplay();
+        } else {
+          const currentYear = new Date().getFullYear();
+          initYearSlider([currentYear]);
+          initPeriodSlider([`Jan/${currentYear.toString().slice(-2)}`], true, 12);
+        }
       }
 
       // Update last update timestamp
@@ -403,10 +459,12 @@ document.addEventListener("DOMContentLoaded", () => {
         lastUpdateEl.textContent = new Date().toLocaleString('en-GB');
       }
 
-      return data;
+      return balanceCache;
     } catch (error) {
       console.error('❌ Erro ao carregar saldos:', error);
       return generateMockBalanceData();
+    } finally {
+      isLoadingBalances = false;
     }
   };
 
@@ -439,15 +497,39 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const loadFinancialKPIs = async (startPeriod = null, endPeriod = null) => {
-    // Prevent duplicate calls
     const currentParams = `${startPeriod || 'null'}-${endPeriod || 'null'}`;
-    if (isLoadingKPIs || currentParams === lastKPIParams) {
-      console.log('🔄 Ignorando chamada duplicada de KPIs:', currentParams);
-      return {};
+
+    // Check cache first for instant display
+    const cacheKey = currentParams;
+    const cachedKPI = kpiCache.get(cacheKey);
+    if (cachedKPI && (Date.now() - cachedKPI.timestamp) < KPI_CACHE_DURATION) {
+      console.log('🚀 Using cached KPI data for instant display');
+      updateKPICards(cachedKPI.data);
+      return cachedKPI.data;
+    }
+
+    // Show immediate approximation while loading if we have balance data
+    if (balanceCache && !cachedKPI) {
+      const approximateKPIs = generateApproximateKPIs();
+      updateKPICards(approximateKPIs);
+      console.log('⚡ Showing approximate KPIs while loading exact data');
+    }
+
+    // Prevent duplicate calls
+    if (isLoadingKPIs) {
+      console.log('🔄 KPI loading already in progress, skipping');
+      return cachedKPI?.data || {};
+    }
+
+    // Don't reload same parameters within 2 seconds (reduced from 5)
+    if (currentParams === lastKPIParams && (Date.now() - lastKPITime) < 2000) {
+      console.log('🔄 Ignorando chamada duplicada recente de KPIs:', currentParams);
+      return cachedKPI?.data || {};
     }
 
     isLoadingKPIs = true;
     lastKPIParams = currentParams;
+    lastKPITime = Date.now();
 
     try {
       let url = '/dashboard/kpis/';
@@ -478,7 +560,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const data = await response.json();
-      console.log('📊 KPIs received:', data);
+      console.log('📊 KPIs carregados');
+
+      // Cache the result
+      kpiCache.set(cacheKey, {
+        data: data,
+        timestamp: Date.now()
+      });
+
+      // Limit cache size to prevent memory issues
+      if (kpiCache.size > 20) {
+        const oldestKey = kpiCache.keys().next().value;
+        kpiCache.delete(oldestKey);
+      }
+
       updateKPICards(data);
       return data;
     } catch (error) {
@@ -488,10 +583,65 @@ document.addEventListener("DOMContentLoaded", () => {
       return mockData;
     } finally {
       isLoadingKPIs = false;
-      // Reset after a delay to allow new calls with different parameters
-      setTimeout(() => {
-        lastKPIParams = null;
-      }, 1000);
+    }
+  };
+
+  // Enhanced approximate KPIs calculation for instant Portfolio Analysis display
+  const generateApproximateKPIs = () => {
+    if (!balanceCache || !balanceCache.rows) {
+      return generateMockKPIs();
+    }
+
+    try {
+      // Calculate totals from latest period for instant display
+      const latestPeriod = allPeriods[allPeriods.length - 1];
+      const previousPeriod = allPeriods[allPeriods.length - 2] || latestPeriod;
+
+      let totalSavings = 0;
+      let totalInvestments = 0;
+      let prevSavings = 0;
+      let prevInvestments = 0;
+
+      balanceCache.rows.forEach(row => {
+        const currentValue = parseFloat(row[latestPeriod]) || 0;
+        const prevValue = parseFloat(row[previousPeriod]) || 0;
+        const rowType = (row.type || '').toLowerCase();
+
+        if (rowType.includes('savings') || rowType.includes('current')) {
+          totalSavings += currentValue;
+          prevSavings += prevValue;
+        } else if (rowType.includes('investment')) {
+          totalInvestments += currentValue;
+          prevInvestments += prevValue;
+        }
+      });
+
+      const totalPatrimonio = totalSavings + totalInvestments;
+      const prevPatrimonio = prevSavings + prevInvestments;
+
+      // Calculate approximate growth
+      const wealthGrowth = prevPatrimonio > 0 ? 
+        ((totalPatrimonio - prevPatrimonio) / prevPatrimonio * 100) : 0;
+
+      // Estimate monthly flows from balance changes
+      const estimatedIncome = Math.max(totalSavings - prevSavings + totalInvestments - prevInvestments + 200, 0);
+      const estimatedExpenses = Math.max(200, estimatedIncome * 0.3); // Conservative estimate
+      const savingsRate = estimatedIncome > 0 ? ((estimatedIncome - estimatedExpenses) / estimatedIncome * 100) : 0;
+
+      return {
+        patrimonio_total: `${totalPatrimonio.toLocaleString('en-GB')} €`,
+        receita_media: `${Math.round(estimatedIncome).toLocaleString('en-GB')} €`,
+        despesa_estimada_media: `${Math.round(estimatedExpenses).toLocaleString('en-GB')} €`,
+        valor_investido_total: `${totalInvestments.toLocaleString('en-GB')} €`,
+        despesas_justificadas_pct: "95%", // Optimistic estimate
+        taxa_poupanca: `${savingsRate.toFixed(1)}%`,
+        wealth_growth: `${wealthGrowth >= 0 ? '+' : ''}${wealthGrowth.toFixed(1)}%`,
+        investment_rate: totalPatrimonio > 0 ? `${(totalInvestments / totalPatrimonio * 100).toFixed(1)}%` : "0%",
+        status: 'fast_estimate'
+      };
+    } catch (error) {
+      console.warn('Failed to generate enhanced approximate KPIs:', error);
+      return generateMockKPIs();
     }
   };
 
@@ -707,176 +857,298 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const updateCharts = () => {
+  const updateCharts = async () => {
     if (!charts.evolution || !periodSlider) return;
 
-    try {
-      const [start, end] = periodSlider.noUiSlider.get();
-      const iStart = allPeriods.indexOf(start);
-      const iEnd = allPeriods.indexOf(end);
-      const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+    // Use requestAnimationFrame for smoother updates
+    return new Promise((resolve) => {
+      requestAnimationFrame(async () => {        try {
+          const [start, end] = periodSlider.noUiSlider.get();
+          const iStart = allPeriods.indexOf(start);
+          const iEnd = allPeriods.indexOf(end);
+          const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
 
-      // Get filter settings
-      const includeSavings = true; // Always include savings
-      const includeInvestments = true; // Always include investments
-      const includeCurrent = true; // Always include current accounts
-      const showTrends = document.getElementById('show-trends')?.checked ?? false;
+          // Get filter settings
+          const includeSavings = true;
+          const includeInvestments = true;
+          const includeCurrent = true;
 
-      // Prepare data for charts
-      const savingsData = [];
-      const investmentsData = [];
-      const totalData = [];
+          // Pre-calculate all data in one pass for better performance
+          const chartData = visiblePeriods.map(period => {
+            let savings = 0;
+            let investments = 0;
 
-      visiblePeriods.forEach(period => {
-        let savings = 0;
-        let investments = 0;
+            rows.forEach(row => {
+              const value = row[period] || 0;
+              const rowType = (row.type || '').toLowerCase();
 
-        rows.forEach(row => {
-          const value = row[period] || 0;
-          const rowType = (row.type || '').toLowerCase();
+              if (rowType.includes('savings') && includeSavings) {
+                savings += value;
+              } else if (rowType.includes('investment') && includeInvestments) {
+                investments += value;
+              } else if (rowType.includes('current') && includeCurrent) {
+                savings += value;
+              }
+            });
 
-          if (rowType.includes('savings') && includeSavings) {
-            savings += value;
-          } else if (rowType.includes('investment') && includeInvestments) {
-            investments += value;
-          } else if (rowType.includes('current') && includeCurrent) {
-            savings += value; // Current accounts counted as savings
+            return {
+              period,
+              savings,
+              investments,
+              total: savings + investments
+            };
+          });
+
+          const savingsData = chartData.map(d => d.savings);
+          const investmentsData = chartData.map(d => d.investments);
+          const totalData = chartData.map(d => d.total);
+
+          // Batch chart updates to reduce redraws
+          if (currentChartType === 'evolution') {
+            const datasets = [];
+
+            if (includeSavings) {
+              datasets.push({
+                label: 'Savings (€)',
+                data: savingsData,
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                tension: 0.4,
+                fill: true
+              });
+            }
+
+            if (includeInvestments) {
+              datasets.push({
+                label: 'Investments (€)',
+                data: investmentsData,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                tension: 0.4,
+                fill: true
+              });
+            }
+
+            datasets.push({
+              label: 'Total Net Worth',  
+              data: totalData,
+              borderColor: '#6f42c1',
+              backgroundColor: 'rgba(111, 66, 193, 0.1)',
+              tension: 0.4,
+              borderWidth: 3,
+              fill: false
+            });
+
+            // Single update call
+            charts.evolution.data.labels = visiblePeriods;
+            charts.evolution.data.datasets = datasets;
+            charts.evolution.update('none');
+          } else if (currentChartType === 'flows') {
+            await updateFlowsChart(analysisData);
+          } else if (currentChartType === 'returns') {
+            updateReturnsChart();
+          } else if (currentChartType === 'expenses') {
+            updateExpensesChart();
           }
-        });
 
-        savingsData.push(savings);
-        investmentsData.push(investments);
-        totalData.push(savings + investments);
+          // Update allocation chart efficiently
+          if (chartData.length > 0) {
+            const latest = chartData[chartData.length - 1];
+
+            const allocationData = [];
+            const allocationLabels = [];
+
+            if (includeSavings && latest.savings > 0) {
+              allocationData.push(latest.savings);
+              allocationLabels.push('Savings (€)');
+            }
+            if (includeInvestments && latest.investments > 0) {
+              allocationData.push(latest.investments);
+              allocationLabels.push('Investments (€)');
+            }
+
+            // Single update call
+            charts.allocation.data.labels = allocationLabels;
+            charts.allocation.data.datasets[0].data = allocationData;
+            charts.allocation.update('none');
+          }
+
+          resolve();
+        } catch (error) {
+          console.error('❌ Erro ao atualizar gráficos:', error);
+          resolve();
+        }
       });
-
-      // Update charts based on current type
-      if (currentChartType === 'evolution') {
-        const datasets = [];
-
-        if (includeSavings) {
-          datasets.push({
-            label: 'Savings (€)',
-            data: savingsData,
-            borderColor: '#28a745',
-            backgroundColor: 'rgba(40, 167, 69, 0.1)',
-            tension: 0.4,
-            fill: true
-          });
-        }
-
-        if (includeInvestments) {
-          datasets.push({
-            label: 'Investments (€)',
-            data: investmentsData,
-            borderColor: '#007bff',
-            backgroundColor: 'rgba(0, 123, 255, 0.1)',
-            tension: 0.4,
-            fill: true
-          });
-        }
-
-        datasets.push({
-          label: 'Total Net Worth',  
-          data: totalData,
-          borderColor: '#6f42c1',
-          backgroundColor: 'rgba(111, 66, 193, 0.1)',
-          tension: 0.4,
-          borderWidth: 3,
-          fill: false
-        });
-
-        charts.evolution.data.labels = visiblePeriods;
-        charts.evolution.data.datasets = datasets;
-        charts.evolution.update('none');
-      } else if (currentChartType === 'flows') {
-        updateFlowsChart(analysisData);
-      } else if (currentChartType === 'returns') {
-        updateReturnsChart();
-      } else if (currentChartType === 'expenses') {
-        updateExpensesChart();
-      }
-
-      // Update allocation chart (use latest values)
-      if (savingsData.length > 0 && investmentsData.length > 0) {
-        const latestSavings = savingsData[savingsData.length - 1];
-        const latestInvestments = investmentsData[investmentsData.length - 1];
-
-        const allocationData = [];
-        const allocationLabels = [];
-
-        if (includeSavings && latestSavings > 0) {
-          allocationData.push(latestSavings);
-          allocationLabels.push('Savings (€)');
-        }
-        if (includeInvestments && latestInvestments > 0) {
-          allocationData.push(latestInvestments);
-          allocationLabels.push('Investments (€)');
-        }
-
-        charts.allocation.data.labels = allocationLabels;
-        charts.allocation.data.datasets[0].data = allocationData;
-        charts.allocation.update('none');
-      }
-    } catch (error) {
-      console.error('❌ Erro ao atualizar gráficos:', error);
-    }
+    });
   };
 
-  const updateFlowsChart = (analysisData) => {
+  const updateFlowsChart = async (analysisData) => {
     if (!charts.flows) return;
 
-    // Use real transaction data if available, otherwise generate from account balances
-    if (analysisData && analysisData.data && analysisData.data.length > 0) {
-      const data = analysisData.data.slice(-12); // Last 12 months
-      const labels = data.map(d => d.period);
-      const income = data.map(d => d.income || 0);
-      const expenses = data.map(d => d.expense_estimated || 0);  
-      const investments = data.map(d => d.investment_flow || 0);
-
-      charts.flows.data.labels = labels;
-      charts.flows.data.datasets[0].data = income;
-      charts.flows.data.datasets[1].data = expenses;
-      charts.flows.data.datasets[2].data = investments;
-    } else {
-      // Generate from current visible periods
+    try {
+      // Get the current period range from slider
       const [start, end] = periodSlider.noUiSlider.get();
       const iStart = allPeriods.indexOf(start);
       const iEnd = allPeriods.indexOf(end);
       const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
 
-      // Calculate estimated flows based on balance changes
+      console.log('📊 [updateFlowsChart] Processing periods:', visiblePeriods);
+
+      // Fetch real transaction data for each period individually
+      const incomeData = [];
+      const expenseData = [];
+      const investmentData = [];
+
+      for (const period of visiblePeriods) {
+        try {
+          // Convert period format from "Jul/25" to date range
+          const [month, year] = period.split('/');
+          const fullYear = 2000 + parseInt(year);
+          const monthNum = getMonthNumber(month); // String format for API
+          const monthInt = getMonthNumberInt(month); // Integer for date calculations
+
+          // Get last day of month
+          const lastDay = new Date(fullYear, monthInt, 0).getDate();
+
+          const response = await fetch('/transactions/totals-v2/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+              date_start: `${fullYear}-${monthNum}-01`,
+              date_end: `${fullYear}-${monthNum}-${lastDay}`,
+              include_system: true
+            })
+          });
+
+          if (response.ok) {
+            const periodData = await response.json();
+            incomeData.push(periodData.income || 0);
+            expenseData.push(Math.abs(periodData.expenses || 0)); // Make positive for display
+            investmentData.push(Math.abs(periodData.investments || 0)); // Make positive for display
+
+            console.log(`📊 [updateFlowsChart] ${period}:`, {
+              income: periodData.income || 0,
+              expenses: Math.abs(periodData.expenses || 0),
+              investments: Math.abs(periodData.investments || 0)
+            });
+          } else {
+            // If API fails, use 0 values for this period
+            incomeData.push(0);
+            expenseData.push(0);
+            investmentData.push(0);
+            console.warn(`⚠️ [updateFlowsChart] Failed to get data for period ${period}`);
+          }
+        } catch (periodError) {
+          console.warn(`⚠️ [updateFlowsChart] Error processing period ${period}:`, periodError);
+          incomeData.push(0);
+          expenseData.push(0);
+          investmentData.push(0);
+        }
+      }
+
+      // Update chart with real monthly data
+      charts.flows.data.labels = visiblePeriods;
+      charts.flows.data.datasets[0].data = incomeData;
+      charts.flows.data.datasets[1].data = expenseData;
+      charts.flows.data.datasets[2].data = investmentData;
+
+      console.log('📊 [updateFlowsChart] Chart updated with real monthly data:', {
+        periods: visiblePeriods.length,
+        totalIncome: incomeData.reduce((a, b) => a + b, 0).toFixed(2),
+        totalExpenses: expenseData.reduce((a, b) => a + b, 0).toFixed(2),
+        totalInvestments: investmentData.reduce((a, b) => a + b, 0).toFixed(2)
+      });
+
+    } catch (error) {
+      console.warn('⚠️ [updateFlowsChart] Failed to load real transaction data, using fallback method:', error);
+
+      // Fallback: Calculate flows from account balance changes
+      const [start, end] = periodSlider.noUiSlider.get();
+      const iStart = allPeriods.indexOf(start);
+      const iEnd = allPeriods.indexOf(end);
+      const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+
       const incomeData = [];
       const expenseData = [];
       const investmentData = [];
 
       visiblePeriods.forEach((period, index) => {
-        // Simulate income (average based on savings growth)
-        const baseIncome = 2000 + (Math.random() * 1000);
-        incomeData.push(baseIncome);
+        let currentSavings = 0;
+        let currentInvestments = 0;
+        let prevSavings = 0;
+        let prevInvestments = 0;
 
-        // Simulate expenses (portion of income)
-        const baseExpense = baseIncome * (0.3 + Math.random() * 0.4);
-        expenseData.push(baseExpense);
-
-        // Get actual investment flow if available
-        let investments = 0;
+        // Get current period values
         rows.forEach(row => {
           const value = parseFloat(row[period]) || 0;
           const rowType = (row.type || '').toLowerCase();
-          if (rowType.includes('investment')) {
-            investments += Math.abs(value * 0.1); // Estimate monthly investment flow
+          if (rowType.includes('savings') || rowType.includes('current')) {
+            currentSavings += value;
+          } else if (rowType.includes('investment')) {
+            currentInvestments += value;
           }
         });
-        investmentData.push(investments || 200);
+
+        // Get previous period values if available
+        if (index > 0) {
+          const prevPeriod = visiblePeriods[index - 1];
+          rows.forEach(row => {
+            const value = parseFloat(row[prevPeriod]) || 0;
+            const rowType = (row.type || '').toLowerCase();
+            if (rowType.includes('savings') || rowType.includes('current')) {
+              prevSavings += value;
+            } else if (rowType.includes('investment')) {
+              prevInvestments += value;
+            }
+          });
+        }
+
+        // Calculate changes (approximated flows)
+        const savingsChange = currentSavings - prevSavings;
+        const investmentChange = currentInvestments - prevInvestments;
+
+        // Estimate income and expenses from balance changes
+        const estimatedIncome = Math.max(savingsChange + Math.abs(investmentChange) + 200, 0);
+        const estimatedExpenses = Math.max(200, 0); // Minimum base expenses
+        const estimatedInvestmentFlow = Math.abs(investmentChange);
+
+        incomeData.push(estimatedIncome);
+        expenseData.push(estimatedExpenses);
+        investmentData.push(estimatedInvestmentFlow);
       });
 
       charts.flows.data.labels = visiblePeriods;
       charts.flows.data.datasets[0].data = incomeData;
       charts.flows.data.datasets[1].data = expenseData;
       charts.flows.data.datasets[2].data = investmentData;
+
+      console.log('📊 [updateFlowsChart] Using fallback data based on balance changes');
     }
-    
+
     charts.flows.update('none');
+  };
+
+  // Helper function to convert month name to number
+  const getMonthNumber = (monthName) => {
+    const months = {
+      'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+      'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+      'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+    };
+    return months[monthName] || '01';
+  };
+
+  // Helper function to get month number as integer (for date calculations)
+  const getMonthNumberInt = (monthName) => {
+    const months = {
+      'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
+      'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
+      'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+    };
+    return months[monthName] || 1;
   };
 
   const updateReturnsChart = () => {
@@ -966,7 +1238,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Show selected chart and update current type
     currentChartType = chartType;
-    
+
     if (chartType === 'evolution' && evolutionCanvas) {
       evolutionCanvas.style.display = 'block';
     } else if (chartType === 'flows' && flowsCanvas) {
@@ -1345,12 +1617,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const updateYearRangeDisplay = () => {
   };
 
-  // Main update function - now recalculates all data based on filters
+  // Optimized main update function with parallel loading and smart updates
   const updateDashboard = async () => {
-    if (!periodSlider || !rows.length) return;
+    if (!periodSlider || !rows.length || !isInitialized) return;
 
     try {
-      console.log('🔄 Atualizando dashboard com filtros...');
+      console.log('🔄 Atualizando dashboard...');
 
       // Get current filter settings
       const [start, end] = periodSlider.noUiSlider.get();
@@ -1362,36 +1634,28 @@ document.addEventListener("DOMContentLoaded", () => {
       const includeInvestments = document.getElementById('include-investments')?.checked ?? true;
       const includeCurrent = document.getElementById('include-current')?.checked ?? true;
 
-      console.log('🎛️ [updateDashboard] Configurações de filtro:', {
-        visiblePeriods: visiblePeriods.length,
-        periodRange: `${start} - ${end}`,
-        includeSavings,
-        includeInvestments,
-        includeCurrent
+      // Run fast operations in parallel for better perceived performance
+      const fastOperations = [
+        updateCharts(),  // Charts update from cached data
+        updateTable(),   // Table update from cached data
+      ];
+
+      // Start these immediately
+      Promise.all(fastOperations).then(() => {
+        console.log('✅ Fast updates completed');
       });
 
-      // Mostrar loading state nos KPIs
-      showKPILoadingState();
+      // Load KPIs in parallel (will show cached/approximate values first)
+      const kpiPromise = (start && end) ? loadFinancialKPIs(start, end) : Promise.resolve();
 
-      // Update charts with filtered data
-      updateCharts();
-
-      // Update table with filtered data
-      updateTable();
-
-      // Load real KPIs from server - SEMPRE aguardar pela resposta correta
-      if (start && end) {
-        await loadFinancialKPIs(start, end);
-      } else {
-        // Se não há filtro de período, carregar sem filtros
-        await loadFinancialKPIs();
-      }
-
-      // Regenerate insights based on filtered data
+      // Generate insights from cached data immediately (no API call needed)
       const filteredAnalysis = generateFilteredAnalysis(visiblePeriods, includeSavings, includeInvestments, includeCurrent);
       generateInsights(filteredAnalysis);
 
-      console.log('✅ Dashboard atualizado com filtros aplicados');
+      // Wait for all operations to complete
+      await Promise.all([...fastOperations, kpiPromise]);
+
+      console.log('✅ Dashboard atualizado');
     } catch (error) {
       console.error('❌ Erro ao atualizar dashboard:', error);
     }
@@ -1417,17 +1681,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-  // Connect slider events to update dashboard with increased debounce
-  const updateDashboardDebounced = debounce(updateDashboard, 800);
+  // Connect slider events to update dashboard with optimized debounce
+  const updateDashboardDebounced = debounce(updateDashboard, 500);
 
-  // Year slider event listeners
+  // Year slider event listeners - only on set (final value)
   if (yearSlider) {
-    yearSlider.addEventListener('noUiSlider-change', updateDashboardDebounced);
+    yearSlider.addEventListener('noUiSlider-set', updateDashboardDebounced);
   }
 
-  // Period slider event listeners
+  // Period slider event listeners - only on set (final value)
   if (periodSlider) {
-    periodSlider.addEventListener('noUiSlider-change', updateDashboardDebounced);
+    periodSlider.addEventListener('noUiSlider-set', updateDashboardDebounced);
   }
 
   document.getElementById('refresh-data')?.addEventListener('click', async () => {
@@ -1446,19 +1710,55 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById('reset-filters')?.addEventListener('click', () => {
-    document.getElementById('analysis-period').value = 'monthly';
-    document.getElementById('show-trends').checked = false;
+    console.log('🔄 Resetting all filters to default values');
+    
+    // Reset analysis period filter
+    const analysisPeriod = document.getElementById('analysis-period');
+    if (analysisPeriod) {
+      analysisPeriod.value = 'monthly';
+    }
+    
+    // Reset show trends checkbox
+    const showTrends = document.getElementById('show-trends');
+    if (showTrends) {
+      showTrends.checked = false;
+    }
+
+    // Reset account type filters
+    const includeSavings = document.getElementById('include-savings');
+    if (includeSavings) {
+      includeSavings.checked = true;
+    }
+    
+    const includeInvestments = document.getElementById('include-investments');
+    if (includeInvestments) {
+      includeInvestments.checked = true;
+    }
+    
+    const includeCurrent = document.getElementById('include-current');
+    if (includeCurrent) {
+      includeCurrent.checked = true;
+    }
 
     // Reset sliders to full range
-    if (yearSlider && yearSlider.noUiSlider) {
+    if (yearSlider && yearSlider.noUiSlider && allYears.length > 0) {
+      console.log('🔄 Resetting year slider to full range:', [allYears[0], allYears[allYears.length - 1]]);
       yearSlider.noUiSlider.set([allYears[0], allYears[allYears.length - 1]]);
     }
-    if (periodSlider && periodSlider.noUiSlider) {
+    
+    if (periodSlider && periodSlider.noUiSlider && allPeriods.length > 0) {
       const lastIndex = allPeriods.length - 1;
       const startIndex = Math.max(0, lastIndex - 11); // Last 12 months
+      console.log('🔄 Resetting period slider to last 12 months:', [allPeriods[startIndex], allPeriods[lastIndex]]);
       periodSlider.noUiSlider.set([allPeriods[startIndex], allPeriods[lastIndex]]);
     }
 
+    // Clear caches to force fresh data
+    balanceCache = null;
+    balanceCacheTime = 0;
+    kpiCache.clear();
+    
+    console.log('✅ All filters reset, updating dashboard');
     updateDashboard();
   });
 
@@ -1487,11 +1787,17 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = '/transactions/export-excel/';
   });
 
-  
 
-  // Initialize dashboard
+
+  // Initialize dashboard - optimized to prevent multiple initializations
   const init = async () => {
-    console.log('🚀 Inicializando dashboard avançado...');
+    if (isInitialized) {
+      console.log('⚠️ Dashboard já inicializado, ignorando');
+      return;
+    }
+
+    console.log('🚀 Inicializando dashboard...');
+    isInitialized = true;
 
     // Initialize charts first with error handling
     try {
@@ -1502,31 +1808,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Load data with better error handling and fallbacks
     try {
-      console.log('📊 Carregando dados do dashboard...');
+      console.log('📊 Carregando dados...');
 
-      // Try to load each component independently
-      const balanceData = await loadAccountBalances().catch(err => {
+      // Load account balances first (most important)
+      const balanceData = await loadAccountBalances(false).catch(err => {
         console.warn('⚠️ Falha ao carregar saldos, usando dados mock');
         return generateMockBalanceData();
       });
 
+      // Load KPIs after balances are ready
       const kpiData = await loadFinancialKPIs().catch(err => {
         console.warn('⚠️ Falha ao carregar KPIs, usando dados mock');
         return generateMockKPIs();
       });
 
-      const analysisData = await loadFinancialAnalysis().catch(err => {
+      // Load analysis data (less critical, can be async)
+      loadFinancialAnalysis().catch(err => {
         console.warn('⚠️ Falha ao carregar análise, usando dados simulados');
         return generateSimulatedAnalysis();
       });
 
-      
-
-      console.log('✅ Dados carregados:', { 
-        balances: !!balanceData, 
-        kpis: !!kpiData, 
-        analysis: !!analysisData 
-      });
+      console.log('✅ Dados carregados');
 
     } catch (error) {
       console.error('❌ Erro durante inicialização:', error);
@@ -1538,7 +1840,7 @@ document.addEventListener("DOMContentLoaded", () => {
       updateKPICards(generateMockKPIs());
     }
 
-    console.log('✅ Dashboard avançado inicializado com sucesso');
+    console.log('✅ Dashboard inicializado');
   };
 
   // Function to synchronize system adjustments

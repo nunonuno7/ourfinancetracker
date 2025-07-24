@@ -1452,16 +1452,27 @@ def transactions_totals_v2(request):
         where_conditions.append("""(
             COALESCE(cat.name, '') ILIKE %s OR
             COALESCE(acc.name, '') ILIKE %s OR
-            COALESCE(STRING_AGG(tag.name, ', '), '') ILIKE %s
+            tx.id IN (
+                SELECT DISTINCT tt.transaction_id 
+                FROM core_transactiontag tt 
+                INNER JOIN core_tag tag ON tt.tag_id = tag.id 
+                WHERE tag.name ILIKE %s
+            )
         )""")
         params.extend([search_term, search_term, search_term])
 
-    # Tags filter
-    if data.get("tags", "").strip():
-        tag_list = [t.strip().lower() for t in data.get("tags").split(",") if t.strip()]
+    # Tags filter - handle separately to avoid duplication
+    tags_filter = data.get("tags", "").strip()
+    if tags_filter:
+        tag_list = [t.strip().lower() for t in tags_filter.split(",") if t.strip()]
         if tag_list:
             tag_pattern = '|'.join(tag_list)
-            where_conditions.append("COALESCE(STRING_AGG(tag.name, ', '), '') ~* %s")
+            where_conditions.append("""tx.id IN (
+                SELECT DISTINCT tt.transaction_id 
+                FROM core_transactiontag tt 
+                INNER JOIN core_tag tag ON tt.tag_id = tag.id 
+                WHERE tag.name ~* %s
+            )""")
             params.append(tag_pattern)
 
     where_clause = " AND ".join(where_conditions)
@@ -1470,7 +1481,7 @@ def transactions_totals_v2(request):
     logger.debug(f"🔍 [transactions_totals_v2] Parameters: {params}")
 
     with connection.cursor() as cursor:
-        # Complex query with JOINs to support all filters
+        # Simplified query to avoid duplication from tag JOINs
         query = f"""
             SELECT 
                 tx.type,
@@ -1479,8 +1490,6 @@ def transactions_totals_v2(request):
             LEFT JOIN core_category cat ON tx.category_id = cat.id
             LEFT JOIN core_account acc ON tx.account_id = acc.id
             LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
-            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
-            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
             WHERE {where_clause}
             GROUP BY tx.type
         """
@@ -1497,6 +1506,10 @@ def transactions_totals_v2(request):
         'investments': 0,
         'transfers': 0
     }
+    
+    # Debug individual transactions
+    for tx_type, amount in rows:
+        logger.debug(f"🔍 [transactions_totals_v2] Processing: type={tx_type}, amount={amount}")
 
     type_mapping = {
         'IN': 'income',
@@ -1506,10 +1519,30 @@ def transactions_totals_v2(request):
     }
 
     for tx_type, amount in rows:
-        mapped_type = type_mapping.get(tx_type, 'expenses')
-        totals[mapped_type] += float(amount)
+        amount_float = float(amount)
+        logger.debug(f"💰 [transactions_totals_v2] Processing {tx_type}: {amount_float}")
+        
+        if tx_type == 'IN':
+            # Income: sum positive values
+            totals['income'] += abs(amount_float)
+            logger.debug(f"📈 [transactions_totals_v2] Income += {abs(amount_float)}, total now: {totals['income']}")
+        elif tx_type == 'EX':
+            # Expenses: sum absolute values (database stores as negative, display as positive)
+            totals['expenses'] += abs(amount_float)
+            logger.debug(f"📉 [transactions_totals_v2] Expenses += {abs(amount_float)}, total now: {totals['expenses']}")
+        elif tx_type == 'IV':
+            # Investments: sum absolute values (database stores as negative, display as positive)
+            totals['investments'] += abs(amount_float)
+            logger.debug(f"📊 [transactions_totals_v2] Investments += {abs(amount_float)}, total now: {totals['investments']}")
+        elif tx_type == 'TR':
+            # Transfers: keep original sign
+            totals['transfers'] += amount_float
+            logger.debug(f"🔄 [transactions_totals_v2] Transfers += {amount_float}, total now: {totals['transfers']}")
 
-    totals['balance'] = totals['income'] - abs(totals['expenses'])
+    # Balance = Income - Expenses (not including investments or transfers)
+    totals['balance'] = totals['income'] - totals['expenses']
+    
+    logger.debug(f"🧮 [transactions_totals_v2] Final calculation: Balance = {totals['income']} - {totals['expenses']} = {totals['balance']}")
 
     logger.debug(f"📊 [transactions_totals_v2] Final totals: {totals}")
     return JsonResponse(totals)
