@@ -401,37 +401,60 @@ class EstimationManager {
 
         console.log('👁️ [handleViewDetails] Showing details for:', summary);
 
-        // Populate modal
+        // Populate modal with details
+        const details = summary.details;
+
+        // Set period title
         $('#modal-period-title').text(summary.period);
 
-        // Real transactions
-        $('#detail-real-income').text(this.formatCurrency(summary.details.real_income || 0));
-        $('#detail-real-expenses').text(this.formatCurrency(summary.details.real_expenses || 0));
-        $('#detail-real-investments').text(this.formatCurrency(summary.details.real_investments || 0));
+        // Estimated Transactions
+        const estimatedIncome = details.estimated_income || 0;
+        const estimatedExpenses = details.estimated_expenses_tx || 0;
+        const estimatedInvestments = details.estimated_investments || 0;
+        
+        $('#detail-estimated-income').text(this.formatCurrency(estimatedIncome));
+        $('#detail-estimated-expenses-tx').text(this.formatCurrency(estimatedExpenses));
+        $('#detail-estimated-investments').text(this.formatCurrencyWithSign(estimatedInvestments));
+        
+        // Calculate and display estimated total
+        const estimatedTotal = estimatedIncome - estimatedExpenses + estimatedInvestments;
+        $('#detail-estimated-total').text(this.formatCurrencyWithSign(estimatedTotal));
 
-        // Estimated transactions
-        $('#detail-estimated-income').text(this.formatCurrency(summary.details.estimated_income || 0));
-        $('#detail-estimated-expenses-tx').text(this.formatCurrency(summary.details.estimated_expenses_tx || 0));
-        $('#detail-estimated-investments').text(this.formatCurrency(summary.details.estimated_investments || 0));
+        // Combined Totals
+        const combinedIncome = (details.real_income || 0) + (details.estimated_income || 0);
+        const combinedExpenses = (details.real_expenses || 0) + (details.estimated_expenses_tx || 0);
+        const combinedInvestments = (details.real_investments || 0) + (details.estimated_investments || 0);
+        
+        $('#detail-income-inserted').text(this.formatCurrency(combinedIncome));
+        $('#detail-expense-inserted').text(this.formatCurrency(combinedExpenses));
+        $('#detail-investment-inserted').text(this.formatCurrencyWithSign(combinedInvestments));
+        
+        // Calculate and display combined total using transaction formula: Income - Expenses - Investments
+        const combinedTotal = combinedIncome - combinedExpenses - combinedInvestments;
+        $('#detail-combined-total').text(this.formatCurrencyWithSign(combinedTotal));
 
-        // Total recorded transactions
-        $('#detail-income-inserted').text(this.formatCurrency(summary.details.income_inserted));
-        $('#detail-expense-inserted').text(this.formatCurrency(summary.details.expense_inserted));
-        $('#detail-investment-inserted').text(this.formatCurrency(summary.details.investment_inserted));
+        // Savings Analysis
+        $('#detail-savings-current').text(this.formatCurrency(details.savings_current || 0));
+        $('#detail-savings-next').text(this.formatCurrency(details.savings_next || 0));
 
-        // Account balances
-        $('#detail-savings-current').text(this.formatCurrency(summary.details.savings_current));
-        $('#detail-savings-next').text(this.formatCurrency(summary.details.savings_next));
+        const savingsDiff = (details.savings_next || 0) - (details.savings_current || 0);
+        const savingsDiffElement = $('#detail-savings-diff');
+        savingsDiffElement.text(this.formatCurrencyWithSign(savingsDiff));
 
-        const savingsDiff = summary.details.savings_next - summary.details.savings_current;
-        $('#detail-savings-diff').text(this.formatCurrency(savingsDiff))
-            .removeClass('text-success text-danger')
-            .addClass(savingsDiff >= 0 ? 'text-success' : 'text-danger');
+        // Update badge color based on savings change
+        savingsDiffElement.removeClass('bg-primary bg-success bg-danger bg-warning');
+        if (savingsDiff > 0) {
+            savingsDiffElement.addClass('bg-success');
+        } else if (savingsDiff < 0) {
+            savingsDiffElement.addClass('bg-danger');
+        } else {
+            savingsDiffElement.addClass('bg-secondary');
+        }
 
-        // Calculation results
-        $('#detail-estimated-expenses').text(this.formatCurrency(summary.details.estimated_expenses));
-        $('#detail-missing-expenses').text(this.formatCurrency(summary.details.missing_expenses));
-        $('#detail-missing-income').text(this.formatCurrency(summary.details.missing_income));
+        // Calculation Results
+        $('#detail-estimated-expenses').text(this.formatCurrency(details.estimated_expenses || 0));
+        $('#detail-missing-expenses').text(this.formatCurrency(details.missing_expenses || 0));
+        $('#detail-missing-income').text(this.formatCurrency(details.missing_income || 0));
 
         // Show modal
         $('#estimationDetailsModal').modal('show');
@@ -442,6 +465,20 @@ class EstimationManager {
             style: 'currency',
             currency: 'EUR'
         }).format(amount || 0);
+    }
+
+    // Function to format amount to include sign
+    formatCurrencyWithSign(amount) {
+        return new Intl.NumberFormat('pt-PT', {
+            style: 'currency',
+            currency: 'EUR',
+            signDisplay: 'always',
+        }).format(amount || 0);
+    }
+
+    // Legacy function for backward compatibility
+    formatAmount(amount) {
+        return this.formatCurrencyWithSign(amount);
     }
 
     showLoading(show) {

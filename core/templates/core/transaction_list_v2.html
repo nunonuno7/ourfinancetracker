@@ -267,55 +267,92 @@ today %} {% block content %} {% csrf_token %}
   </div>
 
   <!-- Main Table Section -->
-  <div class="card shadow">
+  <div class="card shadow-sm border-0">
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table id="transactions-table" class="table table-hover mb-0">
-          <thead class="table-light sticky-top">
-            <tr>
-              <th style="width: 40px">
+        <table id="transactions-table" class="table table-hover mb-0 table-sm">
+          <thead class="table-dark sticky-top">
+            <tr class="text-nowrap">
+              <th style="width: 40px; padding: 0.75rem 0.5rem; text-align: center;">
                 <input
                   type="checkbox"
                   class="form-check-input"
                   id="select-all"
                   style="display: none"
                 />
-                #
+                <span class="badge bg-secondary" style="font-size: 0.7rem;">#</span>
               </th>
-              <th class="sortable-header" data-sort="date">
-                📅 Date <i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-header" data-sort="date" style="min-width: 110px; padding: 0.75rem;">
+                <div class="d-flex align-items-center">
+                  <span class="me-1">📅</span>
+                  <span class="d-none d-sm-inline">Date</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
               <th
                 class="d-none d-md-table-cell sortable-header"
                 data-sort="period"
+                style="min-width: 100px; padding: 0.75rem;"
               >
-                📆 Period <i class="fas fa-sort sort-icon"></i>
+                <div class="d-flex align-items-center">
+                  <span class="me-1">📆</span>
+                  <span>Period</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
-              <th class="sortable-header" data-sort="type">
-                📊 Type <i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-header" data-sort="type" style="min-width: 90px; padding: 0.75rem;">
+                <div class="d-flex align-items-center">
+                  <span class="me-1">📊</span>
+                  <span class="d-none d-sm-inline">Type</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
-              <th class="sortable-header" data-sort="amount">
-                💰 Amount <i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-header text-end" data-sort="amount" style="min-width: 120px; padding: 0.75rem;">
+                <div class="d-flex align-items-center justify-content-end">
+                  <span class="me-1">💰</span>
+                  <span>Amount</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
               <th
                 class="d-none d-lg-table-cell sortable-header"
                 data-sort="category"
+                style="min-width: 120px; padding: 0.75rem;"
               >
-                🏷️ Category <i class="fas fa-sort sort-icon"></i>
+                <div class="d-flex align-items-center">
+                  <span class="me-1">🏷️</span>
+                  <span>Category</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
               <th
                 class="d-none d-xl-table-cell sortable-header"
                 data-sort="tags"
+                style="min-width: 100px; padding: 0.75rem;"
               >
-                🏷️ Tags <i class="fas fa-sort sort-icon"></i>
+                <div class="d-flex align-items-center">
+                  <span class="me-1">🏷️</span>
+                  <span>Tags</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
               <th
                 class="d-none d-md-table-cell sortable-header"
                 data-sort="account"
+                style="min-width: 100px; padding: 0.75rem;"
               >
-                🏦 Account <i class="fas fa-sort sort-icon"></i>
+                <div class="d-flex align-items-center">
+                  <span class="me-1">🏦</span>
+                  <span>Account</span>
+                  <i class="fas fa-sort sort-icon ms-1"></i>
+                </div>
               </th>
-              <th style="width: 120px">⚙️ Actions</th>
+              <th style="width: 120px; padding: 0.75rem; text-align: center;">
+                <div class="d-flex align-items-center justify-content-center">
+                  <span class="me-1">⚙️</span>
+                  <span class="d-none d-sm-inline">Actions</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody id="transactions-tbody">
@@ -387,15 +424,42 @@ today %} {% block content %} {% csrf_token %}
     position: sticky !important;
     top: 0;
     z-index: 1020;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .table-dark {
+    background-color: #000000 !important;
+  }
+
+  .table-dark th {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    border-color: #333333 !important;
   }
 
   .table-hover tbody tr:hover {
-    background-color: rgba(0, 123, 255, 0.05);
+    background-color: rgba(0, 123, 255, 0.08);
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+  }
+
+  .table-sm td {
+    padding: 0.5rem 0.75rem;
+    vertical-align: middle;
+    font-size: 0.9rem;
+  }
+
+  .table-sm th {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
   }
 
   .card {
     border: none;
     border-radius: 12px;
+    overflow: hidden;
   }
 
   .btn {
@@ -408,39 +472,125 @@ today %} {% block content %} {% csrf_token %}
   }
 
   .transaction-amount {
-    font-family: "Courier New", monospace;
+    font-family: "JetBrains Mono", "Courier New", monospace;
     font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
   }
 
   .badge {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    padding: 0.35em 0.65em;
   }
 
+  /* Enhanced row styling */
+  .table tbody tr {
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+
+  .table tbody tr:nth-child(even) {
+    background-color: rgba(248, 249, 250, 0.5);
+  }
+
+  /* Type badges styling */
+  .type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .type-income { background-color: #d4edda; color: #155724; }
+  .type-expense { background-color: #f8d7da; color: #721c24; }
+  .type-investment { background-color: #d1ecf1; color: #0c5460; }
+  .type-transfer { background-color: #fff3cd; color: #856404; }
+
+  /* Mobile optimizations */
   @media (max-width: 768px) {
     .container-fluid {
       padding: 0.5rem;
     }
 
     .card-body {
-      padding: 1rem;
+      padding: 0;
+    }
+
+    .table-sm td {
+      padding: 0.4rem 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .table-sm th {
+      padding: 0.5rem;
+      font-size: 0.8rem;
     }
 
     .btn {
-      padding: 0.375rem 0.5rem;
-      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .transaction-amount {
+      font-size: 0.85rem;
     }
   }
 
   .amount-positive {
-    color: #28a745;
+    color: #198754;
+    font-weight: 600;
   }
 
   .amount-negative {
     color: #dc3545;
+    font-weight: 600;
   }
 
   .amount-neutral {
     color: #6c757d;
+    font-weight: 500;
+  }
+
+  /* Account and category pills */
+  .account-pill, .category-pill {
+    background-color: #f8f9fa;
+    color: #495057;
+    padding: 0.2rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    border: 1px solid #e9ecef;
+    display: inline-block;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .category-pill {
+    background-color: #e7f3ff;
+    color: #0056b3;
+    border-color: #b8daff;
+  }
+
+  /* Tags styling */
+  .tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    max-width: 150px;
+  }
+
+  .tag-pill {
+    background-color: #fff2e6;
+    color: #cc5500;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.75rem;
+    font-size: 0.7rem;
+    border: 1px solid #ffd4a8;
+    white-space: nowrap;
   }
 
   /* Investment Flow Styles */

@@ -584,29 +584,91 @@ class TransactionManager {
   createTransactionRow(tx, index) {
     const isSelected = this.selectedRows.has(tx.id);
 
-    // Format type display
-    let typeDisplay = tx.type;
-
-    // Style for system transactions and adjust type display
+    // Style for system transactions
     const isSystemRow = tx.is_system;
     const rowClass = isSystemRow ? "table-warning" : "";
     let systemBadge = "";
 
     if (isSystemRow) {
-      systemBadge = '<span class="badge bg-info ms-1">AUTO</span>';
-
-      // Keep the type display as received from backend, don't modify it
-      // The backend already maps 'AJ' -> 'Adjustment' correctly
+      systemBadge = '<span class="badge bg-info ms-1" title="Automatically calculated">AUTO</span>';
     }
+
+    // Format type with colored badge
+    const getTypeBadge = (type) => {
+      const typeClasses = {
+        'Income': 'type-badge type-income',
+        'Expense': 'type-badge type-expense',
+        'Investment': 'type-badge type-investment',
+        'Transfer': 'type-badge type-transfer'
+      };
+      const className = typeClasses[type] || 'type-badge';
+      return `<span class="${className}">${this.getTypeIcon(type)} ${type}</span>`;
+    };
+
+    // Format amount with proper styling
+    const formatAmount = (amount, type) => {
+      // For investments, determine color based on actual amount value
+      let amountClass = 'amount-neutral';
+      
+      if (type === 'Income') {
+        amountClass = 'amount-positive';
+      } else if (type === 'Expense') {
+        amountClass = 'amount-negative';
+      } else if (type === 'Investment') {
+        // For investments, check if the original amount is positive or negative
+        const numAmount = parseFloat(tx.amount);
+        amountClass = numAmount >= 0 ? 'amount-positive' : 'amount-negative';
+      }
+      
+      return `<span class="transaction-amount ${amountClass}">${tx.amount_formatted}</span>`;
+    };
+
+    // Format category as pill
+    const formatCategory = (category) => {
+      if (!category || category === '') return '<span class="text-muted">-</span>';
+      return `<span class="category-pill" title="${category}">${category}</span>`;
+    };
+
+    // Format account as pill
+    const formatAccount = (account) => {
+      if (!account || account === 'No account') return '<span class="text-muted">-</span>';
+      return `<span class="account-pill" title="${account}">${account}</span>`;
+    };
+
+    // Format tags as pills
+    const formatTags = (tags) => {
+      if (!tags || tags === '') return '<span class="text-muted">-</span>';
+      
+      const tagList = tags.split(', ').filter(tag => tag.trim());
+      if (tagList.length === 0) return '<span class="text-muted">-</span>';
+      
+      const tagPills = tagList.slice(0, 2).map(tag => 
+        `<span class="tag-pill" title="${tag}">${tag}</span>`
+      ).join(' ');
+      
+      const moreCount = tagList.length - 2;
+      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${tagList.slice(2).join(', ')}">+${moreCount}</span>` : '';
+      
+      return `<div class="tags-container">${tagPills}${moreIndicator}</div>`;
+    };
+
+    // Format date with better display
+    const formatDate = (dateStr) => {
+      const date = new Date(dateStr);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear().toString().substr(-2);
+      return `<span class="text-nowrap">${day}/${month}/${year}</span>`;
+    };
 
     // Disable actions for non-editable system transactions
     const actionsHtml = tx.editable
       ? `
-      <div class="btn-group btn-group-sm">
-        <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit">
+      <div class="btn-group btn-group-sm" role="group">
+        <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit transaction">
           <i class="fas fa-edit"></i>
         </a>
-        <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete">
+        <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete transaction">
           <i class="fas fa-trash"></i>
         </a>
       </div>
@@ -624,26 +686,29 @@ class TransactionManager {
 
     return `
       <tr data-id="${tx.id}" class="${rowClass}">
-        <td ${checkboxVisibility}><input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}></td>
-        <td>${tx.date}</td>
-        <td class="d-none d-md-table-cell">${tx.period}</td>
-        <td>${tx.type}${systemBadge}</td>
-        <td class="text-end">${tx.amount_formatted}</td>
-        <td class="d-none d-lg-table-cell">${tx.category}</td>
-        <td class="d-none d-xl-table-cell">${tx.tags}</td>
-        <td class="d-none d-md-table-cell">${tx.account}</td>
-        <td class="text-end">${actionsHtml}</td>
+        <td ${checkboxVisibility} class="text-center">
+          <input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}>
+        </td>
+        <td class="text-nowrap">${formatDate(tx.date)}</td>
+        <td class="d-none d-md-table-cell text-muted">${tx.period}</td>
+        <td>${getTypeBadge(tx.type)}${systemBadge}</td>
+        <td class="text-end">${formatAmount(tx.amount_formatted, tx.type)}</td>
+        <td class="d-none d-lg-table-cell">${formatCategory(tx.category)}</td>
+        <td class="d-none d-xl-table-cell">${formatTags(tx.tags)}</td>
+        <td class="d-none d-md-table-cell">${formatAccount(tx.account)}</td>
+        <td class="text-center">${actionsHtml}</td>
       </tr>
     `;
   }
 
   getTypeIcon(type) {
     const icons = {
-      Expense: "💸",
-      Income: "💰",
-      Investment: "📈",
-      Transfer: "🔁",
-      "System adjustment": "🧮",
+      'Expense': "💸",
+      'Income': "💰", 
+      'Investment': "📈",
+      'Transfer': "🔁",
+      'Adjustment': "🧮",
+      'System adjustment': "🧮",
     };
     return icons[type] || "📄";
   }

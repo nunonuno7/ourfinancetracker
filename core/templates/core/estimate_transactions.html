@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 {% load static %}
 
@@ -78,116 +77,251 @@
 
             <!-- Details Modal -->
             <div class="modal fade" id="estimationDetailsModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
+                <div class="modal-dialog modal-xl">
                     <div class="modal-content">
-                        <div class="modal-header">
+                        <div class="modal-header bg-light">
                             <h5 class="modal-title">
-                                <i class="fas fa-chart-pie me-2"></i>
-                                Estimation Details: <span id="modal-period-title"></span>
+                                <i class="fas fa-calculator me-2 text-primary"></i>
+                                Financial Estimation Details
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Recorded Transactions</h6>
-                                    <div class="mb-3">
-                                        <small class="text-muted fw-bold">Real (Manual) Transactions:</small>
-                                        <table class="table table-sm mb-2">
-                                            <tr>
-                                                <td>Income:</td>
-                                                <td class="text-end" id="detail-real-income">€ 0.00</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Expenses:</td>
-                                                <td class="text-end" id="detail-real-expenses">€ 0.00</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Investments:</td>
-                                                <td class="text-end" id="detail-real-investments">€ 0.00</td>
-                                            </tr>
-                                        </table>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <small class="text-muted fw-bold">Estimated Transactions:</small>
-                                        <table class="table table-sm mb-2">
-                                            <tr>
-                                                <td>Income:</td>
-                                                <td class="text-end text-warning" id="detail-estimated-income">€ 0.00</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Expenses:</td>
-                                                <td class="text-end text-warning" id="detail-estimated-expenses-tx">€ 0.00</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Investments:</td>
-                                                <td class="text-end text-warning" id="detail-estimated-investments">€ 0.00</td>
-                                            </tr>
-                                        </table>
-                                    </div>
-                                    
+                            <!-- Period Info Header -->
+                            <div class="alert alert-info mb-4">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-calendar-alt me-2"></i>
                                     <div>
-                                        <small class="text-muted fw-bold">Total Inserted:</small>
-                                        <table class="table table-sm table-bordered">
-                                            <tr class="table-light">
-                                                <td><strong>Income:</strong></td>
-                                                <td class="text-end"><strong id="detail-income-inserted">€ 0.00</strong></td>
-                                            </tr>
-                                            <tr class="table-light">
-                                                <td><strong>Expenses:</strong></td>
-                                                <td class="text-end"><strong id="detail-expense-inserted">€ 0.00</strong></td>
-                                            </tr>
-                                            <tr class="table-light">
-                                                <td><strong>Investments:</strong></td>
-                                                <td class="text-end"><strong id="detail-investment-inserted">€ 0.00</strong></td>
-                                            </tr>
-                                        </table>
+                                        <strong>Period: <span id="modal-period-title">Loading...</span></strong>
+                                        <p class="mb-0 small">
+                                            This analysis compares recorded transactions with account balance changes to identify missing entries.
+                                        </p>
                                     </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>Account Balances</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td>Current Month:</td>
-                                            <td class="text-end" id="detail-savings-current">€ 0.00</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Next Month:</td>
-                                            <td class="text-end" id="detail-savings-next">€ 0.00</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Difference:</td>
-                                            <td class="text-end" id="detail-savings-diff">€ 0.00</td>
-                                        </tr>
-                                    </table>
                                 </div>
                             </div>
 
-                            <hr>
-
                             <div class="row">
+                                <!-- Left Column: Transaction Data -->
+                                <div class="col-lg-8">
+                                    <div class="card mb-3">
+                                        <div class="card-header bg-primary text-white">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-list-alt me-2"></i>
+                                                Transaction Summary
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <!-- Estimated Transactions -->
+                                                <div class="col-md-6">
+                                                    <h6 class="text-warning">
+                                                        <i class="fas fa-robot me-1"></i>
+                                                        System Estimates
+                                                    </h6>
+                                                    <table class="table table-sm">
+                                                        <tbody>
+                                                            <tr>
+                                                                <td>
+                                                                    <i class="fas fa-arrow-up text-warning me-1"></i>
+                                                                    Income:
+                                                                </td>
+                                                                <td class="text-end fw-bold text-warning" id="detail-estimated-income">0,00&nbsp;€</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>
+                                                                    <i class="fas fa-arrow-down text-warning me-1"></i>
+                                                                    Expenses:
+                                                                </td>
+                                                                <td class="text-end fw-bold text-warning" id="detail-estimated-expenses-tx">0,00&nbsp;€</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>
+                                                                    <i class="fas fa-chart-line text-warning me-1"></i>
+                                                                    Investments:
+                                                                </td>
+                                                                <td class="text-end fw-bold text-warning" id="detail-estimated-investments">+0,00&nbsp;€</td>
+                                                            </tr>
+                                                            <tr class="table-light border-top">
+                                                                <td>
+                                                                    <strong>
+                                                                        <i class="fas fa-calculator text-warning me-1"></i>
+                                                                        Total:
+                                                                    </strong>
+                                                                </td>
+                                                                <td class="text-end">
+                                                                    <strong class="text-warning" id="detail-estimated-total">+0,00&nbsp;€</strong>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- Combined Totals -->
+                                                <div class="col-md-6">
+                                                    <h6 class="text-primary">
+                                                        <i class="fas fa-calculator me-1"></i>
+                                                        Combined Total
+                                                    </h6>
+                                                    <table class="table table-sm table-bordered">
+                                                        <tbody>
+                                                            <tr class="table-light">
+                                                                <td>
+                                                                    <strong>
+                                                                        <i class="fas fa-arrow-up text-success me-1"></i>
+                                                                        Income:
+                                                                    </strong>
+                                                                </td>
+                                                                <td class="text-end">
+                                                                    <strong class="text-success" id="detail-income-inserted">0,00&nbsp;€</strong>
+                                                                </td>
+                                                            </tr>
+                                                            <tr class="table-light">
+                                                                <td>
+                                                                    <strong>
+                                                                        <i class="fas fa-arrow-down text-danger me-1"></i>
+                                                                        Expenses:
+                                                                    </strong>
+                                                                </td>
+                                                                <td class="text-end">
+                                                                    <strong class="text-danger" id="detail-expense-inserted">0,00&nbsp;€</strong>
+                                                                </td>
+                                                            </tr>
+                                                            <tr class="table-light">
+                                                                <td>
+                                                                    <strong>
+                                                                        <i class="fas fa-chart-line text-info me-1"></i>
+                                                                        Investments:
+                                                                    </strong>
+                                                                </td>
+                                                                <td class="text-end">
+                                                                    <strong class="text-info" id="detail-investment-inserted">+0,00&nbsp;€</strong>
+                                                                </td>
+                                                            </tr>
+                                                            <tr class="table-primary border-top">
+                                                                <td>
+                                                                    <strong>
+                                                                        <i class="fas fa-equals text-primary me-1"></i>
+                                                                        Net Total:
+                                                                    </strong>
+                                                                </td>
+                                                                <td class="text-end">
+                                                                    <strong class="text-primary fs-6" id="detail-combined-total">+0,00&nbsp;€</strong>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Right Column: Balance Analysis -->
+                                <div class="col-lg-4">
+                                    <div class="card mb-3">
+                                        <div class="card-header bg-success text-white">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-piggy-bank me-2"></i>
+                                                Savings Analysis
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <table class="table table-sm">
+                                                <tbody>
+                                                    <tr>
+                                                        <td>
+                                                            <i class="fas fa-calendar-day me-1 text-muted"></i>
+                                                            Current Month:
+                                                        </td>
+                                                        <td class="text-end fw-bold" id="detail-savings-current">0,00&nbsp;€</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td>
+                                                            <i class="fas fa-calendar-plus me-1 text-muted"></i>
+                                                            Next Month:
+                                                        </td>
+                                                        <td class="text-end fw-bold" id="detail-savings-next">0,00&nbsp;€</td>
+                                                    </tr>
+                                                    <tr class="table-light">
+                                                        <td>
+                                                            <strong>
+                                                                <i class="fas fa-exchange-alt me-1 text-primary"></i>
+                                                                Change:
+                                                            </strong>
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <strong id="detail-savings-diff" class="badge bg-primary">0,00&nbsp;€</strong>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+
+                                            <small class="text-muted">
+                                                <i class="fas fa-info-circle me-1"></i>
+                                                Savings change indicates money flow between periods
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <!-- Estimation Formula -->
+                                    <div class="card">
+                                        <div class="card-header bg-warning text-dark">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-formula me-2"></i>
+                                                Estimation Formula
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="bg-light p-3 rounded mb-2">
+                                                <small class="text-muted d-block mb-1">Expected Expenses:</small>
+                                                <code>Income - Savings Change - Investments</code>
+                                            </div>
+
+                                            <table class="table table-sm mb-0">
+                                                <tbody>
+                                                    <tr>
+                                                        <td>Expected Expenses:</td>
+                                                        <td class="text-end fw-bold" id="detail-estimated-expenses">0,00&nbsp;€</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-danger">Missing Expenses:</td>
+                                                        <td class="text-end fw-bold text-danger" id="detail-missing-expenses">0,00&nbsp;€</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="text-success">Missing Income:</td>
+                                                        <td class="text-end fw-bold text-success" id="detail-missing-income">0,00&nbsp;€</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bottom Summary -->
+                            <div class="row mt-3">
                                 <div class="col-12">
-                                    <h6>Calculation Results</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td>Estimated Expenses:</td>
-                                            <td class="text-end" id="detail-estimated-expenses">€ 0.00</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Missing Expenses:</td>
-                                            <td class="text-end text-danger" id="detail-missing-expenses">€ 0.00</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Missing Income:</td>
-                                            <td class="text-end text-success" id="detail-missing-income">€ 0.00</td>
-                                        </tr>
-                                    </table>
+                                    <div class="alert alert-secondary mb-0">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-lightbulb me-2 text-warning"></i>
+                                            <div>
+                                                <strong>How it works:</strong>
+                                                <p class="mb-0 small">
+                                                    The system compares your recorded transactions with account balance changes. 
+                                                    If the math doesn't add up, it suggests creating an estimated transaction to balance the books.
+                                                    This helps identify potentially missing income or expenses.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <div class="modal-footer bg-light">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-1"></i>
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>

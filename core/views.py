@@ -94,7 +94,7 @@ class LogoutView(View):
     def get(self, request):
         auth_logout(request)
         messages.info(request, 'You have been logged out successfully.')
-        return redirect('home')
+        return redirect('/')
 
 class HomeView(TemplateView):
     """Home page view."""
@@ -792,7 +792,7 @@ def transaction_bulk_duplicate(request):
 @require_POST
 @login_required
 def transaction_bulk_delete(request):
-    """Bulk delete transactions."""
+    """Bulk delete transactions with optimized performance."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get('transaction_ids', [])
@@ -800,35 +800,54 @@ def transaction_bulk_delete(request):
         if not transaction_ids:
             return JsonResponse({'success': False, 'error': 'No transactions selected'})
 
-        # Validate transactions belong to user and are deletable
-        transactions = Transaction.objects.filter(
+        logger.info(f"🗑️ [transaction_bulk_delete] Starting bulk delete of {len(transaction_ids)} transactions for user {request.user.id}")
+
+        # Validate transactions belong to user in a single query
+        valid_transactions = Transaction.objects.filter(
             id__in=transaction_ids, 
             user=request.user
-        )
+        ).values_list('id', flat=True)
 
-        if len(transactions) != len(transaction_ids):
-            return JsonResponse({'success': False, 'error': 'Some transactions not found'})
+        valid_count = len(valid_transactions)
+        if valid_count != len(transaction_ids):
+            invalid_count = len(transaction_ids) - valid_count
+            logger.warning(f"⚠️ [transaction_bulk_delete] {invalid_count} transactions not found or don't belong to user")
+            return JsonResponse({
+                'success': False, 
+                'error': f'{invalid_count} transactions not found or access denied'
+            })
 
-        deleted_count = 0
-
-        # Use atomic transaction to ensure all deletions happen together
+        # Use optimized bulk deletion with atomic transaction
         with db_transaction.atomic():
-            for transaction in transactions:
-                transaction.delete()
-                deleted_count += 1
+            # First, delete related TransactionTag entries in bulk
+            from .models import TransactionTag
+            tag_delete_count = TransactionTag.objects.filter(
+                transaction_id__in=valid_transactions
+            ).delete()[0]
+            
+            logger.debug(f"🏷️ [transaction_bulk_delete] Deleted {tag_delete_count} transaction tags")
+
+            # Then delete transactions in bulk - much faster than individual deletes
+            deleted_info = Transaction.objects.filter(
+                id__in=valid_transactions,
+                user=request.user
+            ).delete()
+            
+            deleted_count = deleted_info[0]  # Total objects deleted
+            logger.info(f"🗑️ [transaction_bulk_delete] Bulk deleted {deleted_count} objects from database")
 
         # Clear cache only AFTER all database operations are complete
         clear_tx_cache(request.user.id)
-        logger.info(f"✅ Bulk delete completed: {deleted_count} transactions deleted, cache cleared for user {request.user.id}")
+        logger.info(f"✅ Bulk delete completed: {valid_count} transactions deleted, cache cleared for user {request.user.id}")
 
         return JsonResponse({
             'success': True,
-            'deleted': deleted_count,
-            'message': f'{deleted_count} transactions deleted'
+            'deleted': valid_count,
+            'message': f'{valid_count} transactions deleted successfully'
         })
 
     except Exception as e:
-        logger.error(f"Bulk delete error for user {request.user.id}: {e}")
+        logger.error(f"❌ Bulk delete error for user {request.user.id}: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
@@ -1655,9 +1674,9 @@ def transactions_totals_v2(request):
             totals['expenses'] += abs(amount_float)
             logger.debug(f"📉 [transactions_totals_v2] Expenses += {abs(amount_float)}, total now: {totals['expenses']}")
         elif tx_type == 'IV':
-            # Investments: sum absolute values (database stores as negative, display as positive)
-            totals['investments'] += abs(amount_float)
-            logger.debug(f"📊 [transactions_totals_v2] Investments += {abs(amount_float)}, total now: {totals['investments']}")
+            # Investments: keep original amount (positive = reinforcement, negative = withdrawal)
+            totals['investments'] += amount_float
+            logger.debug(f"📊 [transactions_totals_v2] Investments += {amount_float}, total now: {totals['investments']}")
         elif tx_type == 'TR':
             # Transfers: keep original sign
             totals['transfers'] += amount_float
@@ -1737,6 +1756,63 @@ class AccountListView(OwnerQuerysetMixin, ListView):
     model = Account
     template_name = "core/account_list.html"
     context_object_name = "accounts"
+    paginate_by = 50  # Add pagination for large account lists
+
+    def get_queryset(self):
+        """Optimize queryset with select_related for foreign keys."""
+        queryset = super().get_queryset().select_related(
+            'account_type', 'currency'
+        ).prefetch_related(
+            'balances__period'
+        )
+        
+        # Handle search functionality
+        search_query = self.request.GET.get('q', '').strip()
+        if search_query:
+            queryset = queryset.filter(name__icontains=search_query)
+        
+        return queryset.order_by('name')
+
+    def get_context_data(self, **kwargs):
+        """Add optimized context data."""
+        context = super().get_context_data(**kwargs)
+        
+        # Get accounts efficiently
+        accounts = context['accounts']
+        
+        # Calculate totals by account type using efficient aggregation
+        account_type_totals = {}
+        default_currency = 'EUR'
+        
+        # Get latest period for balance calculations
+        latest_period = DatePeriod.objects.order_by('-year', '-month').first()
+        
+        if latest_period and accounts:
+            # Efficient query for latest balances by account type
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT at.name, 
+                           COALESCE(SUM(ab.reported_balance), 0) as total_balance,
+                           c.code as currency
+                    FROM core_accounttype at
+                    LEFT JOIN core_account a ON a.account_type_id = at.id AND a.user_id = %s
+                    LEFT JOIN core_currency c ON a.currency_id = c.id
+                    LEFT JOIN core_accountbalance ab ON ab.account_id = a.id AND ab.period_id = %s
+                    GROUP BY at.name, c.code
+                    HAVING COALESCE(SUM(ab.reported_balance), 0) != 0
+                    ORDER BY at.name
+                """, [self.request.user.id, latest_period.id])
+                
+                results = cursor.fetchall()
+                for account_type, balance, currency in results:
+                    if balance:
+                        currency_symbol = currency or default_currency
+                        account_type_totals[account_type] = f"{balance:,.0f} {currency_symbol}"
+        
+        context['account_type_totals'] = account_type_totals
+        context['default_currency'] = default_currency
+        
+        return context
 
 
 class AccountCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
@@ -1808,10 +1884,30 @@ def move_account_down(request, pk):
 def account_reorder(request):
     """Reorder accounts via AJAX."""
     if request.method == 'POST':
-        order_data = json.loads(request.body)
-        # Implementation would depend on your ordering system
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False})
+        try:
+            data = json.loads(request.body)
+            order_list = data.get('order', [])
+            
+            # Update position for each account
+            with db_transaction.atomic():
+                for item in order_list:
+                    account_id = item.get('id')
+                    position = item.get('position')
+                    
+                    if account_id and position is not None:
+                        Account.objects.filter(
+                            id=account_id,
+                            user=request.user
+                        ).update(position=position)
+            
+            logger.info(f"Account order updated for user {request.user.id}")
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            logger.error(f"Error reordering accounts for user {request.user.id}: {e}")
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'POST method required'})
 
 
 def _merge_duplicate_accounts(user):

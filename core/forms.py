@@ -411,7 +411,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     # INIT
     # ------------------------------------------------------------------ #
-    def __init__(self, *args: Any, user: "User | None" = None, **kwargs: Any) -> None:
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, user=user, **kwargs)
 
         self.fields["account_type"].queryset = AccountType.objects.order_by("name")
@@ -427,10 +427,10 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     # CLEANERS
     # ------------------------------------------------------------------ #
-    def clean_name(self) -> str:
+    def clean_name(self):
         return self.cleaned_data["name"].strip()
 
-    def clean(self) -> None:
+    def clean(self):
         super().clean()
 
         name: str = self.cleaned_data.get("name", "").strip()
@@ -484,7 +484,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     # SAVE
     # ------------------------------------------------------------------ #
-    def save(self, commit: bool = True) -> Account:
+    def save(self, commit=True):
         """
         - Guarda a nova/actual conta normalmente.
         - Se houver duplicado e confirm_merge, funde saldos de forma transacional.
@@ -493,7 +493,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         self.instance.name = name
         self.instance.user = self.user  # ← garante owner correcto
 
-        duplicate: Account | None = getattr(self, "_duplicate_to_merge", None)
+        duplicate = getattr(self, "_duplicate_to_merge", None)
 
         if duplicate:
             return self._merge_into(duplicate)
@@ -506,7 +506,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     # MERGE HELPER
     # ------------------------------------------------------------------ #
-    def _merge_into(self, target: Account) -> Account:
+    def _merge_into(self, target):
         """
         Move saldos da `self.instance` para `target` (duplicado), somando
         reported_balance quando já existe o mesmo periodo.

@@ -22,20 +22,20 @@ def get_default_account_type_id() -> int:
     return get_default_account_type().pk
 
 
-def get_default_currency() -> "Currency":
+def get_default_currency():
     """Return the default *EUR* currency (create if missing)."""
     from django.apps import apps
 
-    Currency: type["Currency"] = apps.get_model("core", "Currency")  # type: ignore[name-defined]
+    Currency = apps.get_model("core", "Currency")
     obj, _ = Currency.objects.get_or_create(code="EUR", defaults={"symbol": "€", "decimals": 2})
     return obj
 
 
-def get_default_account_type() -> "AccountType":
+def get_default_account_type():
     """Return the fallback *Savings* account-type (create if missing)."""
     from django.apps import apps
 
-    AccountType: type["AccountType"] = apps.get_model("core", "AccountType")  # type: ignore[name-defined]
+    AccountType = apps.get_model("core", "AccountType")
     obj, _ = AccountType.objects.get_or_create(name="Savings")
     return obj
 
@@ -55,7 +55,7 @@ class Currency(models.Model):
         verbose_name_plural = "currencies"
         ordering = ("code",)
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self):
         return self.code
 
 
@@ -69,7 +69,7 @@ class AccountType(models.Model):
         verbose_name_plural = "account types"
         ordering = ("name",)
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self):
         return self.name
 
 
@@ -101,7 +101,12 @@ class Account(models.Model):
     position = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ("name",)
+        ordering = ("position", "name")
+        indexes = [
+            models.Index(fields=["user", "name"]),
+            models.Index(fields=["user", "account_type"]),
+            models.Index(fields=["user", "created_at"]),
+        ]
         constraints = [
             UniqueConstraint(fields=["user", "name"], name="unique_account_user_name")
         ]
@@ -140,7 +145,7 @@ class Account(models.Model):
         super().save(*args, **kwargs)
 
 
-    def is_default(self) -> bool:
+    def is_default(self):
         """Returns True if this account is the default 'Cash' account."""
         return self.name.strip().lower() == "cash"
 
@@ -158,10 +163,10 @@ class AccountBalance(models.Model):
             UniqueConstraint(fields=["account", "period"], name="unique_accountbalance_account_period")
         ]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.account} @ {self.period}: {self.reported_balance}"
 
-    def merge_into(self, target: 'AccountBalance') -> None:
+    def merge_into(self, target):
         """
         Merge this balance into the target balance for the same period.
 
@@ -204,13 +209,13 @@ class Category(models.Model):
             UniqueConstraint(fields=["user", "name"], name="unique_category_user_name")
         ]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return self.name
 
     # -------------------- helpers ----------------------
 
     @classmethod
-    def get_fallback(cls, user: User) -> "Category":
+    def get_fallback(cls, user):
         """
         Garante que existe a categoria 'Other' (em inglês),
         usada como fallback ao eliminar ou fundir categorias.
@@ -218,14 +223,14 @@ class Category(models.Model):
         return cls.objects.get_or_create(user=user, name="Other")[0]
 
     @classmethod
-    def get_default(cls, user: User) -> "Category":
+    def get_default(cls, user):
         """
         🔁 Compatibilidade retroativa com código antigo que usava 'Geral'.
         Agora redireciona para 'Other'.
         """
         return cls.get_fallback(user)
 
-    def merge_into(self, target: 'Category') -> None:
+    def merge_into(self, target):
         """Merge this category into target category."""
         if self.pk == target.pk:
             return
@@ -299,7 +304,7 @@ class Transaction(models.Model):
         ]
         ordering = ("-date", "-id")
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.date} {self.get_type_display()} {self.amount}"
 
     def save(self, *args, **kwargs):
@@ -365,7 +370,7 @@ class UserSettings(models.Model):
         help_text="Day of month considered the start for budgeting",
     )
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self):
         return f"Settings for {self.user}"
 
 

@@ -87,7 +87,7 @@ class FinanceEstimationService:
 
             income_inserted = transactions['income'] or Decimal('0')
             expense_inserted = abs(transactions['expenses'] or Decimal('0'))
-            investment_inserted = abs(transactions['investments'] or Decimal('0'))
+            investment_inserted = transactions['investments'] or Decimal('0')
 
             # Get account balances
             current_savings = self._get_savings_balance(period)
@@ -209,10 +209,10 @@ logger = logging.getLogger(__name__)
 
 class FinanceEstimationService:
     """Service for financial estimation and reconciliation."""
-    
+
     def __init__(self, user):
         self.user = user
-    
+
     def get_estimation_summary(self, period):
         """Get estimation summary for a specific period."""
         try:
@@ -220,7 +220,7 @@ class FinanceEstimationService:
             current_balances = self.get_period_balances(period)
             next_period = self.get_next_period(period)
             next_balances = self.get_period_balances(next_period) if next_period else {}
-            
+
             # Get recorded transactions for the period - separated by estimated vs real
             real_transactions = Transaction.objects.filter(
                 user=self.user,
@@ -231,7 +231,7 @@ class FinanceEstimationService:
                 expenses=Sum('amount', filter=Q(type='EX')) or Decimal('0'),
                 investments=Sum('amount', filter=Q(type='IV')) or Decimal('0')
             )
-            
+
             estimated_transactions = Transaction.objects.filter(
                 user=self.user,
                 period=period,
@@ -241,42 +241,42 @@ class FinanceEstimationService:
                 expenses=Sum('amount', filter=Q(type='EX')) or Decimal('0'),
                 investments=Sum('amount', filter=Q(type='IV')) or Decimal('0')
             )
-            
+
             # Combined totals for calculations
             transactions = {
                 'income': (real_transactions['income'] or Decimal('0')) + (estimated_transactions['income'] or Decimal('0')),
                 'expenses': (real_transactions['expenses'] or Decimal('0')) + (estimated_transactions['expenses'] or Decimal('0')),
                 'investments': (real_transactions['investments'] or Decimal('0')) + (estimated_transactions['investments'] or Decimal('0'))
             }
-            
+
             # Calculate savings difference
             savings_current = current_balances.get('Savings', Decimal('0'))
             savings_next = next_balances.get('Savings', Decimal('0'))
             savings_diff = savings_next - savings_current
-            
+
             # Estimate missing expenses based on savings change
             income_inserted = abs(transactions['income'] or Decimal('0'))
             expense_inserted = abs(transactions['expenses'] or Decimal('0'))
-            investment_inserted = abs(transactions['investments'] or Decimal('0'))
-            
+            investment_inserted = transactions['investments'] or Decimal('0')
+
             # Calculate expected expenses
             estimated_expenses = income_inserted - savings_diff - investment_inserted
             missing_expenses = max(Decimal('0'), estimated_expenses - expense_inserted)
             missing_income = max(Decimal('0'), -estimated_expenses) if estimated_expenses < 0 else Decimal('0')
-            
+
             # Check if there's an estimated transaction
             estimated_tx = Transaction.objects.filter(
                 user=self.user,
                 period=period,
                 is_estimated=True
             ).first()
-            
+
             # Determine status
             status = 'balanced'
             status_message = 'Period is balanced'
             estimated_type = None
             estimated_amount = Decimal('0')
-            
+
             if missing_expenses > 10:  # Threshold for missing expenses
                 status = 'missing_expenses'
                 status_message = f'Missing €{missing_expenses:.0f} in expenses'
@@ -287,7 +287,7 @@ class FinanceEstimationService:
                 status_message = f'Missing €{missing_income:.0f} in income'
                 estimated_type = 'IN'
                 estimated_amount = missing_income
-            
+
             return {
                 'period_id': period.id,
                 'period': period.label,
@@ -315,7 +315,7 @@ class FinanceEstimationService:
                     'estimated_investments': float(abs(estimated_transactions['investments'] or Decimal('0')))
                 }
             }
-            
+
         except Exception as e:
             logger.error(f"Error getting estimation summary for period {period.id}: {e}")
             return {
@@ -329,12 +329,12 @@ class FinanceEstimationService:
                 'estimated_transaction_id': None,
                 'details': {}
             }
-    
+
     def get_period_balances(self, period):
         """Get account balances for a period grouped by account type."""
         if not period:
             return {}
-            
+
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT at.name, SUM(ab.reported_balance)
@@ -344,13 +344,13 @@ class FinanceEstimationService:
                 WHERE a.user_id = %s AND ab.period_id = %s
                 GROUP BY at.name
             """, [self.user.id, period.id])
-            
+
             balances = {}
             for account_type, balance in cursor.fetchall():
                 balances[account_type] = Decimal(str(balance or 0))
-            
+
             return balances
-    
+
     def get_next_period(self, period):
         """Get the next period after the given period."""
         try:
@@ -360,7 +360,7 @@ class FinanceEstimationService:
                 return DatePeriod.objects.get(year=period.year, month=period.month + 1)
         except DatePeriod.DoesNotExist:
             return None
-    
+
     def delete_estimated_transaction_by_period(self, period):
         """Delete estimated transactions for a specific period."""
         try:
@@ -370,13 +370,13 @@ class FinanceEstimationService:
                 period=period,
                 is_estimated=True
             )
-            
+
             deleted_count = estimated_transactions.count()
             estimated_transactions.delete()
-            
+
             logger.info(f"Deleted {deleted_count} estimated transaction(s) for period {period.label}")
             return deleted_count
-            
+
         except Exception as e:
             logger.error(f"Error deleting estimated transactions for period {period.id}: {e}")
             raise
@@ -385,27 +385,27 @@ class FinanceEstimationService:
         """Create or update estimated transaction for a period."""
         try:
             summary = self.get_estimation_summary(period)
-            
+
             if summary['status'] == 'error' or summary['estimated_amount'] <= 10:
                 return None
-            
+
             # Delete existing estimated transaction using the service method
             self.delete_estimated_transaction_by_period(period)
-            
+
             # Create new estimated transaction
             from ..models import Category
-            
+
             # Get or create estimation category
             category, _ = Category.objects.get_or_create(
                 name='Estimated Transaction',
                 user=self.user
             )
-            
+
             # Get default account
             account = Account.objects.filter(user=self.user).first()
             if not account:
                 raise Exception("No account found for user")
-            
+
             estimated_tx = Transaction.objects.create(
                 user=self.user,
                 type=summary['estimated_type'],
@@ -417,10 +417,10 @@ class FinanceEstimationService:
                 account=account,
                 category=category
             )
-            
+
             logger.info(f"Created estimated transaction {estimated_tx.id} for period {period.label}")
             return estimated_tx
-            
+
         except Exception as e:
             logger.error(f"Error estimating transaction for period {period.id}: {e}")
             raise
