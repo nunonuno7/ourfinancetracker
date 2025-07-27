@@ -20,4 +20,18 @@ document.addEventListener("DOMContentLoaded", () => {
   popoverTriggerList.forEach(el => {
     new bootstrap.Popover(el);
   });
+
+  // Debug navigation issues
+  console.log('🔍 Main.js loaded, current path:', window.location.pathname);
+
+  // Debug logout links
+  document.addEventListener('DOMContentLoaded', function() {
+    const logoutLinks = document.querySelectorAll('a[href*="logout"]');
+    logoutLinks.forEach(link => {
+      console.log('🔍 Found logout link with href:', link.href);
+      link.addEventListener('click', function(e) {
+        console.log('🔍 Logout link clicked, href:', this.href);
+      });
+    });
+  });
 });

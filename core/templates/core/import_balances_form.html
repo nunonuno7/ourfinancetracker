@@ -19,11 +19,12 @@
   {% endif %}
 
   <!-- Upload form -->
-  <form method="post" enctype="multipart/form-data" class="card p-4 shadow-sm">
+  <form method="post" enctype="multipart/form-data" class="card p-4 shadow-sm" id="import-form">
     {% csrf_token %}
     <div class="mb-3">
       <label for="file" class="form-label">Select the Excel file:</label>
       <input type="file" name="file" id="file" accept=".xlsx" class="form-control" required>
+      <div class="form-text">Maximum file size: 10MB. For better performance, limit to 10,000 rows per import.</div>
     </div>
 
     <!-- Info -->
@@ -31,14 +32,86 @@
       <strong>Expected format:</strong><br>
       The file must include the following columns:
       <code>Year</code>, <code>Month</code>, <code>Account</code>, <code>Balance</code>.<br>
-      Each row represents the balance of one account for one month.
+      Each row represents the balance of one account for one month.<br>
+      <strong>Performance tip:</strong> Remove empty rows and ensure all data is clean before uploading.
+    </div>
+
+    <!-- Progress section (hidden initially) -->
+    <div id="progress-section" class="mb-3 d-none">
+      <div class="alert alert-info">
+        <div class="d-flex align-items-center">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+          <span>Processing import... This may take a moment for large files.</span>
+        </div>
+        <div class="progress mt-2" style="height: 20px;">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" 
+               role="progressbar" style="width: 0%" id="progress-bar">
+            <span id="progress-text">0%</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="d-flex justify-content-between align-items-center">
-      <button type="submit" class="btn btn-success">📥 Import Balances</button>
+      <button type="submit" class="btn btn-success" id="submit-btn">
+        <span id="submit-text">📥 Import Balances</span>
+        <span id="submit-loading" class="d-none">
+          <span class="spinner-border spinner-border-sm me-1"></span>
+          Importing...
+        </span>
+      </button>
       <a href="{% url 'account_balance_template_xlsx' %}" class="btn btn-outline-primary">📄 Download Template</a>
     </div>
   </form>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('import-form');
+    const fileInput = document.getElementById('file');
+    const submitBtn = document.getElementById('submit-btn');
+    const submitText = document.getElementById('submit-text');
+    const submitLoading = document.getElementById('submit-loading');
+    const progressSection = document.getElementById('progress-section');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+
+    // File size validation
+    fileInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (file && file.size > 10 * 1024 * 1024) {
+        alert('File size too large. Please select a file smaller than 10MB.');
+        this.value = '';
+      }
+    });
+
+    // Form submission handler
+    form.addEventListener('submit', function(e) {
+      if (!fileInput.files.length) {
+        e.preventDefault();
+        alert('Please select a file first.');
+        return;
+      }
+
+      // Show loading state
+      submitBtn.disabled = true;
+      submitText.classList.add('d-none');
+      submitLoading.classList.remove('d-none');
+      progressSection.classList.remove('d-none');
+
+      // Simulate progress for user feedback
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress >= 90) {
+          clearInterval(interval);
+          progress = 90;
+        }
+        progressBar.style.width = progress + '%';
+        progressText.textContent = Math.round(progress) + '%';
+      }, 500);
+    });
+  });
+  </script>
 </div>
 
 <!-- Bootstrap JS (for alerts) -->

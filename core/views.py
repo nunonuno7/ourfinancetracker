@@ -154,7 +154,7 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
 
         qs = super().get_queryset()
         filtered_qs = qs.filter(user=self.request.user)
-        
+
         # Otimizar queries com relacionamentos
         model_name = getattr(self, 'model', None)
         if model_name:
@@ -164,7 +164,7 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
                 filtered_qs = filtered_qs.select_related('category')
             if hasattr(model_name, 'period'):
                 filtered_qs = filtered_qs.select_related('period')
-                
+
         return filtered_qs
 
     def get_object(self, queryset=None):
@@ -838,7 +838,7 @@ def transaction_bulk_delete(request):
 
 @login_required
 def import_transactions_xlsx(request):
-    """Import transactions from Excel file."""
+    """Import transactions from Excel file with optimized bulk operations."""
     if request.method == 'POST':
         try:
             uploaded_file = request.FILES.get('file')
@@ -846,73 +846,197 @@ def import_transactions_xlsx(request):
                 messages.error(request, 'No file uploaded.')
                 return render(request, 'core/import_form.html')
 
+            logger.info(f"📁 [import_transactions_xlsx] Starting import for user {request.user.id}, file: {uploaded_file.name}")
+
             # Read Excel file
             df = pd.read_excel(uploaded_file)
+            logger.info(f"📊 [import_transactions_xlsx] Read Excel file with shape: {df.shape}")
+            logger.info(f"📋 [import_transactions_xlsx] Columns found: {list(df.columns)}")
+            logger.info(f"🔍 [import_transactions_xlsx] First 3 rows:\n{df.head(3).to_string()}")
+            
+            # Detailed analysis of tag columns
+            tag_columns = ['Tags', 'tags', 'Tag', 'tag']
+            for col in tag_columns:
+                if col in df.columns:
+                    non_empty_count = df[col].notna().sum()
+                    unique_values = df[col].dropna().unique()[:5]  # First 5 unique values
+                    logger.info(f"🏷️ [import_transactions_xlsx] Column '{col}' found: {non_empty_count} non-empty values")
+                    logger.info(f"🏷️ [import_transactions_xlsx] Sample values from '{col}': {unique_values}")
+                    break
+            else:
+                logger.warning(f"⚠️ [import_transactions_xlsx] No tags column found in: {list(df.columns)}")
 
             # Validate required columns
             required_cols = ['Date', 'Type', 'Amount', 'Category', 'Account']
             missing_cols = [col for col in required_cols if col not in df.columns]
             if missing_cols:
+                logger.error(f"❌ [import_transactions_xlsx] Missing columns: {missing_cols}")
                 messages.error(request, f'Missing required columns: {", ".join(missing_cols)}')
                 return render(request, 'core/import_form.html')
 
-            imported_count = 0
-            errors = []
+            logger.info(f"✅ [import_transactions_xlsx] All required columns present")
 
-            for index, row in df.iterrows():
-                try:
-                    # Parse date
-                    transaction_date = pd.to_datetime(row['Date']).date()
+            # Clean and validate data upfront
+            initial_rows = len(df)
+            logger.info(f"📋 [import_transactions_xlsx] Initial data preview:")
+            logger.info(f"📋 [import_transactions_xlsx] First 3 rows:\n{df.head(3).to_string()}")
+            
+            # Check for completely empty rows first
+            df_non_empty = df.dropna(how='all')
+            logger.info(f"🧹 [import_transactions_xlsx] After removing completely empty rows: {len(df)} → {len(df_non_empty)}")
+            
+            # More flexible cleaning - only drop rows where ALL required columns are missing
+            missing_mask = df_non_empty[required_cols].isna().all(axis=1)
+            df_clean = df_non_empty[~missing_mask].copy()
+            rows_after_dropna = len(df_clean)
+            logger.info(f"🧹 [import_transactions_xlsx] Rows after cleaning required columns: {initial_rows} → {rows_after_dropna}")
+            
+            # Log which columns have missing values
+            for col in required_cols:
+                missing_count = df_clean[col].isna().sum()
+                if missing_count > 0:
+                    logger.warning(f"⚠️ [import_transactions_xlsx] Column '{col}' has {missing_count} missing values")
+                    logger.warning(f"📋 [import_transactions_xlsx] Sample missing rows for '{col}':")
+                    sample_missing = df_clean[df_clean[col].isna()].head(3)
+                    logger.warning(f"{sample_missing.to_string()}")
 
-                    # Get or create period
-                    period, _ = DatePeriod.objects.get_or_create(
-                        year=transaction_date.year,
-                        month=transaction_date.month,
-                        defaults={'label': transaction_date.strftime('%B %Y')}
-                    )
+            if df_clean.empty:
+                logger.error(f"❌ [import_transactions_xlsx] No valid rows after cleaning")
+                logger.error(f"📋 [import_transactions_xlsx] Original DataFrame info:")
+                logger.error(f"Shape: {df.shape}")
+                logger.error(f"Columns: {list(df.columns)}")
+                logger.error(f"Data types: {df.dtypes.to_dict()}")
+                messages.error(request, 'No valid data rows found in the Excel file. Please check that your file has data in the required columns: Date, Type, Amount, Category, Account')
+                return render(request, 'core/import_form.html')
 
-                    # Get or create category
-                    category, _ = Category.objects.get_or_create(
-                        name=row['Category'],
-                        user=request.user
-                    )
+            # Clean string columns more carefully
+            for col in ['Account', 'Category']:
+                if col in df_clean.columns:
+                    df_clean[col] = df_clean[col].fillna('').astype(str).str.strip()
+                    # Replace empty strings with a default value
+                    empty_mask = df_clean[col] == ''
+                    if empty_mask.any():
+                        default_value = 'Unknown Account' if col == 'Account' else 'Uncategorized'
+                        df_clean.loc[empty_mask, col] = default_value
+                        logger.warning(f"⚠️ [import_transactions_xlsx] Filled {empty_mask.sum()} empty {col} values with '{default_value}'")
 
-                    # Get or create account (assuming default currency and type)
-                    currency, _ = Currency.objects.get_or_create(code='EUR', defaults={'name': 'Euro', 'symbol': '€'})
-                    account_type, _ = AccountType.objects.get_or_create(name='Checking')
-                    account, _ = Account.objects.get_or_create(
-                        name=row['Account'],
-                        user=request.user,
-                        defaults={'currency': currency, 'account_type': account_type}
-                    )
+            logger.info(f"🏦 [import_transactions_xlsx] Unique accounts: {df_clean['Account'].unique()}")
+            logger.info(f"🏷️ [import_transactions_xlsx] Unique categories: {df_clean['Category'].unique()}")
 
-                    # Create transaction
-                    Transaction.objects.create(
-                        user=request.user,
-                        type=row['Type'].upper()[:2],  # Convert to enum value
-                        amount=float(row['Amount']),
-                        date=transaction_date,
-                        category=category,
-                        account=account,
-                        period=period,
-                        notes=row.get('Notes', '')
-                    )
-                    imported_count += 1
+            try:
+                logger.info(f"🔄 [import_transactions_xlsx] Converting data types...")
+                
+                # Convert dates more carefully
+                logger.info(f"📅 [import_transactions_xlsx] Sample date values: {df_clean['Date'].head().tolist()}")
+                df_clean['Date'] = pd.to_datetime(df_clean['Date'], errors='coerce').dt.date
+                invalid_dates = df_clean['Date'].isna().sum()
+                if invalid_dates > 0:
+                    logger.error(f"❌ [import_transactions_xlsx] {invalid_dates} invalid dates found")
+                    df_clean = df_clean.dropna(subset=['Date'])
+                
+                # Convert amounts more carefully
+                logger.info(f"💰 [import_transactions_xlsx] Sample amount values: {df_clean['Amount'].head().tolist()}")
+                df_clean['Amount'] = pd.to_numeric(df_clean['Amount'], errors='coerce')
+                invalid_amounts = df_clean['Amount'].isna().sum()
+                if invalid_amounts > 0:
+                    logger.error(f"❌ [import_transactions_xlsx] {invalid_amounts} invalid amounts found")
+                    df_clean = df_clean.dropna(subset=['Amount'])
+                
+                logger.info(f"📅 [import_transactions_xlsx] Date range: {df_clean['Date'].min()} to {df_clean['Date'].max()}")
+                logger.info(f"💰 [import_transactions_xlsx] Amount range: {df_clean['Amount'].min()} to {df_clean['Amount'].max()}")
+                
+                # Clean and normalize transaction types
+                logger.info(f"🏷️ [import_transactions_xlsx] Sample type values: {df_clean['Type'].head().tolist()}")
+                df_clean['Type'] = df_clean['Type'].fillna('').astype(str).str.strip().str.upper()
+                
+                # Log original types before normalization
+                original_types = df_clean['Type'].value_counts().to_dict()
+                logger.info(f"📊 [import_transactions_xlsx] Original types: {original_types}")
+                
+                # Check for completely empty types
+                empty_types = (df_clean['Type'] == '').sum()
+                if empty_types > 0:
+                    logger.error(f"❌ [import_transactions_xlsx] {empty_types} rows have empty Type values")
+                    df_clean = df_clean[df_clean['Type'] != '']
+                
+                # Log final data shape
+                final_rows = len(df_clean)
+                logger.info(f"✅ [import_transactions_xlsx] Final cleaned data: {final_rows} rows")
+                
+                # Log tags information if present - check all possible tag column names
+                tag_columns = ['Tags', 'tags', 'Tag', 'tag']
+                found_tag_col = None
+                for col in tag_columns:
+                    if col in df_clean.columns:
+                        found_tag_col = col
+                        break
+                
+                if found_tag_col:
+                    # Count non-empty tag entries
+                    tags_mask = df_clean[found_tag_col].notna() & (df_clean[found_tag_col].astype(str).str.strip() != '') & (~df_clean[found_tag_col].astype(str).str.lower().isin(['nan', 'none', 'null']))
+                    tags_with_data = tags_mask.sum()
+                    logger.info(f"🏷️ [import_transactions_xlsx] Found column '{found_tag_col}' with {tags_with_data} rows containing tag data")
+                    
+                    if tags_with_data > 0:
+                        sample_tags = df_clean[tags_mask][found_tag_col].head(5).tolist()
+                        logger.info(f"🏷️ [import_transactions_xlsx] Sample tags: {sample_tags}")
+                        
+                        # Log each unique tag value for debugging
+                        unique_tags = df_clean[tags_mask][found_tag_col].unique()
+                        logger.info(f"🏷️ [import_transactions_xlsx] All unique tag values ({len(unique_tags)}): {unique_tags[:10]}")  # First 10
+                else:
+                    logger.warning(f"⚠️ [import_transactions_xlsx] No tags column found. Available columns: {list(df_clean.columns)}")
+                
+                if final_rows == 0:
+                    logger.error(f"❌ [import_transactions_xlsx] No rows remaining after data cleaning")
+                    messages.error(request, 'No valid data rows remain after cleaning. Please check your data format.')
+                    return render(request, 'core/import_form.html')
+                
+            except Exception as e:
+                logger.error(f"❌ [import_transactions_xlsx] Data conversion error: {str(e)}")
+                logger.exception("Full error traceback:")
+                messages.error(request, f'Invalid data format: {str(e)}')
+                return render(request, 'core/import_form.html')
 
-                except Exception as e:
-                    errors.append(f'Row {index + 2}: {str(e)}')
+            # Use optimized bulk importer
+            from .utils.import_helpers import BulkTransactionImporter
+            
+            importer = BulkTransactionImporter(request.user, batch_size=5000)  # Increased batch size for better performance
+            result = importer.import_dataframe(df_clean)
+            
+            imported_count = result['imported']
+            errors = result['errors']
 
             # Clear cache after import
             clear_tx_cache(request.user.id)
+            logger.info(f"🗄️ [import_transactions_xlsx] Cache cleared for user {request.user.id}")
+
+            logger.info(f"📊 [import_transactions_xlsx] Import completed: {imported_count} imported, {len(errors)} errors")
+
+            # Clear any existing messages to prevent duplicates
+            storage = messages.get_messages(request)
+            for message in storage:
+                pass  # Iterate through to mark as consumed
+            storage.used = True
 
             if errors:
                 messages.warning(request, f'Imported {imported_count} transactions with {len(errors)} errors.')
+                if len(errors) <= 5:  # Show first 5 errors
+                    for error in errors[:5]:
+                        messages.error(request, error)
+                # Log all errors for debugging
+                for error in errors:
+                    logger.error(f"🔴 [import_transactions_xlsx] Error: {error}")
             else:
+                # Clear any remaining messages before adding the final success message
+                list(messages.get_messages(request))
                 messages.success(request, f'Successfully imported {imported_count} transactions.')
 
-            return redirect('transaction_list_v2')
+            # Stay on import page instead of redirecting
+            return render(request, 'core/import_form.html')
 
         except Exception as e:
+            logger.error(f"Import error for user {request.user.id}: {e}")
             messages.error(request, f'Import failed: {str(e)}')
 
     return render(request, 'core/import_form.html')
@@ -923,13 +1047,13 @@ def import_transactions_template(request):
     """Download Excel template for transaction import."""
     # Create sample data
     data = {
-        'Date': ['2025-01-01', '2025-01-02'],
-        'Type': ['Income', 'Expense'],
-        'Amount': [1000.00, -50.00],
-        'Category': ['Salary', 'Food'],
-        'Account': ['Checking', 'Cash'],
-        'Tags': ['monthly', 'daily'],
-        'Notes': ['Monthly salary', 'Lunch']
+        'Date': ['2025-01-01', '2025-01-02', '2025-01-03'],
+        'Type': ['Income', 'Expense', 'Investment'],
+        'Amount': [1000.00, -50.00, -200.00],
+        'Category': ['Salary', 'Food', 'Stocks'],
+        'Account': ['Checking', 'Cash', 'Investment'],
+        'Tags': ['monthly', 'daily', 'monthly'],
+        'Notes': ['Monthly salary', 'Lunch', 'ETF purchase']
     }
 
     df = pd.DataFrame(data)
@@ -1139,7 +1263,7 @@ def transactions_json_v2(request):
     # ✅ EXCEL-STYLE CASCADING FILTERS IMPLEMENTATION
     # Store original data for calculating available filter options
     df_original = df.copy()
-    
+
     # Parse filters from request - convert empty strings to None
     active_filters = {}
     if data.get("type", "").strip():
@@ -1158,14 +1282,14 @@ def transactions_json_v2(request):
         active_filters["amount_max"] = data.get("amount_max").strip()
     if data.get("tags", "").strip():
         active_filters["tags"] = data.get("tags").strip()
-    
+
     include_system = data.get("include_system", False)
-    
+
     logger.debug(f"📋 [Excel Filters] Active filters: {active_filters}")
 
     # Apply filters in cascade - each filter operates on the result of previous filters
     df_filtered = df.copy()
-    
+
     # System filter first (if not included)
     if not include_system:
         df_filtered = df_filtered[df_filtered["is_system"] != True]
@@ -1173,32 +1297,32 @@ def transactions_json_v2(request):
 
     # Apply each filter sequentially (Excel-style)
     filter_order = ["type", "category", "account", "period", "search", "amount_min", "amount_max", "tags"]
-    
+
     for filter_name in filter_order:
         if filter_name in active_filters:
             filter_value = active_filters[filter_name]
             df_before = len(df_filtered)
-            
+
             if filter_name == "type":
                 # Filter by the raw type from database (IN, EX, IV, TR, AJ)
                 df_filtered = df_filtered[df_filtered["type"] == filter_value]
-                
+
             elif filter_name == "category":
                 df_filtered = df_filtered[df_filtered["category"].str.contains(filter_value, case=False, na=False)]
-                
+
             elif filter_name == "account":
                 df_filtered = df_filtered[df_filtered["account"].str.contains(filter_value, case=False, na=False)]
-                
+
             elif filter_name == "period":
                 df_filtered = df_filtered[df_filtered["period"] == filter_value]
-                
+
             elif filter_name == "search":
                 # Create mapped type column for search
                 df_search = df_filtered.copy()
                 df_search["type_display"] = df_search["type"].map({
                     'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
                 }).fillna(df_search["type"])
-                
+
                 search_mask = (
                     df_search["category"].str.contains(filter_value, case=False, na=False) |
                     df_search["account"].str.contains(filter_value, case=False, na=False) |
@@ -1206,45 +1330,45 @@ def transactions_json_v2(request):
                     df_search["tags"].str.contains(filter_value, case=False, na=False)
                 )
                 df_filtered = df_filtered[search_mask]
-                
+
             elif filter_name == "amount_min":
                 try:
                     min_val = float(filter_value)
                     df_filtered = df_filtered[df_filtered["amount"] >= min_val]
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid amount_min value: {filter_value}")
-                    
+
             elif filter_name == "amount_max":
                 try:
                     max_val = float(filter_value)
                     df_filtered = df_filtered[df_filtered["amount"] <= max_val]
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid amount_max value: {filter_value}")
-                    
+
             elif filter_name == "tags":
                 tag_list = [t.strip().lower() for t in filter_value.split(",") if t.strip()]
                 if tag_list:
                     tag_pattern = '|'.join(tag_list)
                     df_filtered = df_filtered[df_filtered["tags"].str.contains(tag_pattern, case=False, na=False)]
-            
+
             logger.debug(f"🔽 [Excel Filter] {filter_name}='{filter_value}' applied: {df_before} → {len(df_filtered)} rows")
 
     # 📊 CALCULATE AVAILABLE FILTER OPTIONS (Excel-style)
     # For each filter, calculate what values are available based on OTHER active filters
-    
+
     def get_available_options_for_filter(target_filter):
         """Get available options for a specific filter based on other active filters."""
         temp_df = df.copy()
-        
+
         # System filter first (if not included)
         if not include_system:
             temp_df = temp_df[temp_df["is_system"] != True]
-        
+
         # Apply all OTHER filters (not the target filter)
         for filter_name in filter_order:
             if filter_name != target_filter and filter_name in active_filters:
                 filter_value = active_filters[filter_name]
-                
+
                 if filter_name == "type":
                     temp_df = temp_df[temp_df["type"] == filter_value]
                 elif filter_name == "category":
@@ -1258,7 +1382,7 @@ def transactions_json_v2(request):
                     temp_search["type_display"] = temp_search["type"].map({
                         'IN': 'Income', 'EX': 'Expense', 'IV': 'Investment', 'TR': 'Transfer', 'AJ': 'Adjustment'
                     }).fillna(temp_search["type"])
-                    
+
                     search_mask = (
                         temp_search["category"].str.contains(filter_value, case=False, na=False) |
                         temp_search["account"].str.contains(filter_value, case=False, na=False) |
@@ -1283,7 +1407,7 @@ def transactions_json_v2(request):
                     if tag_list:
                         tag_pattern = '|'.join(tag_list)
                         temp_df = temp_df[temp_df["tags"].str.contains(tag_pattern, case=False, na=False)]
-        
+
         return temp_df
 
     # Calculate available options for each filter
@@ -1493,7 +1617,7 @@ def transactions_totals_v2(request):
             WHERE {where_clause}
             GROUP BY tx.type
         """
-        
+
         logger.debug(f"📝 [transactions_totals_v2] SQL Query: {query}")
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -1506,7 +1630,7 @@ def transactions_totals_v2(request):
         'investments': 0,
         'transfers': 0
     }
-    
+
     # Debug individual transactions
     for tx_type, amount in rows:
         logger.debug(f"🔍 [transactions_totals_v2] Processing: type={tx_type}, amount={amount}")
@@ -1521,7 +1645,7 @@ def transactions_totals_v2(request):
     for tx_type, amount in rows:
         amount_float = float(amount)
         logger.debug(f"💰 [transactions_totals_v2] Processing {tx_type}: {amount_float}")
-        
+
         if tx_type == 'IN':
             # Income: sum positive values
             totals['income'] += abs(amount_float)
@@ -1541,7 +1665,7 @@ def transactions_totals_v2(request):
 
     # Balance = Income - Expenses (not including investments or transfers)
     totals['balance'] = totals['income'] - totals['expenses']
-    
+
     logger.debug(f"🧮 [transactions_totals_v2] Final calculation: Balance = {totals['income']} - {totals['expenses']} = {totals['balance']}")
 
     logger.debug(f"📊 [transactions_totals_v2] Final totals: {totals}")
@@ -2001,7 +2125,7 @@ def account_balance_export_xlsx(request):
 
 @login_required
 def account_balance_import_xlsx(request):
-    """Import account balances from Excel."""
+    """Import account balances from Excel with optimized bulk operations."""
     if request.method == 'POST':
         try:
             uploaded_file = request.FILES.get('file')
@@ -2019,67 +2143,167 @@ def account_balance_import_xlsx(request):
                 messages.error(request, f'Missing required columns: {", ".join(missing_cols)}')
                 return render(request, 'core/import_balances_form.html')
 
+            # Clean and validate data upfront
+            df = df.dropna(subset=required_cols)
+            df['Account'] = df['Account'].astype(str).str.strip()
+
+            try:
+                df['Year'] = df['Year'].astype(int)
+                df['Month'] = df['Month'].astype(int)
+                df['Balance'] = df['Balance'].astype(float)
+            except ValueError as e:
+                messages.error(request, f'Invalid data format: {str(e)}')
+                return render(request, 'core/import_balances_form.html')
+
             imported_count = 0
+            updated_count = 0
             errors = []
 
             with db_transaction.atomic():
+                # Pre-fetch default objects
+                default_currency, _ = Currency.objects.get_or_create(
+                    code='EUR', 
+                    defaults={'name': 'Euro', 'symbol': '€'}
+                )
+                default_account_type, _ = AccountType.objects.get_or_create(
+                    name='Savings'
+                )
+
+                # Get unique periods and accounts from data
+                unique_periods = df[['Year', 'Month']].drop_duplicates()
+                unique_accounts = df['Account'].unique()
+
+                # Bulk create/get periods
+                periods_to_create = []
+                existing_periods = {}
+
+                for _, row in unique_periods.iterrows():
+                    year, month = int(row['Year']), int(row['Month'])
+                    try:
+                        period = DatePeriod.objects.get(year=year, month=month)
+                        existing_periods[(year, month)] = period
+                    except DatePeriod.DoesNotExist:
+                        period_date = date(year, month, 1)
+                        periods_to_create.append(DatePeriod(
+                            year=year,
+                            month=month,
+                            label=period_date.strftime('%B %Y')
+                        ))
+
+                # Bulk create new periods
+                if periods_to_create:
+                    DatePeriod.objects.bulk_create(periods_to_create, ignore_conflicts=True)
+
+                # Re-fetch all periods after bulk create
+                all_periods = DatePeriod.objects.filter(
+                    year__in=unique_periods['Year'].values,
+                    month__in=unique_periods['Month'].values
+                )
+                period_lookup = {(p.year, p.month): p for p in all_periods}
+
+                # Bulk create/get accounts
+                accounts_to_create = []
+                existing_accounts = {}
+
+                for account_name in unique_accounts:
+                    try:
+                        account = Account.objects.get(name=account_name, user=request.user)
+                        existing_accounts[account_name] = account
+                    except Account.DoesNotExist:
+                        accounts_to_create.append(Account(
+                            name=account_name,
+                            user=request.user,
+                            currency=default_currency,
+                            account_type=default_account_type
+                        ))
+
+                # Bulk create new accounts
+                if accounts_to_create:
+                    Account.objects.bulk_create(accounts_to_create, ignore_conflicts=True)
+
+                # Re-fetch all accounts after bulk create
+                all_accounts = Account.objects.filter(
+                    user=request.user,
+                    name__in=unique_accounts
+                )
+                account_lookup = {a.name: a for a in all_accounts}
+
+                # Prepare balance operations
+                balances_to_create = []
+                balances_to_update = []
+
+                # Get existing balances for this user in bulk
+                existing_balances = {}
+                if account_lookup and period_lookup:
+                    existing_balance_qs = AccountBalance.objects.filter(
+                        account__user=request.user,
+                        account__in=account_lookup.values(),
+                        period__in=period_lookup.values()
+                    ).select_related('account', 'period')
+
+                    for bal in existing_balance_qs:
+                        key = (bal.account.name, bal.period.year, bal.period.month)
+                        existing_balances[key] = bal
+
+                # Process each row for balance operations
                 for index, row in df.iterrows():
                     try:
                         year = int(row['Year'])
                         month = int(row['Month'])
                         account_name = str(row['Account']).strip()
-                        balance = float(row['Balance'])
+                        balance = Decimal(str(row['Balance']))
 
-                        # Get or create period
-                        period, _ = DatePeriod.objects.get_or_create(
-                            year=year,
-                            month=month,
-                            defaults={'label': f"{date(year, month, 1).strftime('%B %Y')}"}
-                        )
+                        # Get period and account from lookup
+                        period = period_lookup.get((year, month))
+                        account = account_lookup.get(account_name)
 
-                        # Get or create account
-                        default_currency = Currency.objects.get_or_create(
-                            code='EUR', 
-                            defaults={'name': 'Euro', 'symbol': '€'}
-                        )[0]
+                        if not period or not account:
+                            errors.append(f'Row {index + 2}: Could not find period or account')
+                            continue
 
-                        default_account_type = AccountType.objects.get_or_create(
-                            name='Savings'
-                        )[0]
+                        balance_key = (account_name, year, month)
 
-                        account, _ = Account.objects.get_or_create(
-                            name=account_name,
-                            user=request.user,
-                            defaults={
-                                'currency': default_currency,
-                                'account_type': default_account_type
-                            }
-                        )
-
-                        # Create or update balance
-                        balance_obj, created = AccountBalance.objects.get_or_create(
-                            account=account,
-                            period=period,
-                            defaults={'reported_balance': Decimal(str(balance))}
-                        )
-
-                        if not created:
-                            balance_obj.reported_balance = Decimal(str(balance))
-                            balance_obj.save()
-
-                        imported_count += 1
+                        if balance_key in existing_balances:
+                            # Update existing balance
+                            existing_balance = existing_balances[balance_key]
+                            existing_balance.reported_balance = balance
+                            balances_to_update.append(existing_balance)
+                            updated_count += 1
+                        else:
+                            # Create new balance
+                            balances_to_create.append(AccountBalance(
+                                account=account,
+                                period=period,
+                                reported_balance=balance
+                            ))
+                            imported_count += 1
 
                     except Exception as e:
                         errors.append(f'Row {index + 2}: {str(e)}')
 
-            if errors:
-                messages.warning(request, f'Imported {imported_count} balances with {len(errors)} errors: {"; ".join(errors[:3])}')
-            else:
-                messages.success(request, f'Successfully imported {imported_count} account balances.')
+                # Bulk operations for balances
+                if balances_to_create:
+                    AccountBalance.objects.bulk_create(balances_to_create, ignore_conflicts=True)
 
-            return redirect('account_balance')
+                if balances_to_update:
+                    AccountBalance.objects.bulk_update(
+                        balances_to_update, 
+                        ['reported_balance'], 
+                        batch_size=1000
+                    )
+
+            if errors:
+                messages.warning(request, f'Imported {imported_count} new balances, updated {updated_count} existing balances with {len(errors)} errors.')
+                if len(errors) <= 5:  # Show first 5 errors
+                    for error in errors[:5]:
+                        messages.error(request, error)
+            else:
+                messages.success(request, f'Successfully imported {imported_count} new balances and updated {updated_count} existing balances.')
+
+            return redirect('/account-balance/')
 
         except Exception as e:
+            logger.error(f"Import error for user {request.user.id}: {e}")
             messages.error(request, f'Import failed: {str(e)}')
 
     return render(request, 'core/import_balances_form.html')
@@ -2120,14 +2344,14 @@ def estimate_transaction_view(request):
     periods_with_balances = DatePeriod.objects.filter(
         account_balances__account__user=request.user
     ).distinct().select_related().order_by('-year', '-month')[:12]  # Last 12 months
-    
+
     logger.debug(f"Found {periods_with_balances.count()} periods with balances for user {request.user.id}")
-    
+
     context = {
         'periods': periods_with_balances,
         'user_id': request.user.id,  # Add for frontend caching
     }
-    
+
     return render(request, 'core/estimate_transactions.html', context)
 
 
@@ -2136,45 +2360,45 @@ def estimate_transaction_view(request):
 def estimate_transaction_for_period(request):
     """Estimate transaction for a specific period."""
     from .services.finance_estimation import FinanceEstimationService
-    
+
     try:
         data = json.loads(request.body)
         period_id = data.get('period_id')
-        
+
         if not period_id:
             return JsonResponse({'success': False, 'error': 'Period ID required'})
-        
+
         # Get the period
         try:
             period = DatePeriod.objects.get(id=period_id)
         except DatePeriod.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Period not found'})
-        
+
         logger.info(f"Estimating transaction for period {period.label} (user {request.user.id})")
-        
+
         # Run estimation
         estimation_service = FinanceEstimationService(request.user)
         estimated_tx = estimation_service.estimate_transaction_for_period(period)
-        
+
         # Get updated summary data
         summary = estimation_service.get_estimation_summary(period)
-        
+
         # Clear transaction cache
         clear_tx_cache(request.user.id)
-        
+
         message = f'Estimation completed for {period.label}'
         if estimated_tx:
             message += f' - Created transaction ID {estimated_tx.id}'
         else:
             message += ' - No estimation needed (period appears balanced)'
-        
+
         return JsonResponse({
             'success': True,
             'transaction_id': estimated_tx.id if estimated_tx else None,
             'summary': summary,
             'message': message
         })
-        
+
     except Exception as e:
         logger.error(f"Error estimating transaction for user {request.user.id}: {e}")
         return JsonResponse({
@@ -2187,16 +2411,16 @@ def estimate_transaction_for_period(request):
 def get_estimation_summaries(request):
     """Get estimation summaries for multiple periods."""
     from .services.finance_estimation import FinanceEstimationService
-    
+
     try:
         # Get year filter from request
         year_filter = request.GET.get('year')
-        
+
         # Get periods with account balances, properly ordered
         periods_qs = DatePeriod.objects.filter(
             account_balances__account__user=request.user
         ).distinct().order_by('-year', '-month')
-        
+
         # Apply year filter if provided
         if year_filter:
             try:
@@ -2205,19 +2429,19 @@ def get_estimation_summaries(request):
                 logger.debug(f"Applied year filter: {year}")
             except (ValueError, TypeError):
                 logger.warning(f"Invalid year filter: {year_filter}")
-        
+
         periods = periods_qs[:12]
-        
+
         logger.debug(f"Found {periods.count()} periods for user {request.user.id}")
-        
+
         estimation_service = FinanceEstimationService(request.user)
         summaries = []
-        
+
         # Use select_related for better performance
         periods_with_data = periods.select_related().prefetch_related(
             'account_balances__account'
         )
-        
+
         for period in periods_with_data:
             try:
                 summary = estimation_service.get_estimation_summary(period)
@@ -2237,7 +2461,7 @@ def get_estimation_summaries(request):
                     'estimated_transaction_id': None,
                     'details': {}
                 })
-        
+
         # Ensure summaries are properly ordered by period (most recent first)
         summaries.sort(key=lambda x: (
             int(x['period'].split(' ')[1]) if len(x['period'].split(' ')) > 1 else 0,  # Year
@@ -2245,14 +2469,14 @@ def get_estimation_summaries(request):
              'July', 'August', 'September', 'October', 'November', 'December'].index(
                 x['period'].split(' ')[0]) + 1 if len(x['period'].split(' ')) > 1 else 0  # Month
         ), reverse=True)
-        
+
         logger.info(f"Returning {len(summaries)} estimation summaries for user {request.user.id}")
-        
+
         return JsonResponse({
             'success': True,
             'summaries': summaries
         })
-        
+
     except Exception as e:
         logger.error(f"Error getting estimation summaries for user {request.user.id}: {e}")
         return JsonResponse({
@@ -2279,18 +2503,18 @@ def delete_estimated_transaction(request, transaction_id):
                 'success': True,
                 'message': 'No estimated transaction found to delete'
             })
-        
+
         period_label = tx.period.label if tx.period else "Unknown"
         tx.delete()
-        
+
         # Clear cache
         clear_tx_cache(request.user.id)
-        
+
         return JsonResponse({
             'success': True,
             'message': f'Estimated transaction for {period_label} deleted successfully'
         })
-        
+
     except Exception as e:
         logger.error(f"Error deleting estimated transaction {transaction_id}: {e}")
         return JsonResponse({
@@ -2309,27 +2533,27 @@ def delete_estimated_transaction_by_period(request, period_id):
             period = DatePeriod.objects.get(id=period_id)
         except DatePeriod.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Period not found'})
-        
-        # Find and delete estimated transactions for this period and user
+
+        # Find and delete estimated transactions for this period anduser
         estimated_transactions = Transaction.objects.filter(
             user=request.user,
             period=period,
             is_estimated=True
         )
-        
+
         deleted_count = estimated_transactions.count()
         estimated_transactions.delete()
-        
+
         logger.info(f"Deleted {deleted_count} estimated transaction(s) for period {period.label}")
-        
+
         # Clear cache
         clear_tx_cache(request.user.id)
-        
+
         return JsonResponse({
             'success': True,
             'message': f'Deleted {deleted_count} estimated transaction(s) for {period.label}'
         })
-        
+
     except Exception as e:
         logger.error(f"Error deleting estimated transactions for period {period_id}: {e}")
         return JsonResponse({
@@ -2352,16 +2576,16 @@ def get_available_years(request):
                 WHERE a.user_id = %s
                 ORDER BY dp.year DESC
             """, [request.user.id])
-            
+
             years = [row[0] for row in cursor.fetchall()]
-            
+
         logger.debug(f"Found {len(years)} years with balance periods for user {request.user.id}: {years}")
-        
+
         return JsonResponse({
             'success': True,
             'years': years
         })
-        
+
     except Exception as e:
         logger.error(f"Error getting available years for user {request.user.id}: {e}")
         return JsonResponse({
@@ -2659,7 +2883,7 @@ def dashboard_goals_json(request):
         # Calculate monthly savings goal (target: €2000)
         savings_target = 2000
         current_savings = 0
-        
+
         if current_period:
             # Get current month transactions
             current_income = Transaction.objects.filter(
@@ -2667,36 +2891,36 @@ def dashboard_goals_json(request):
                 period=current_period,
                 type='IN'
             ).aggregate(total=models.Sum('amount'))['total'] or 0
-            
+
             current_expenses = abs(Transaction.objects.filter(
                 user_id=user_id,
                 period=current_period,
                 type='EX'
             ).aggregate(total=models.Sum('amount'))['total'] or 0)
-            
+
             current_savings = float(current_income) - float(current_expenses)
-        
+
         savings_progress = min(100, max(0, (current_savings / savings_target) * 100))
-        
+
         # Calculate investment target (target: €10000 total)
         investment_target = 10000
         total_investments = float(Transaction.objects.filter(
             user_id=user_id,
             type='IV'
         ).aggregate(total=models.Sum('amount'))['total'] or 0)
-        
+
         investment_progress = min(100, max(0, (abs(total_investments) / investment_target) * 100))
-        
+
         # Calculate spending reduction goal (target: save €500 vs average)
         # Get last 3 months average expenses
         last_3_months = DatePeriod.objects.filter(
             year__gte=today.year - 1
         ).order_by('-year', '-month')[:3]
-        
+
         avg_expenses = 0
         current_month_expenses = 0
         reduction_target = 500
-        
+
         if last_3_months.count() >= 2:
             # Average of previous months (excluding current)
             previous_periods = last_3_months[1:]
@@ -2705,7 +2929,7 @@ def dashboard_goals_json(request):
                 period__in=previous_periods,
                 type='EX'
             ).aggregate(total=models.Sum('amount'))['total'] or 0) / len(previous_periods)
-            
+
             # Current month expenses
             if current_period:
                 current_month_expenses = float(Transaction.objects.filter(
@@ -2713,7 +2937,7 @@ def dashboard_goals_json(request):
                     period=current_period,
                     type='EX'
                 ).aggregate(total=models.Sum('amount'))['total'] or 0)
-        
+
         actual_reduction = max(0, abs(avg_expenses) - abs(current_month_expenses))
         reduction_progress = min(100, max(0, (actual_reduction / reduction_target) * 100))
 
@@ -2754,6 +2978,101 @@ def dashboard_goals_json(request):
         }, status=500)
 
 
+@login_required
+def dashboard_spending_by_category_json(request):
+    """Dashboard Spending by Category JSON API."""
+    try:
+        user_id = request.user.id
+        logger.debug(f"🛒 [dashboard_spending_by_category_json] Request from user {user_id}")
+
+        if request.method != 'POST':
+            return JsonResponse({'status': 'error', 'message': 'POST required'}, status=405)
+
+        import json
+        data = json.loads(request.body)
+        start_period = data.get('start_period')  # Format: YYYY-MM
+        end_period = data.get('end_period')      # Format: YYYY-MM
+
+        logger.debug(f"📅 [dashboard_spending_by_category_json] Period: {start_period} -> {end_period}")
+
+        # Base query for expense transactions
+        tx_query = Transaction.objects.filter(
+            user_id=user_id,
+            type='EX'  # Only expenses
+        )
+
+        # Apply period filters if provided
+        if start_period and end_period:
+            try:
+                # Parse periods (format: YYYY-MM)
+                start_year, start_month = map(int, start_period.split('-'))
+                end_year, end_month = map(int, end_period.split('-'))
+
+                # Calculate date range
+                from calendar import monthrange
+                start_date = date(start_year, start_month, 1)
+                _, last_day = monthrange(end_year, end_month)
+                end_date = date(end_year, end_month, last_day)
+
+                logger.debug(f"📅 [dashboard_spending_by_category_json] Date range: {start_date} -> {end_date}")
+
+                tx_query = tx_query.filter(
+                    date__gte=start_date,
+                    date__lte=end_date
+                )
+            except ValueError as e:
+                logger.error(f"❌ [dashboard_spending_by_category_json] Invalid period format: {e}")
+                return JsonResponse({'status': 'error', 'message': 'Invalid period format'}, status=400)
+
+        # Group expenses by category
+        category_totals = tx_query.values('category__name').annotate(
+            total_amount=models.Sum('amount'),
+            transaction_count=models.Count('id')
+        ).order_by('-total_amount')
+
+        categories = []
+        total_expenses = 0
+
+        for item in category_totals:
+            category_name = item['category__name'] or 'Uncategorized'
+            amount = abs(float(item['total_amount'] or 0))  # Ensure positive
+            count = item['transaction_count']
+
+            if amount > 0:  # Only include categories with expenses
+                categories.append({
+                    'name': category_name,
+                    'total_amount': amount,
+                    'transaction_count': count,
+                    'percentage': 0  # Will calculate after getting total
+                })
+                total_expenses += amount
+
+        # Calculate percentages
+        for category in categories:
+            if total_expenses > 0:
+                category['percentage'] = (category['total_amount'] / total_expenses) * 100
+
+        # Sort by amount (descending)
+        categories.sort(key=lambda x: x['total_amount'], reverse=True)
+
+        logger.debug(f"🛒 [dashboard_spending_by_category_json] Found {len(categories)} categories, total: €{total_expenses:.2f}")
+
+        return JsonResponse({
+            'status': 'success',
+            'categories': categories,
+            'total_expenses': total_expenses,
+            'period': f"{start_period} to {end_period}" if start_period and end_period else 'All time'
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error in dashboard_spending_by_category_json for user {request.user.id}: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e),
+            'categories': []
+        }, status=500)
+
+
 @login_required  
 def dashboard_insights_json(request):
     """Dashboard Insights JSON API."""
@@ -2762,10 +3081,10 @@ def dashboard_insights_json(request):
         logger.debug(f"🧠 [dashboard_insights_json] Request from user {user_id}")
 
         insights = []
-        
+
         # Get user's financial data for analysis
         total_transactions = Transaction.objects.filter(user_id=user_id).count()
-        
+
         if total_transactions == 0:
             insights.append({
                 'type': 'info',
@@ -2776,34 +3095,34 @@ def dashboard_insights_json(request):
 
         # Get recent data (last 3 months)
         recent_periods = DatePeriod.objects.order_by('-year', '-month')[:3]
-        
+
         # Calculate monthly averages
         recent_income = Transaction.objects.filter(
             user_id=user_id,
             period__in=recent_periods,
             type='IN'
         ).aggregate(total=models.Sum('amount'))['total'] or 0
-        
+
         recent_expenses = abs(Transaction.objects.filter(
             user_id=user_id,
             period__in=recent_periods,
             type='EX'
         ).aggregate(total=models.Sum('amount'))['total'] or 0)
-        
+
         recent_investments = abs(Transaction.objects.filter(
             user_id=user_id,
             period__in=recent_periods,
             type='IV'
         ).aggregate(total=models.Sum('amount'))['total'] or 0)
-        
+
         months_count = max(1, recent_periods.count())
         avg_income = float(recent_income) / months_count
         avg_expenses = float(recent_expenses) / months_count
         avg_investments = float(recent_investments) / months_count
-        
+
         # Savings rate analysis
         savings_rate = ((avg_income - avg_expenses) / avg_income * 100) if avg_income > 0 else 0
-        
+
         if savings_rate > 30:
             insights.append({
                 'type': 'positive',
@@ -2828,10 +3147,10 @@ def dashboard_insights_json(request):
                 'title': '⚠️ Spending Alert',
                 'text': 'You\'re spending more than you earn. Review your budget urgently.'
             })
-        
+
         # Investment analysis
         investment_rate = (avg_investments / avg_income * 100) if avg_income > 0 else 0
-        
+
         if investment_rate > 15:
             insights.append({
                 'type': 'positive',
@@ -2850,22 +3169,22 @@ def dashboard_insights_json(request):
                 'title': '🌱 Investment Starter',
                 'text': f'Great start with {investment_rate:.1f}% invested. Gradually increase your investment rate.'
             })
-        
+
         # Transaction categorization insight
         categorized_count = Transaction.objects.filter(
             user_id=user_id,
             category__isnull=False
         ).count()
-        
+
         categorization_rate = (categorized_count / total_transactions * 100) if total_transactions > 0 else 0
-        
+
         if categorization_rate < 80:
             insights.append({
                 'type': 'info',
                 'title': '🏷️ Organize Your Finances',
                 'text': f'Only {categorization_rate:.0f}% of transactions are categorized. Better categorization provides deeper insights.'
             })
-        
+
         # Seasonal spending insight
         current_month = date.today().month
         if current_month in [11, 12, 1]:  # Nov, Dec, Jan
@@ -2880,7 +3199,7 @@ def dashboard_insights_json(request):
                 'title': '☀️ Summer Spending',
                 'text': 'Summer often brings vacation and leisure expenses. Plan ahead to maintain your savings goals.'
             })
-        
+
         # Account balance insight
         latest_period = DatePeriod.objects.order_by('-year', '-month').first()
         if latest_period:
@@ -2888,14 +3207,14 @@ def dashboard_insights_json(request):
                 account__user_id=user_id,
                 period=latest_period
             ).aggregate(total=models.Sum('reported_balance'))['total'] or 0
-            
+
             if float(total_balance) > 50000:
                 insights.append({
                     'type': 'positive',
                     'title': '💰 Strong Financial Position',
                     'text': 'Your net worth is growing well. Consider diversifying investments for optimal returns.'
                 })
-        
+
         # If no specific insights, add encouragement
         if len(insights) == 0:
             insights.append({
@@ -2903,10 +3222,10 @@ def dashboard_insights_json(request):
                 'title': '📊 Keep Building Data',
                 'text': 'Continue adding transactions and balances for more personalized financial insights.'
             })
-        
+
         # Limit to 4 most relevant insights
         insights = insights[:4]
-        
+
         return JsonResponse({
             'status': 'success',
             'insights': insights

@@ -124,9 +124,72 @@ document.addEventListener("DOMContentLoaded", () => {
           tooltip: {
             mode: 'index',
             intersect: false,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            footerColor: '#a0a0a0',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            cornerRadius: 8,
             callbacks: {
+              title: function(tooltipItems) {
+                return tooltipItems[0]?.label ? `📅 ${tooltipItems[0].label}` : '';
+              },
               label: function(context) {
-                return context.dataset.label + ': ' + formatCurrency(context.parsed.y);
+                return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+              },
+              afterBody: function(tooltipItems) {
+                if (tooltipItems.length === 0) return '';
+
+                // Calculate period-specific insights
+                let savings = 0;
+                let investments = 0;
+                let total = 0;
+
+                tooltipItems.forEach(item => {
+                  const value = item.parsed.y || 0;
+                  if (item.dataset.label.includes('Savings')) {
+                    savings = value;
+                  } else if (item.dataset.label.includes('Investments')) {
+                    investments = value;
+                  } else if (item.dataset.label.includes('Total')) {
+                    total = value;
+                  }
+                });
+
+                const result = [''];
+
+                // Show allocation percentages
+                if (total > 0) {
+                  const savingsPercent = ((savings / total) * 100).toFixed(1);
+                  const investmentsPercent = ((investments / total) * 100).toFixed(1);
+
+                  result.push('💼 Portfolio Allocation:');
+                  result.push(`   💰 Savings: ${savingsPercent}%`);
+                  result.push(`   📈 Investments: ${investmentsPercent}%`);
+                }
+
+                // Calculate growth from previous period if available
+                const currentIndex = tooltipItems[0].dataIndex;
+                if (currentIndex > 0 && charts.evolution.data.datasets.length > 0) {
+                  const totalDataset = charts.evolution.data.datasets.find(d => d.label.includes('Total'));
+                  if (totalDataset && totalDataset.data[currentIndex - 1] !== undefined) {
+                    const previousTotal = totalDataset.data[currentIndex - 1] || 0;
+                    const currentTotal = totalDataset.data[currentIndex] || 0;
+
+                    if (previousTotal > 0) {
+                      const growth = ((currentTotal - previousTotal) / previousTotal * 100);
+                      const growthText = growth >= 0 ? `+${growth.toFixed(1)}%` : `${growth.toFixed(1)}%`;
+                      const growthIcon = growth >= 0 ? '📈' : '📉';
+
+                      result.push('');
+                      result.push(`${growthIcon} Growth vs Previous Period: ${growthText}`);
+                      result.push(`   Absolute Change: ${formatCurrency(currentTotal - previousTotal)}`);
+                    }
+                  }
+                }
+
+                return result;
               }
             }
           }
@@ -192,6 +255,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
                 const percentage = ((value / total) * 100).toFixed(1);
                 return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+              },
+              footer: function(tooltipItems) {
+                if (tooltipItems.length === 0) return '';
+
+                const total = tooltipItems[0].dataset.data.reduce((a, b) => a + b, 0);
+                const numItems = tooltipItems[0].dataset.data.length;
+                const average = total / numItems;
+
+                return ['', '--- Current Total ---', `Total Portfolio: ${formatCurrency(total)}`];
               }
             }
           }
@@ -239,6 +311,75 @@ document.addEventListener("DOMContentLoaded", () => {
           title: {
             display: true,
             text: 'Monthly Financial Flows'
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            footerColor: '#a0a0a0',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            cornerRadius: 8,
+            callbacks: {
+              title: function(tooltipItems) {
+                return tooltipItems[0]?.label ? `Month: ${tooltipItems[0].label}` : '';
+              },
+              label: function(context) {
+                return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+              },
+              afterBody: function(tooltipItems) {
+                if (tooltipItems.length === 0) return '';
+
+                // Calculate savings rate for this month
+                let monthlyIncome = 0;
+                let monthlyExpenses = 0;
+                let monthlyInvestments = 0;
+
+                tooltipItems.forEach(item => {
+                  const value = item.parsed.y || 0;
+                  if (item.dataset.label.includes('Income')) {
+                    monthlyIncome = value;
+                  } else if (item.dataset.label.includes('Expenses')) {
+                    monthlyExpenses = value;
+                  } else if (item.dataset.label.includes('Investments')) {
+                    monthlyInvestments = value;
+                  }
+                });
+
+                const monthlySavings = monthlyIncome - monthlyExpenses - monthlyInvestments;
+                const savingsRate = monthlyIncome > 0 ? (monthlySavings / monthlyIncome * 100) : 0;
+
+                // Calculate period averages
+                const periodStats = [];
+                tooltipItems.forEach(item => {
+                  const dataset = item.dataset;
+                  const data = dataset.data;
+                  if (data && data.length > 0) {
+                    const validData = data.filter(val => val !== null && val !== undefined && !isNaN(val));
+                    if (validData.length > 0) {
+                      const average = validData.reduce((sum, val) => sum + val, 0) / validData.length;
+                      const total = validData.reduce((sum, val) => sum + val, 0);
+
+                      periodStats.push(`📊 ${dataset.label} (Period):`);
+                      periodStats.push(`   Average: ${formatCurrency(average)}`);
+                      periodStats.push(`   Total: ${formatCurrency(total)}`);
+                      periodStats.push('');
+                    }
+                  }
+                });
+
+                const result = [''];
+                if (monthlyIncome > 0) {
+                  result.push(`💰 Monthly Savings: ${formatCurrency(monthlySavings)}`);
+                  result.push(`📈 Savings Rate: ${savingsRate.toFixed(1)}%`);
+                  result.push('');
+                }
+
+                return [...result, ...periodStats];
+              }
+            }
           }
         },
         scales: {
@@ -289,6 +430,51 @@ document.addEventListener("DOMContentLoaded", () => {
           title: {
             display: true,
             text: 'Investment Returns Over Time'
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            footerColor: '#a0a0a0',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            cornerRadius: 8,
+            callbacks: {
+              title: function(tooltipItems) {
+                return tooltipItems[0]?.label ? `Period: ${tooltipItems[0].label}` : '';
+              },
+              label: function(context) {
+                return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+              },
+              afterBody: function(tooltipItems) {
+                if (tooltipItems.length === 0) return '';
+
+                // Calculate averages for the selected period
+                const periodAverages = [];
+                tooltipItems.forEach(item => {
+                  const dataset = item.dataset;
+                  const data = dataset.data;
+                  if (data && data.length > 0) {
+                    const validData = data.filter(val => val !== null && val !== undefined && !isNaN(val));
+                    if (validData.length > 0) {
+                      const average = validData.reduce((sum, val) => sum + val, 0) / validData.length;
+                      const maxValue = Math.max(...validData);
+                      const minValue = Math.min(...validData);
+
+                      periodAverages.push('');
+                      periodAverages.push(`📊 ${dataset.label} Statistics:`);
+                      periodAverages.push(`   Average: ${formatCurrency(average)}`);
+                      periodAverages.push(`   Maximum: ${formatCurrency(maxValue)}`);
+                      periodAverages.push(`   Minimum: ${formatCurrency(minValue)}`);
+                    }
+                  }
+                });
+
+                return periodAverages;
+              }
+            }
           }
         },
         scales: {
@@ -343,6 +529,37 @@ document.addEventListener("DOMContentLoaded", () => {
                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
                 const percentage = ((value / total) * 100).toFixed(1);
                 return `${context.label}: ${formatCurrency(value)} (${percentage}%)`;
+              },
+              footer: function(tooltipItems) {
+                if (tooltipItems.length === 0) return '';
+
+                const categoryName = tooltipItems[0].label;
+                const categoryTotal = tooltipItems[0].parsed;
+
+                // Get the current period range from slider
+                const [start, end] = periodSlider.noUiSlider.get();
+                const iStart = allPeriods.indexOf(start);
+                const iEnd = allPeriods.indexOf(end);
+                const numPeriods = iEnd - iStart + 1;
+
+                // Calculate detailed statistics for this category
+                const monthlyAverage = categoryTotal / numPeriods;
+                const dailyAverage = categoryTotal / (numPeriods * 30); // Approximate daily average
+
+                // Calculate percentage of total spending
+                const totalSpending = tooltipItems[0].dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = ((categoryTotal / totalSpending) * 100).toFixed(1);
+
+                return [
+                  '',
+                  `--- ${categoryName} Details ---`,
+                  `Selected Period: ${start} to ${end}`,
+                  `Total Amount: ${formatCurrency(categoryTotal)}`,
+                  `Monthly Average: ${formatCurrency(monthlyAverage)}`,
+                  `Daily Average: ${formatCurrency(dailyAverage)}`,
+                  `% of Total Spending: ${percentage}%`,
+                  `Number of Periods: ${numPeriods} months`
+                ];
               }
             }
           }
@@ -994,20 +1211,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       console.log('📊 [updateFlowsChart] Processing periods:', visiblePeriods);
 
-      // Fetch real transaction data for each period individually
-      const incomeData = [];
-      const expenseData = [];
-      const investmentData = [];
-
-      for (const period of visiblePeriods) {
-        try {
-          // Convert period format from "Jul/25" to date range
+      // Batch fetch all periods at once for better performance
+      const allPeriodsData = await Promise.allSettled(
+        visiblePeriods.map(async (period) => {
           const [month, year] = period.split('/');
           const fullYear = 2000 + parseInt(year);
-          const monthNum = getMonthNumber(month); // String format for API
-          const monthInt = getMonthNumberInt(month); // Integer for date calculations
-
-          // Get last day of month
+          const monthNum = getMonthNumber(month);
+          const monthInt = getMonthNumberInt(month);
           const lastDay = new Date(fullYear, monthInt, 0).getDate();
 
           const response = await fetch('/transactions/totals-v2/', {
@@ -1019,43 +1229,65 @@ document.addEventListener("DOMContentLoaded", () => {
             body: JSON.stringify({
               date_start: `${fullYear}-${monthNum}-01`,
               date_end: `${fullYear}-${monthNum}-${lastDay}`,
-              include_system: true
+              include_system: false  // Exclude system transactions for real user spending
             })
           });
 
-          if (response.ok) {
-            const periodData = await response.json();
-            incomeData.push(periodData.income || 0);
-            expenseData.push(Math.abs(periodData.expenses || 0)); // Make positive for display
-            investmentData.push(Math.abs(periodData.investments || 0)); // Make positive for display
-
-            console.log(`📊 [updateFlowsChart] ${period}:`, {
-              income: periodData.income || 0,
-              expenses: Math.abs(periodData.expenses || 0),
-              investments: Math.abs(periodData.investments || 0)
-            });
-          } else {
-            // If API fails, use 0 values for this period
-            incomeData.push(0);
-            expenseData.push(0);
-            investmentData.push(0);
-            console.warn(`⚠️ [updateFlowsChart] Failed to get data for period ${period}`);
+          if (!response.ok) {
+            throw new Error(`API failed for period ${period}`);
           }
-        } catch (periodError) {
-          console.warn(`⚠️ [updateFlowsChart] Error processing period ${period}:`, periodError);
-          incomeData.push(0);
-          expenseData.push(0);
-          investmentData.push(0);
-        }
-      }
 
-      // Update chart with real monthly data
+          const data = await response.json();
+          console.log(`📊 [updateFlowsChart] ${period} data:`, data);
+
+          return {
+            period,
+            income: Math.abs(data.income || 0),  // Ensure positive
+            expenses: Math.abs(data.expenses || 0),  // Ensure positive  
+            investments: Math.abs(data.investments || 0),  // Ensure positive
+            balance: data.balance || 0
+          };
+        })
+      );
+
+      // Process results and handle failures gracefully
+      const incomeData = [];
+      const expenseData = [];
+      const investmentData = [];
+
+      allPeriodsData.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const data = result.value;
+          incomeData.push(data.income);
+          expenseData.push(data.expenses);
+          investmentData.push(data.investments);
+
+          console.log(`✅ [updateFlowsChart] ${data.period}: Income=€${data.income}, Expenses=€${data.expenses}, Investments=€${data.investments}`);
+        } else {
+          // Fallback for failed periods - estimate from account balance changes
+          const period = visiblePeriods[index];
+          const fallbackData = estimateFlowsFromBalanceChanges(period, index, visiblePeriods);
+
+          incomeData.push(fallbackData.income);
+          expenseData.push(fallbackData.expenses);
+          investmentData.push(fallbackData.investments);
+
+          console.warn(`⚠️ [updateFlowsChart] Using fallback data for ${period}:`, fallbackData);
+        }
+      });
+
+      // Update chart with real transaction data
       charts.flows.data.labels = visiblePeriods;
       charts.flows.data.datasets[0].data = incomeData;
       charts.flows.data.datasets[1].data = expenseData;
       charts.flows.data.datasets[2].data = investmentData;
 
-      console.log('📊 [updateFlowsChart] Chart updated with real monthly data:', {
+      // Update chart labels to be clearer
+      charts.flows.data.datasets[0].label = 'Income (€)';
+      charts.flows.data.datasets[1].label = 'Expenses (€)';
+      charts.flows.data.datasets[2].label = 'Investments (€)';
+
+      console.log('📊 [updateFlowsChart] Chart updated with transaction totals:', {
         periods: visiblePeriods.length,
         totalIncome: incomeData.reduce((a, b) => a + b, 0).toFixed(2),
         totalExpenses: expenseData.reduce((a, b) => a + b, 0).toFixed(2),
@@ -1063,72 +1295,86 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
     } catch (error) {
-      console.warn('⚠️ [updateFlowsChart] Failed to load real transaction data, using fallback method:', error);
+      console.error('❌ [updateFlowsChart] Error loading transaction data:', error);
 
-      // Fallback: Calculate flows from account balance changes
-      const [start, end] = periodSlider.noUiSlider.get();
-      const iStart = allPeriods.indexOf(start);
-      const iEnd = allPeriods.indexOf(end);
-      const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
-
-      const incomeData = [];
-      const expenseData = [];
-      const investmentData = [];
-
-      visiblePeriods.forEach((period, index) => {
-        let currentSavings = 0;
-        let currentInvestments = 0;
-        let prevSavings = 0;
-        let prevInvestments = 0;
-
-        // Get current period values
-        rows.forEach(row => {
-          const value = parseFloat(row[period]) || 0;
-          const rowType = (row.type || '').toLowerCase();
-          if (rowType.includes('savings') || rowType.includes('current')) {
-            currentSavings += value;
-          } else if (rowType.includes('investment')) {
-            currentInvestments += value;
-          }
-        });
-
-        // Get previous period values if available
-        if (index > 0) {
-          const prevPeriod = visiblePeriods[index - 1];
-          rows.forEach(row => {
-            const value = parseFloat(row[prevPeriod]) || 0;
-            const rowType = (row.type || '').toLowerCase();
-            if (rowType.includes('savings') || rowType.includes('current')) {
-              prevSavings += value;
-            } else if (rowType.includes('investment')) {
-              prevInvestments += value;
-            }
-          });
-        }
-
-        // Calculate changes (approximated flows)
-        const savingsChange = currentSavings - prevSavings;
-        const investmentChange = currentInvestments - prevInvestments;
-
-        // Estimate income and expenses from balance changes
-        const estimatedIncome = Math.max(savingsChange + Math.abs(investmentChange) + 200, 0);
-        const estimatedExpenses = Math.max(200, 0); // Minimum base expenses
-        const estimatedInvestmentFlow = Math.abs(investmentChange);
-
-        incomeData.push(estimatedIncome);
-        expenseData.push(estimatedExpenses);
-        investmentData.push(estimatedInvestmentFlow);
-      });
-
-      charts.flows.data.labels = visiblePeriods;
-      charts.flows.data.datasets[0].data = incomeData;
-      charts.flows.data.datasets[1].data = expenseData;
-      charts.flows.data.datasets[2].data = investmentData;
-
-      console.log('📊 [updateFlowsChart] Using fallback data based on balance changes');
+      // Comprehensive fallback using balance changes
+      await updateFlowsChartFallback();
     }
 
     charts.flows.update('none');
+  };
+
+  // Helper function to estimate flows from balance changes for individual periods
+  const estimateFlowsFromBalanceChanges = (period, index, visiblePeriods) => {
+    let currentSavings = 0;
+    let currentInvestments = 0;
+    let prevSavings = 0;
+    let prevInvestments = 0;
+
+    // Get current period values
+    rows.forEach(row => {
+      const value = parseFloat(row[period]) || 0;
+      const rowType = (row.type || '').toLowerCase();
+      if (rowType.includes('savings') || rowType.includes('current')) {
+        currentSavings += value;
+      } else if (rowType.includes('investment')) {
+        currentInvestments += value;
+      }
+    });
+
+    // Get previous period values if available
+    if (index > 0) {
+      const prevPeriod = visiblePeriods[index - 1];
+      rows.forEach(row => {
+        const value = parseFloat(row[prevPeriod]) || 0;
+        const rowType = (row.type || '').toLowerCase();
+        if (rowType.includes('savings') || rowType.includes('current')) {
+          prevSavings += value;
+        } else if (rowType.includes('investment')) {
+          prevInvestments += value;
+        }
+      });
+    }
+
+    // Calculate changes and estimate flows
+    const savingsChange = currentSavings - prevSavings;
+    const investmentChange = Math.abs(currentInvestments - prevInvestments);
+
+    // More realistic estimation based on balance changes
+    const estimatedIncome = Math.max(0, savingsChange + investmentChange + 800); // Add base living expenses
+    const estimatedExpenses = Math.max(400, estimatedIncome - savingsChange - investmentChange); // Derive from income and savings
+
+    return {
+      income: estimatedIncome,
+      expenses: estimatedExpenses,
+      investments: investmentChange
+    };
+  };
+
+  // Comprehensive fallback method when API calls fail
+  const updateFlowsChartFallback = async () => {
+    const [start, end] = periodSlider.noUiSlider.get();
+    const iStart = allPeriods.indexOf(start);
+    const iEnd = allPeriods.indexOf(end);
+    const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+
+    const incomeData = [];
+    const expenseData = [];
+    const investmentData = [];
+
+    visiblePeriods.forEach((period, index) => {
+      const fallbackData = estimateFlowsFromBalanceChanges(period, index, visiblePeriods);
+      incomeData.push(fallbackData.income);
+      expenseData.push(fallbackData.expenses);
+      investmentData.push(fallbackData.investments);
+    });
+
+    charts.flows.data.labels = visiblePeriods;
+    charts.flows.data.datasets[0].data = incomeData;
+    charts.flows.data.datasets[1].data = expenseData;
+    charts.flows.data.datasets[2].data = investmentData;
+
+    console.log('📊 [updateFlowsChart] Using comprehensive fallback based on balance changes');
   };
 
   // Helper function to convert month name to number
@@ -1201,28 +1447,96 @@ document.addEventListener("DOMContentLoaded", () => {
     charts.returns.update('none');
   };
 
-  const updateExpensesChart = () => {
-    if (!charts.expenses) return;
+  const updateExpensesChart = async () => {
+    if (!charts.expenses || !periodSlider) return;
 
-    // For now, create mock expense categories based on typical spending patterns
-    // In a real implementation, this would come from categorized transactions
-    const expenseCategories = [
-      { name: 'Food & Dining', amount: 600 },
-      { name: 'Transportation', amount: 200 },
-      { name: 'Shopping', amount: 300 },
-      { name: 'Entertainment', amount: 150 },
-      { name: 'Bills & Utilities', amount: 400 },
-      { name: 'Healthcare', amount: 100 },
-      { name: 'Travel', amount: 250 },
-      { name: 'Other', amount: 100 }
+    try {
+      // Get current period range from slider
+      const [start, end] = periodSlider.noUiSlider.get();
+      const iStart = allPeriods.indexOf(start);
+      const iEnd = allPeriods.indexOf(end);
+      const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+
+      console.log('📊 [updateExpensesChart] Loading real spending data for periods:', visiblePeriods);
+
+      // Convert periods to date range for API call
+      const startPeriod = visiblePeriods[0]; // e.g., "Jul/24"
+      const endPeriod = visiblePeriods[visiblePeriods.length - 1];
+
+      const convertPeriodToDate = (period) => {
+        const [month, year] = period.split('/');
+        const monthMap = {
+          'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+          'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+          'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        };
+        return `20${year}-${monthMap[month]}`;
+      };
+
+      const startDate = convertPeriodToDate(startPeriod);
+      const endDate = convertPeriodToDate(endPeriod);
+
+      // Fetch real spending data by category
+      const response = await fetch('/dashboard/spending-by-category/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({
+          start_period: startDate,
+          end_period: endDate
+        })
+      });
+
+      if (!response.ok) {
+        console.warn('⚠️ [updateExpensesChart] API failed, using fallback data');
+        updateExpensesChartFallback();
+        return;
+      }
+
+      const data = await response.json();
+      console.log('📊 [updateExpensesChart] Real spending data received:', data);
+
+      if (data.status === 'success' && data.categories && data.categories.length > 0) {
+        const labels = data.categories.map(cat => cat.name);
+        const amounts = data.categories.map(cat => Math.abs(cat.total_amount)); // Ensure positive values
+
+        charts.expenses.data.labels = labels;
+        charts.expenses.data.datasets[0].data = amounts;
+
+        console.log('✅ [updateExpensesChart] Chart updated with real categories:', {
+          categories: labels.length,
+          total: amounts.reduce((a, b) => a + b, 0).toFixed(2)
+        });
+      } else {
+        console.warn('⚠️ [updateExpensesChart] No category data available, using fallback');
+        updateExpensesChartFallback();
+      }
+
+    } catch (error) {
+      console.error('❌ [updateExpensesChart] Error loading real spending data:', error);
+      updateExpensesChartFallback();
+    }
+
+    charts.expenses.update('none');
+  };
+
+  // Fallback method when API fails or no data available
+  const updateExpensesChartFallback = () => {
+    const fallbackCategories = [
+      { name: 'Uncategorized', amount: 800 },
+      { name: 'General Expenses', amount: 600 },
+      { name: 'Other', amount: 200 }
     ];
 
-    const labels = expenseCategories.map(cat => cat.name);
-    const data = expenseCategories.map(cat => cat.amount);
+    const labels = fallbackCategories.map(cat => cat.name);
+    const data = fallbackCategories.map(cat => cat.amount);
 
     charts.expenses.data.labels = labels;
     charts.expenses.data.datasets[0].data = data;
-    charts.expenses.update('none');
+
+    console.log('📊 [updateExpensesChart] Using fallback category data');
   };
 
   const switchChart = (chartType) => {
@@ -1711,13 +2025,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById('reset-filters')?.addEventListener('click', () => {
     console.log('🔄 Resetting all filters to default values');
-    
+
     // Reset analysis period filter
     const analysisPeriod = document.getElementById('analysis-period');
     if (analysisPeriod) {
       analysisPeriod.value = 'monthly';
     }
-    
+
     // Reset show trends checkbox
     const showTrends = document.getElementById('show-trends');
     if (showTrends) {
@@ -1729,12 +2043,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (includeSavings) {
       includeSavings.checked = true;
     }
-    
+
     const includeInvestments = document.getElementById('include-investments');
     if (includeInvestments) {
       includeInvestments.checked = true;
     }
-    
+
     const includeCurrent = document.getElementById('include-current');
     if (includeCurrent) {
       includeCurrent.checked = true;
@@ -1745,7 +2059,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log('🔄 Resetting year slider to full range:', [allYears[0], allYears[allYears.length - 1]]);
       yearSlider.noUiSlider.set([allYears[0], allYears[allYears.length - 1]]);
     }
-    
+
     if (periodSlider && periodSlider.noUiSlider && allPeriods.length > 0) {
       const lastIndex = allPeriods.length - 1;
       const startIndex = Math.max(0, lastIndex - 11); // Last 12 months
@@ -1757,7 +2071,7 @@ document.addEventListener("DOMContentLoaded", () => {
     balanceCache = null;
     balanceCacheTime = 0;
     kpiCache.clear();
-    
+
     console.log('✅ All filters reset, updating dashboard');
     updateDashboard();
   });
