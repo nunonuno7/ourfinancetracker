@@ -1244,7 +1244,7 @@ document.addEventListener("DOMContentLoaded", () => {
             period,
             income: Math.abs(data.income || 0),  // Ensure positive
             expenses: Math.abs(data.expenses || 0),  // Ensure positive  
-            investments: Math.abs(data.investments || 0),  // Ensure positive
+            investments: data.investments || 0,  // Keep original sign for investments
             balance: data.balance || 0
           };
         })
@@ -1338,16 +1338,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Calculate changes and estimate flows
     const savingsChange = currentSavings - prevSavings;
-    const investmentChange = Math.abs(currentInvestments - prevInvestments);
+    const investmentChange = currentInvestments - prevInvestments; // Keep original sign
 
     // More realistic estimation based on balance changes
-    const estimatedIncome = Math.max(0, savingsChange + investmentChange + 800); // Add base living expenses
-    const estimatedExpenses = Math.max(400, estimatedIncome - savingsChange - investmentChange); // Derive from income and savings
+    const estimatedIncome = Math.max(0, savingsChange + Math.abs(investmentChange) + 800); // Add base living expenses
+    const estimatedExpenses = Math.max(400, estimatedIncome - savingsChange - Math.abs(investmentChange)); // Derive from income and savings
 
     return {
       income: estimatedIncome,
       expenses: estimatedExpenses,
-      investments: investmentChange
+      investments: investmentChange // Preserve sign
     };
   };
 

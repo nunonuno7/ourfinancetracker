@@ -1,5 +1,11 @@
 {% extends "base.html" %} {% load static %} {% block title %}Advanced Financial
-Dashboard{% endblock %} {% block content %}
+Dashboard{% endblock %} {% block extra_head %}
+<!-- Mobile-specific optimizations -->
+<meta name="format-detection" content="telephone=no">
+<meta name="format-detection" content="date=no">
+<meta name="format-detection" content="address=no">
+<meta name="format-detection" content="email=no">
+{% endblock %} {% block content %}
 <div class="container-fluid">
   <!-- Header with Advanced Controls -->
   <div class="d-flex justify-content-between align-items-center mb-4">
@@ -103,9 +109,14 @@ Dashboard{% endblock %} {% block content %}
     </div>
   </div>
 
+  <!-- Mobile swipe indicator -->
+  <div class="swipe-indicator d-block d-lg-none">
+    <i class="bi bi-arrow-left-right"></i> Swipe to see all metrics
+  </div>
+
   <!-- Enhanced KPI Cards Row -->
   <div class="row mb-4">
-    <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
+    <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-success h-100 kpi-card">
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
@@ -127,7 +138,7 @@ Dashboard{% endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
+    <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-danger h-100 kpi-card">
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
@@ -149,7 +160,7 @@ Dashboard{% endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
+    <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-success h-100 kpi-card">
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
@@ -175,7 +186,7 @@ Dashboard{% endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
+    <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-info h-100 kpi-card">
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
@@ -197,7 +208,7 @@ Dashboard{% endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
+    <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-purple h-100 kpi-card">
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
@@ -221,7 +232,7 @@ Dashboard{% endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-xl-2 col-lg-4 col-md-6 mb-3">
+    <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-dark h-100 kpi-card">
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
@@ -340,9 +351,13 @@ Dashboard{% endblock %} {% block content %}
       </div>
     </div>
   </div>
-
-  
 </div>
+<!-- Floating Action Button for Mobile -->
+<a href="{% url 'transaction_create' %}" class="fab d-block d-lg-none" 
+   title="Add New Transaction" aria-label="Add New Transaction">
+  <i class="bi bi-plus"></i>
+</a>
+
 {% endblock %} {% block extra_js %}
 <!-- Chart.js with advanced plugins -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -356,21 +371,23 @@ Dashboard{% endblock %} {% block content %}
 
 <style>
   .card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
-    border: 1px solid rgba(0, 0, 0, 0.125);
-    transition:
-      transform 0.2s ease-in-out,
-      box-shadow 0.2s ease-in-out;
+    box-shadow: 0 2px 8px rgba(36, 40, 44, 0.08) !important;
+    border: 1px solid #D9DBDD !important;
+    border-radius: 12px !important;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    background-color: #ffffff !important;
   }
 
   .kpi-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 4px 16px rgba(36, 40, 44, 0.12) !important;
   }
 
   .card-header {
     background-color: #f8f9fa !important;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    border-bottom: 1px solid #D9DBDD !important;
+    color: #24282C !important;
+    font-weight: 600;
   }
 
   #balance-table th,
@@ -385,27 +402,31 @@ Dashboard{% endblock %} {% block content %}
   }
 
   .insight-item {
-    border-left: 4px solid #007bff;
-    padding: 1rem;
+    border-left: 4px solid #3AB49E;
+    padding: 1.25rem;
     margin-bottom: 1rem;
     background-color: #f8f9fa;
-    border-radius: 0.25rem;
+    border-radius: 8px;
     transition: all 0.3s ease;
+    border: 1px solid #D9DBDD;
   }
 
   .insight-positive {
-    border-left-color: #28a745;
-    background-color: #d4edda;
+    border-left-color: #3AB49E;
+    background-color: rgba(58, 180, 158, 0.1);
+    color: #2E9A84;
   }
 
   .insight-negative {
-    border-left-color: #dc3545;
-    background-color: #f8d7da;
+    border-left-color: #DC3545;
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #B02A37;
   }
 
   .insight-warning {
-    border-left-color: #ffc107;
-    background-color: #fff3cd;
+    border-left-color: #FFC107;
+    background-color: rgba(255, 193, 7, 0.1);
+    color: #856404;
   }
 
   .text-purple {
@@ -526,6 +547,25 @@ Dashboard{% endblock %} {% block content %}
     color: white;
   }
 
+  /* Portfolio Analysis Chart Buttons */
+  .card-header .btn-group .btn-outline-primary {
+    color: var(--growth-mint) !important;
+    border-color: var(--growth-mint) !important;
+    background-color: transparent !important;
+  }
+
+  .card-header .btn-group .btn-outline-primary:hover {
+    background-color: var(--growth-mint) !important;
+    border-color: var(--growth-mint) !important;
+    color: white !important;
+  }
+
+  .card-header .btn-group .btn-outline-primary.active {
+    background-color: var(--growth-mint) !important;
+    border-color: var(--growth-mint) !important;
+    color: white !important;
+  }
+
   /* Enhanced filter panel spacing */
   .card-body .row {
     margin-bottom: 0;
@@ -638,6 +678,46 @@ Dashboard{% endblock %} {% block content %}
 
     canvas {
       max-height: 250px !important;
+    }
+  }
+    /* Floating Action Button Style */
+  .fab {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #007bff;
+    color: white;
+    border-radius: 50%;
+    padding: 15px;
+    font-size: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease-in-out;
+    z-index: 1000; /* Ensure it stays on top */
+  }
+
+  .fab:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Swipe Indicator Style */
+  .swipe-indicator {
+    text-align: center;
+    color: #6c757d;
+    margin-bottom: 10px;
+  }
+
+  .swipe-indicator i {
+    font-size: 1.5rem;
+    animation: swipe-animation 1.5s infinite;
+  }
+
+  @keyframes swipe-animation {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(10px);
     }
   }
 </style>

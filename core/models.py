@@ -162,6 +162,10 @@ class AccountBalance(models.Model):
         constraints = [
             UniqueConstraint(fields=["account", "period"], name="unique_accountbalance_account_period")
         ]
+        indexes = [
+            models.Index(fields=["account", "period"]),
+            models.Index(fields=["period"]),
+        ]
 
     def __str__(self):
         return f"{self.account} @ {self.period}: {self.reported_balance}"
@@ -314,6 +318,10 @@ class Transaction(models.Model):
         force_save = kwargs.pop('force_save', False)
         if not self.editable and self.pk and not force_save:
             raise ValidationError("System transaction is read-only.")
+
+        # 🔒 Transações estimadas não podem ser editáveis
+        if self.is_estimated:
+            self.editable = False
 
         # 🚫 Garante que pelo menos um dos dois está definido
         if not self.date and not self.period:

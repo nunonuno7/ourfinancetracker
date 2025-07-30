@@ -5,8 +5,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="description" content="Track your income, expenses and accounts with OurFinanceTracker." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#3AB49E" />
   <title>{% block title %}OurFinanceTracker{% endblock %}</title>
 
   <link rel="shortcut icon" href="{% static 'images/favicon.ico' %}" type="image/x-icon" />
@@ -20,11 +24,166 @@
 
   {% block extra_head %}{% endblock %}
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
+
+    <!-- Project Color Overrides for Bootstrap -->
+    <style>
+        /* Bootstrap Component Overrides with Project Colors */
+        .btn-primary {
+            background-color: #3AB49E !important;
+            border-color: #3AB49E !important;
+        }
+        .btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+            background-color: #2E9A84 !important;
+            border-color: #2E9A84 !important;
+        }
+
+        .btn-outline-primary {
+            color: #3AB49E !important;
+            border-color: #3AB49E !important;
+        }
+        .btn-outline-primary:hover, .btn-outline-primary:focus, .btn-outline-primary:active {
+            background-color: #3AB49E !important;
+            border-color: #3AB49E !important;
+            color: white !important;
+        }
+
+        .btn-success {
+            background-color: #3AB49E !important;
+            border-color: #3AB49E !important;
+        }
+        .btn-success:hover, .btn-success:focus, .btn-success:active {
+            background-color: #2E9A84 !important;
+            border-color: #2E9A84 !important;
+        }
+
+        .btn-outline-secondary {
+            color: #A0A4A8 !important;
+            border-color: #A0A4A8 !important;
+        }
+        .btn-outline-secondary:hover, .btn-outline-secondary:focus, .btn-outline-secondary:active {
+            background-color: #A0A4A8 !important;
+            border-color: #A0A4A8 !important;
+            color: white !important;
+        }
+
+        .btn-danger {
+            background-color: #DC3545 !important;
+            border-color: #DC3545 !important;
+        }
+        .btn-danger:hover, .btn-danger:focus, .btn-danger:active {
+            background-color: #B02A37 !important;
+            border-color: #B02A37 !important;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #3AB49E !important;
+            box-shadow: 0 0 0 0.2rem rgba(58, 180, 158, 0.25) !important;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: rgba(58, 180, 158, 0.08) !important;
+        }
+
+        .text-primary {
+            color: #3AB49E !important;
+        }
+
+        .bg-primary {
+            background-color: #3AB49E !important;
+        }
+
+        .border-primary {
+            border-color: #3AB49E !important;
+        }
+
+        .badge.bg-primary {
+            background-color: #3AB49E !important;
+        }
+
+        .alert-success {
+            background-color: rgba(58, 180, 158, 0.15) !important;
+            border-color: #3AB49E !important;
+            color: #2E9A84 !important;
+        }
+
+        .pagination .page-link {
+            color: #3AB49E !important;
+        }
+        .pagination .page-item.active .page-link {
+            background-color: #3AB49E !important;
+            border-color: #3AB49E !important;
+        }
+        .pagination .page-link:hover {
+            color: #2E9A84 !important;
+            background-color: rgba(58, 180, 158, 0.1) !important;
+        }
+
+        /* Override Bootstrap navbar for consistent styling */
+        .navbar {
+            background-color: #ffffff !important;
+            border-bottom: 1px solid #D9DBDD !important;
+        }
+        
+        .navbar-brand, .navbar-nav .nav-link {
+            color: #24282C !important;
+        }
+        
+        .navbar-brand:hover, .navbar-nav .nav-link:hover {
+            color: #3AB49E !important;
+        }
+        
+        .navbar-nav .nav-link.active {
+            color: #3AB49E !important;
+            font-weight: 600;
+        }
+
+        /* Ensure consistent card styling */
+        .card {
+            border: 1px solid #D9DBDD !important;
+            border-radius: 12px !important;
+        }
+
+        .card-header {
+            background-color: #f8f9fa !important;
+            border-bottom: 1px solid #D9DBDD !important;
+        }
+
+        /* Navigation consistency */
+        .navbar-brand, .nav-link {
+            color: #ffffff !important;
+        }
+
+        .nav-link:hover {
+            color: #3AB49E !important;
+        }
+
+        .navbar-dark .navbar-brand,
+        .navbar-dark .nav-link {
+            color: #ffffff !important;
+        }
+
+        .navbar-dark .nav-link:hover {
+            color: #3AB49E !important;
+        }
+
+        /* Table improvements */
+        .table th {
+            color: #24282C !important;
+            font-weight: 600 !important;
+        }
+
+        /* Input groups */
+        .input-group-text {
+            background-color: #E9E5DB !important;
+            border-color: #D9DBDD !important;
+            color: #24282C !important;
+        }
+    </style>
 </head>
-<body>
+<body style="background-color: #f8f9fa;">
 
 {% block navbar %}
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark" aria-label="Main navigation">
+<nav class="navbar navbar-expand-lg navbar-light" style="background-color: #ffffff; border-bottom: 1px solid #ccc;" aria-label="Main navigation">
   <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'home' %}">
 
@@ -32,7 +191,7 @@
       <strong>ourfinancetracker</strong>
     </a>
 
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+    <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
             aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>

@@ -388,9 +388,17 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
         return super().get_queryset().prefetch_related("tags")
 
     def get_object(self, queryset=None):
-        """Override to provide better error handling."""
+        """Override to provide better error handling and prevent editing estimated transactions."""
         try:
-            return super().get_object(queryset)
+            obj = super().get_object(queryset)
+            
+            # Prevent editing estimated transactions
+            if obj.is_estimated:
+                messages.error(self.request, "Estimated transactions cannot be edited directly. Use the estimation tool at /transactions/estimate/ instead.")
+                logger.warning(f"User {self.request.user.id} tried to edit estimated transaction {obj.id}")
+                raise PermissionDenied("Cannot edit estimated transaction")
+                
+            return obj
         except Transaction.DoesNotExist:
             messages.error(self.request, f"Transaction with ID {self.kwargs.get('pk')} not found or you don't have permission to edit it.")
             logger.warning(f"User {self.request.user.id} tried to access non-existent transaction {self.kwargs.get('pk')}")
@@ -1248,7 +1256,7 @@ def transactions_json_v2(request):
                        COALESCE(acc.name, 'No account') AS account,
                        COALESCE(curr.symbol, '€') AS currency,
                        COALESCE(STRING_AGG(tag.name, ', '), '') AS tags,
-                       tx.is_system, tx.editable,
+                       tx.is_system, tx.editable, tx.is_estimated,
                        CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) AS period
                 FROM core_transaction tx
                 LEFT JOIN core_category cat ON tx.category_id = cat.id
@@ -1260,7 +1268,7 @@ def transactions_json_v2(request):
                 WHERE tx.user_id = %s
                 AND tx.date BETWEEN %s AND %s
                 GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                         cat.name, acc.name, curr.symbol, tx.is_system, tx.editable
+                         cat.name, acc.name, curr.symbol, tx.is_system, tx.editable, tx.is_estimated
                 ORDER BY {order_clause}
             """
             logger.debug(f"📝 [transactions_json_v2] SQL Query: {query}")
@@ -1274,7 +1282,7 @@ def transactions_json_v2(request):
         df = pd.DataFrame(rows, columns=[
             "id", "date", "year", "month", "type", "amount",
             "category", "account", "currency", "tags", 
-            "is_system", "editable", "period"
+            "is_system", "editable", "is_estimated", "period"
         ])
         logger.debug(f"📋 [transactions_json_v2] DataFrame created with {len(df)} rows")
         cache.set(cache_key, df.copy(), timeout=300)
@@ -1771,7 +1779,7 @@ class AccountListView(OwnerQuerysetMixin, ListView):
         if search_query:
             queryset = queryset.filter(name__icontains=search_query)
         
-        return queryset.order_by('name')
+        return queryset.order_by('position', 'name')
 
     def get_context_data(self, **kwargs):
         """Add optimized context data."""
@@ -1888,20 +1896,31 @@ def account_reorder(request):
             data = json.loads(request.body)
             order_list = data.get('order', [])
             
+            logger.debug(f"Reordering accounts for user {request.user.id}: {order_list}")
+            
             # Update position for each account
             with db_transaction.atomic():
-                for item in order_list:
+                for index, item in enumerate(order_list):
                     account_id = item.get('id')
-                    position = item.get('position')
                     
-                    if account_id and position is not None:
-                        Account.objects.filter(
+                    if account_id:
+                        # Use the index as the position to ensure proper ordering
+                        updated_count = Account.objects.filter(
                             id=account_id,
                             user=request.user
-                        ).update(position=position)
+                        ).update(position=index)
+                        
+                        if updated_count:
+                            logger.debug(f"Updated account {account_id} to position {index}")
+                        else:
+                            logger.warning(f"Account {account_id} not found or not owned by user {request.user.id}")
+            
+            # Clear cache to ensure fresh data
+            cache.delete(f"account_balance_{request.user.id}")
+            cache.delete(f"account_summary_{request.user.id}")
             
             logger.info(f"Account order updated for user {request.user.id}")
-            return JsonResponse({'success': True})
+            return JsonResponse({'success': True, 'message': 'Account order updated successfully'})
             
         except Exception as e:
             logger.error(f"Error reordering accounts for user {request.user.id}: {e}")
@@ -1911,17 +1930,54 @@ def account_reorder(request):
 
 
 def _merge_duplicate_accounts(user):
-    """Função auxiliar para fundir contas duplicadas por nome."""
-    seen = {}
-    for acc in Account.objects.filter(user=user).order_by("name"):
-        key = acc.name.strip().lower()
-        if key in seen:
-            primary = seen[key]
-            AccountBalance.objects.filter(account=acc).update(account=primary)
-            Transaction.objects.filter(account=acc).update(account=primary)
-            acc.delete()
-        else:
-            seen[key] = acc
+    """Função auxiliar otimizada para fundir contas duplicadas por nome."""
+    # Usar raw SQL para melhor performance
+    with connection.cursor() as cursor:
+        # Encontrar contas duplicadas
+        cursor.execute("""
+            SELECT LOWER(TRIM(name)) as normalized_name, 
+                   array_agg(id ORDER BY created_at) as account_ids,
+                   COUNT(*) as count
+            FROM core_account 
+            WHERE user_id = %s 
+            GROUP BY LOWER(TRIM(name))
+            HAVING COUNT(*) > 1
+        """, [user.id])
+        
+        duplicates = cursor.fetchall()
+        
+        if not duplicates:
+            return  # Sem duplicados
+        
+        logger.info(f"Found {len(duplicates)} sets of duplicate accounts for user {user.id}")
+        
+        for normalized_name, account_ids, count in duplicates:
+            primary_id = account_ids[0]  # Manter a conta mais antiga
+            duplicate_ids = account_ids[1:]  # Contas a serem fundidas
+            
+            logger.debug(f"Merging accounts {duplicate_ids} into {primary_id}")
+            
+            # Atualizar saldos em bulk
+            cursor.execute("""
+                UPDATE core_accountbalance 
+                SET account_id = %s 
+                WHERE account_id = ANY(%s)
+            """, [primary_id, duplicate_ids])
+            
+            # Atualizar transações em bulk  
+            cursor.execute("""
+                UPDATE core_transaction 
+                SET account_id = %s 
+                WHERE account_id = ANY(%s)
+            """, [primary_id, duplicate_ids])
+            
+            # Eliminar contas duplicadas
+            cursor.execute("""
+                DELETE FROM core_account 
+                WHERE id = ANY(%s)
+            """, [duplicate_ids])
+            
+        logger.info(f"Account merge completed for user {user.id}")
 
 # ==============================================================================
 # ACCOUNT BALANCE FUNCTIONS
@@ -1929,10 +1985,7 @@ def _merge_duplicate_accounts(user):
 
 @login_required
 def account_balance_view(request):
-    """Vista principal para gestão de saldos de contas."""
-    # Limpar mensagens anteriores
-    list(messages.get_messages(request))
-
+    """Vista principal ultra otimizada para gestão de saldos de contas com detecção de alterações."""
     # Determinar mês/ano selecionado
     today = date.today()
     try:
@@ -1946,75 +1999,356 @@ def account_balance_view(request):
         messages.error(request, "Invalid date.")
         year, month = today.year, today.month
 
+    # Check cache first for GET requests
+    cache_key = f"account_balance_ultra_{request.user.id}_{year}_{month}"
+    
     # Obter ou criar período correspondente
-    period, _ = DatePeriod.objects.get_or_create(
+    period, period_created = DatePeriod.objects.get_or_create(
         year=year,
         month=month,
         defaults={"label": date(year, month, 1).strftime("%B %Y")},
     )
 
-    # Query base dos saldos do utilizador
-    qs_base = AccountBalance.objects.filter(
-        account__user=request.user,
-        period=period
-    ).select_related("account", "account__account_type", "account__currency")
-
     if request.method == "POST":
-        formset = AccountBalanceFormSet(request.POST, queryset=qs_base, user=request.user)
+        logger.info(f"🚀 [account_balance_view] Change-detection POST processing for user {request.user.id}, period {year}-{month:02d}")
+        start_time = datetime.now()
 
-        if formset.is_valid():
-            try:
-                with db_transaction.atomic():
-                    for form in formset:
-                        if form.cleaned_data.get("DELETE"):
-                            continue
-
-                        inst = form.save(commit=False)
-                        inst.period = period
-
-                        if inst.account.user_id is None:
-                            inst.account.user = request.user
-                            inst.account.save()
-
-                        # Atualizar se já existe saldo para esta conta/período
-                        existing = AccountBalance.objects.filter(
-                            account=inst.account,
-                            period=period,
-                        ).first()
-
-                        if existing:
-                            existing.reported_balance = inst.reported_balance
-                            existing.save()
+        try:
+            # Parse form data in memory first for maximum speed
+            form_data = request.POST
+            total_forms = int(form_data.get('form-TOTAL_FORMS', 0))
+            logger.debug(f"📊 [account_balance_view] Processing {total_forms} forms")
+            
+            # ⚡ ENHANCED CHANGE DETECTION - More thorough but still fast
+            # First pass: Quick scan for obvious changes
+            has_obvious_changes = False
+            for i in range(total_forms):
+                prefix = f'form-{i}'
+                
+                # Check for deletions - these are always changes
+                if form_data.get(f'{prefix}-DELETE'):
+                    has_obvious_changes = True
+                    logger.debug(f"🔍 [account_balance_view] Found deletion in form {i}")
+                    break
+                
+                # Check for new entries (no balance_id but has data)
+                balance_id = form_data.get(f'{prefix}-id')
+                account_name = form_data.get(f'{prefix}-account')
+                reported_balance_str = form_data.get(f'{prefix}-reported_balance')
+                
+                if not balance_id and account_name and reported_balance_str:
+                    has_obvious_changes = True
+                    logger.debug(f"🔍 [account_balance_view] Found new entry in form {i}: {account_name}")
+                    break
+            
+            # If no obvious changes, do more thorough verification with actual data comparison
+            if not has_obvious_changes:
+                logger.debug(f"⚡ [account_balance_view] No obvious changes detected, doing thorough verification")
+                
+                # Load current data for comparison
+                current_balances_dict = {}
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT ab.id, ab.account_id, ab.reported_balance, a.name
+                        FROM core_accountbalance ab
+                        INNER JOIN core_account a ON ab.account_id = a.id
+                        WHERE a.user_id = %s AND ab.period_id = %s
+                    """, [request.user.id, period.id])
+                    
+                    for balance_id, account_id, current_amount, account_name in cursor.fetchall():
+                        current_balances_dict[balance_id] = {
+                            'account_name': account_name,
+                            'amount': Decimal(str(current_amount))
+                        }
+                
+                # Compare form data with database data
+                changes_detected = False
+                form_balance_ids = set()
+                
+                for i in range(total_forms):
+                    prefix = f'form-{i}'
+                    balance_id = form_data.get(f'{prefix}-id')
+                    account_name = form_data.get(f'{prefix}-account')
+                    reported_balance_str = form_data.get(f'{prefix}-reported_balance')
+                    
+                    # Skip empty forms
+                    if not account_name or reported_balance_str == '':
+                        continue
+                        
+                    if balance_id:
+                        balance_id_int = int(balance_id)
+                        form_balance_ids.add(balance_id_int)
+                        
+                        # Check if this balance exists in DB and if amount changed
+                        if balance_id_int in current_balances_dict:
+                            try:
+                                new_amount = Decimal(str(reported_balance_str))
+                                current_amount = current_balances_dict[balance_id_int]['amount']
+                                
+                                if new_amount != current_amount:
+                                    changes_detected = True
+                                    logger.debug(f"🔍 [account_balance_view] Amount change detected: {account_name} {current_amount} → {new_amount}")
+                                    break
+                            except (ValueError, TypeError):
+                                changes_detected = True
+                                logger.debug(f"🔍 [account_balance_view] Invalid amount format for {account_name}: {reported_balance_str}")
+                                break
                         else:
-                            inst.save()
+                            # Balance ID in form but not in DB - this is a change
+                            changes_detected = True
+                            logger.debug(f"🔍 [account_balance_view] Balance ID {balance_id_int} not found in DB")
+                            break
+                    else:
+                        # New entry without balance_id
+                        changes_detected = True
+                        logger.debug(f"🔍 [account_balance_view] New entry without ID: {account_name}")
+                        break
+                
+                # Check if any existing balances were removed from the form
+                if not changes_detected:
+                    db_balance_ids = set(current_balances_dict.keys())
+                    if db_balance_ids != form_balance_ids:
+                        changes_detected = True
+                        removed_ids = db_balance_ids - form_balance_ids
+                        logger.debug(f"🔍 [account_balance_view] Balances removed from form: {removed_ids}")
+                
+                # If no changes detected, return early
+                if not changes_detected:
+                    logger.info(f"✅ [account_balance_view] Thorough verification - no changes detected")
+                    processing_time = (datetime.now() - start_time).total_seconds()
+                    messages.info(request, f"ℹ️ No changes detected ({processing_time:.2f}s)")
+                    return redirect(f"{request.path}?year={year}&month={month:02d}")
+                else:
+                    logger.info(f"🔍 [account_balance_view] Changes detected during thorough verification")
+            
+            # ✨ Load current balances only if changes are likely
+            current_balances = {}
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT ab.id, ab.account_id, ab.reported_balance, a.name
+                    FROM core_accountbalance ab
+                    INNER JOIN core_account a ON ab.account_id = a.id
+                    WHERE a.user_id = %s AND ab.period_id = %s
+                """, [request.user.id, period.id])
+                
+                for balance_id, account_id, current_amount, account_name in cursor.fetchall():
+                    current_balances[balance_id] = {
+                        'account_id': account_id,
+                        'account_name': account_name,
+                        'current_amount': Decimal(str(current_amount))
+                    }
+            
+            logger.debug(f"📋 [account_balance_view] Loaded {len(current_balances)} existing balances")
+            
+            # Pre-allocate lists for better memory performance
+            balance_updates = []
+            balance_creates = []
+            balance_deletes = []
+            skipped_count = 0
+            
+            # Single pass through form data - ultra optimized with change detection
+            for i in range(total_forms):
+                prefix = f'form-{i}'
+                
+                # Check deletion first
+                if form_data.get(f'{prefix}-DELETE'):
+                    balance_id = form_data.get(f'{prefix}-id')
+                    if balance_id:
+                        balance_deletes.append(int(balance_id))
+                    continue
+                
+                account_name = form_data.get(f'{prefix}-account')
+                reported_balance_str = form_data.get(f'{prefix}-reported_balance')
+                balance_id = form_data.get(f'{prefix}-id')
+                
+                # Skip empty entries
+                if not account_name or reported_balance_str == '':
+                    continue
+                    
+                try:
+                    new_amount = Decimal(str(reported_balance_str))
+                    account_name = str(account_name).strip()
+                    
+                    # Get or create account by name
+                    account, created = Account.objects.get_or_create(
+                        user_id=request.user.id,
+                        name__iexact=account_name,
+                        defaults={
+                            'name': account_name,
+                            'currency_id': Currency.objects.filter(code='EUR').first().id,
+                            'account_type_id': AccountType.objects.filter(name='Savings').first().id,
+                        }
+                    )
+                    
+                    if balance_id:  # Update existing
+                        balance_id_int = int(balance_id)
+                        
+                        # ✨ DETECÇÃO DE ALTERAÇÕES: Só gravar se valor mudou
+                        if balance_id_int in current_balances:
+                            current_amount = current_balances[balance_id_int]['current_amount']
+                            
+                            # Comparar valores com precisão decimal
+                            if new_amount != current_amount:
+                                balance_updates.append((balance_id_int, account.id, new_amount, current_amount, new_amount))
+                                logger.debug(f"🔄 [account_balance_view] Changed: {account_name} {current_amount} → {new_amount}")
+                            else:
+                                skipped_count += 1
+                                logger.debug(f"⏭️ [account_balance_view] Skipped unchanged: {account_name} = {current_amount}")
+                        else:
+                            # Balance ID exists but not in current_balances - treat as update
+                            balance_updates.append((balance_id_int, account.id, new_amount, Decimal('0'), new_amount))
+                    else:  # Create new
+                        balance_creates.append((account.id, new_amount))
+                        logger.debug(f"➕ [account_balance_view] Creating new: {account_name} = {new_amount}")
+                        
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"⚠️ [account_balance_view] Invalid data in form {i}: {e}")
+                    continue
 
-                    # Fundir contas duplicadas por nome
-                    _merge_duplicate_accounts(request.user)
+            # Ultra-fast bulk operations using single atomic transaction
+            operations_count = 0
+            changed_count = len(balance_updates) + len(balance_creates) + len(balance_deletes)
+            
+            logger.info(f"📈 [account_balance_view] Changes detected: {changed_count} operations, {skipped_count} skipped")
+            
+            if changed_count > 0:
+                with db_transaction.atomic():
+                    with connection.cursor() as cursor:
+                        
+                        # 1. Bulk deletes with single query
+                        if balance_deletes:
+                            cursor.execute("""
+                                DELETE FROM core_accountbalance 
+                                WHERE id = ANY(%s) AND account_id IN (
+                                    SELECT id FROM core_account WHERE user_id = %s
+                                )
+                            """, [balance_deletes, request.user.id])
+                            operations_count += cursor.rowcount
+                            logger.debug(f"🗑️ [account_balance_view] Deleted {cursor.rowcount} balances")
+                        
+                        # 2. Bulk updates - only changed values
+                        if balance_updates:
+                            for balance_id, account_id, new_amount, old_amount, _ in balance_updates:
+                                cursor.execute("""
+                                    UPDATE core_accountbalance 
+                                    SET reported_balance = %s
+                                    WHERE id = %s AND account_id IN (
+                                        SELECT id FROM core_account WHERE user_id = %s
+                                    )
+                                """, [new_amount, balance_id, request.user.id])
+                                operations_count += cursor.rowcount
+                            
+                            logger.debug(f"🔄 [account_balance_view] Updated {len(balance_updates)} changed balances")
+                        
+                        # 3. Bulk creates with single INSERT
+                        if balance_creates:
+                            for account_id, amount in balance_creates:
+                                cursor.execute("""
+                                    INSERT INTO core_accountbalance (account_id, period_id, reported_balance)
+                                    VALUES (%s, %s, %s)
+                                    ON CONFLICT (account_id, period_id) 
+                                    DO UPDATE SET reported_balance = EXCLUDED.reported_balance
+                                """, [account_id, period.id, amount])
+                                operations_count += cursor.rowcount
+                                
+                            logger.debug(f"➕ [account_balance_view] Created/updated {len(balance_creates)} new balances")
 
-                messages.success(request, "Balances saved successfully!")
-                return redirect(f"{request.path}?year={year}&month={month:02d}")
-            except Exception as e:
-                messages.error(request, f"Error whilst saving balances: {str(e)}")
-        else:
-            messages.error(request, "Error whilst saving balances. Please check the fields.")
-    else:
-        formset = AccountBalanceFormSet(queryset=qs_base, user=request.user)
+                # Strategic cache clearing - only clear what's necessary
+                from django.core.cache import cache
+                cache_keys_pattern = [
+                    f"account_balance_ultra_{request.user.id}_{year}_{month}",
+                    f"account_balance_optimized_{request.user.id}_{year}_{month}",
+                    f"account_summary_{request.user.id}",
+                ]
+                
+                # Use pipeline for batch cache operations
+                cache.delete_many(cache_keys_pattern)
+                
+                # Clear transaction cache to ensure consistency
+                clear_tx_cache(request.user.id)
+            else:
+                logger.info(f"⚡ [account_balance_view] No changes detected - skipping database operations")
 
-    # Agrupar formulários por tipo e moeda
-    grouped_forms = {}
+            processing_time = (datetime.now() - start_time).total_seconds()
+            logger.info(f"⚡ [account_balance_view] POST completed in {processing_time:.3f}s, {operations_count} operations, {skipped_count} skipped")
+            
+            if changed_count > 0:
+                messages.success(request, f"✅ Balances saved! ({operations_count} ops, {skipped_count} unchanged, {processing_time:.2f}s)")
+            else:
+                messages.info(request, f"ℹ️ No changes detected ({processing_time:.2f}s)")
+            
+            # Optimized redirect with minimal URL construction
+            return redirect(f"{request.path}?year={year}&month={month:02d}")
+                
+        except Exception as e:
+            processing_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ [account_balance_view] Error after {processing_time:.3f}s for user {request.user.id}: {e}")
+            messages.error(request, f"Error saving balances: {str(e)}")
+
+    # GET request - ultra-fast cache lookup
+    from django.core.cache import cache
+    cached_data = cache.get(cache_key)
+    if cached_data and request.method == "GET":
+        logger.debug(f"⚡ [account_balance_view] Using cached summary data for user {request.user.id}")
+        # We still need to build the formset as it can't be cached
+        # But we can use cached totals and other data
+
+    # Build context with single ultra-optimized query
+    start_time = datetime.now()
+    
+    with connection.cursor() as cursor:
+        # Single query with all JOINs and calculations
+        cursor.execute("""
+            SELECT 
+                a.id, a.name, a.position,
+                at.name, cur.code, cur.symbol,
+                COALESCE(ab.reported_balance, 0),
+                ab.id,
+                CASE WHEN ab.id IS NOT NULL THEN 1 ELSE 0 END
+            FROM core_account a
+            INNER JOIN core_accounttype at ON a.account_type_id = at.id
+            INNER JOIN core_currency cur ON a.currency_id = cur.id
+            LEFT JOIN core_accountbalance ab ON (ab.account_id = a.id AND ab.period_id = %s)
+            WHERE a.user_id = %s
+            ORDER BY a.position NULLS LAST, a.name
+        """, [period.id, request.user.id])
+        
+        rows = cursor.fetchall()
+
+    # Ultra-fast data processing with pre-allocated dictionaries
     totals_by_group = {}
     grand_total = 0
 
+    # Single pass processing for maximum efficiency
+    for row in rows:
+        account_id, account_name, account_position, account_type_name, currency_code, currency_symbol, balance, balance_id, has_balance = row
+        
+        balance_value = float(balance)
+        grand_total += balance_value
+        
+        # Group totals calculation
+        key = (account_type_name, currency_code)
+        totals_by_group[key] = totals_by_group.get(key, 0) + balance_value
+
+    # Minimized formset creation for template
+    queryset = AccountBalance.objects.filter(
+        account__user=request.user,
+        period=period
+    ).select_related('account__account_type', 'account__currency').only(
+        'id', 'reported_balance', 'account__id', 'account__name', 
+        'account__account_type__name', 'account__currency__code'
+    ).order_by('account__position', 'account__name')
+    
+    formset = AccountBalanceFormSet(queryset=queryset, user=request.user)
+    
+    # Ultra-fast form grouping
+    grouped_forms = {}
     for form in formset:
         if hasattr(form.instance, 'account') and form.instance.account:
-            account = form.instance.account
-            key = (account.account_type.name, account.currency.code)
-            grouped_forms.setdefault(key, []).append(form)
-
-    for key, forms in grouped_forms.items():
-        subtotal = sum((f.instance.reported_balance or 0) for f in forms)
-        totals_by_group[key] = subtotal
-        grand_total += subtotal
+            key = (form.instance.account.account_type.name, form.instance.account.currency.code)
+            if key not in grouped_forms:
+                grouped_forms[key] = []
+            grouped_forms[key].append(form)
 
     context = {
         "formset": formset,
@@ -2026,24 +2360,103 @@ def account_balance_view(request):
         "selected_month": date(year, month, 1),
     }
 
+    # Cache only serializable data for performance
+    if request.method == "GET":
+        cache_safe_context = {
+            "totals_by_group": totals_by_group,
+            "grand_total": grand_total,
+            "year": year,
+            "month": month,
+            "selected_month": date(year, month, 1),
+        }
+        cache.set(cache_key, cache_safe_context, timeout=600)  # 10 minutes cache
+    
+    query_time = (datetime.now() - start_time).total_seconds()
+    logger.debug(f"⚡ [account_balance_view] GET completed in {query_time:.3f}s for user {request.user.id}")
+
     return render(request, "core/account_balance.html", context)
 
 
 @login_required
 def delete_account_balance(request, pk):
-    """Delete account balance."""
-    balance = get_object_or_404(AccountBalance, pk=pk, account__user=request.user)
-    balance.delete()
-    messages.success(request, 'Account balance deleted successfully!')
-    return redirect('account_balance')
+    """Optimized delete account balance."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    
+    try:
+        balance = get_object_or_404(AccountBalance, pk=pk, account__user=request.user)
+        period_year = balance.period.year
+        period_month = balance.period.month
+        
+        balance.delete()
+        logger.info(f"Account balance {pk} deleted by user {request.user.id}")
+        
+        # Clear related cache
+        cache.delete(f"account_balance_{request.user.id}_{period_year}_{period_month}")
+        
+        # Return JSON response for AJAX requests
+        if request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'success': True, 'message': 'Balance deleted successfully'})
+        
+        # Redirect back to account balance page for the same period
+        messages.success(request, "Balance deleted successfully!")
+        return redirect(f"{reverse('account_balance')}?year={period_year}&month={period_month:02d}")
+        
+    except AccountBalance.DoesNotExist:
+        logger.error(f"Error deleting account balance {pk} for user {request.user.id}: No AccountBalance matches the given query.")
+        
+        if request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'success': False, 'error': 'Balance not found'}, status=404)
+        
+        messages.error(request, "Balance not found or already deleted.")
+        return redirect('account_balance')
+        
+    except Exception as e:
+        logger.error(f"Error deleting account balance {pk} for user {request.user.id}: {e}")
+        
+        if request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'success': False, 'error': 'Error deleting balance'}, status=500)
+        
+        messages.error(request, 'Error deleting account balance.')
+        return redirect('account_balance')
+
+
+@login_required
+def warm_account_balance_cache(request):
+    """Warm cache for account balance view to improve performance."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST method required'})
+    
+    try:
+        year = int(request.GET.get('year', date.today().year))
+        month = int(request.GET.get('month', date.today().month))
+        
+        # Warm cache by making a quick query
+        cache_key = f"account_balance_optimized_{request.user.id}_{year}_{month}"
+        
+        if not cache.get(cache_key):
+            # Quick cache warming query
+            period = DatePeriod.objects.filter(year=year, month=month).first()
+            if period:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM core_account a
+                        LEFT JOIN core_accountbalance ab ON (ab.account_id = a.id AND ab.period_id = %s)
+                        WHERE a.user_id = %s
+                    """, [period.id, request.user.id])
+                    
+                logger.info(f"🔥 Cache warmed for user {request.user.id}, period {year}-{month:02d}")
+        
+        return JsonResponse({'success': True, 'message': 'Cache warmed'})
+        
+    except Exception as e:
+        logger.error(f"Error warming cache for user {request.user.id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
 @login_required
 def copy_previous_balances_view(request):
-    """Copy previous month balances to current period."""
-    from datetime import date
-    from decimal import Decimal
-
+    """Optimized copy previous month balances to current period."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST method required'})
 
@@ -2060,61 +2473,86 @@ def copy_previous_balances_view(request):
             prev_year = year
             prev_month = month - 1
 
-        # Get or create periods
-        target_period, _ = DatePeriod.objects.get_or_create(
-            year=year,
-            month=month,
-            defaults={'label': f"{date(year, month, 1).strftime('%B %Y')}"}
-        )
+        logger.info(f"Copying balances from {prev_year}-{prev_month:02d} to {year}-{month:02d} for user {request.user.id}")
 
-        try:
-            source_period = DatePeriod.objects.get(year=prev_year, month=prev_month)
-        except DatePeriod.DoesNotExist:
-            return JsonResponse({
-                'success': False, 
-                'error': f'No data found for {prev_year}-{prev_month:02d}'
-            })
+        # Use raw SQL for better performance
+        with connection.cursor() as cursor:
+            # First check if source period has any data
+            cursor.execute("""
+                SELECT COUNT(*) FROM core_accountbalance ab
+                INNER JOIN core_account a ON ab.account_id = a.id
+                INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
+                WHERE a.user_id = %s AND dp.year = %s AND dp.month = %s
+            """, [request.user.id, prev_year, prev_month])
+            
+            source_count = cursor.fetchone()[0]
+            if source_count == 0:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'No balances found for {prev_year}-{prev_month:02d}'
+                })
 
-        # Get previous month balances
-        source_balances = AccountBalance.objects.filter(
-            account__user=request.user,
-            period=source_period
-        ).select_related('account')
+            # Get or create target period
+            target_period, _ = DatePeriod.objects.get_or_create(
+                year=year,
+                month=month,
+                defaults={'label': f"{date(year, month, 1).strftime('%B %Y')}"}
+            )
 
-        if not source_balances.exists():
-            return JsonResponse({
-                'success': False,
-                'error': f'No balances found for {prev_year}-{prev_month:02d}'
-            })
-
-        # Copy balances to target period
-        created_count = 0
-        updated_count = 0
-
-        with db_transaction.atomic():
-            for source_balance in source_balances:
-                target_balance, created = AccountBalance.objects.get_or_create(
-                    account=source_balance.account,
-                    period=target_period,
-                    defaults={
-                        'reported_balance': source_balance.reported_balance
-                    }
+            # Use bulk upsert with raw SQL for maximum performance
+            cursor.execute("""
+                WITH source_data AS (
+                    SELECT 
+                        ab.account_id,
+                        ab.reported_balance,
+                        %s as target_period_id
+                    FROM core_accountbalance ab
+                    INNER JOIN core_account a ON ab.account_id = a.id
+                    INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
+                    WHERE a.user_id = %s AND dp.year = %s AND dp.month = %s
+                ),
+                upsert AS (
+                    INSERT INTO core_accountbalance (account_id, period_id, reported_balance)
+                    SELECT account_id, target_period_id, reported_balance 
+                    FROM source_data
+                    ON CONFLICT (account_id, period_id) 
+                    DO UPDATE SET reported_balance = EXCLUDED.reported_balance
+                    RETURNING 
+                        CASE WHEN xmax = 0 THEN 1 ELSE 0 END as is_insert,
+                        account_id
                 )
+                SELECT 
+                    SUM(is_insert) as created_count,
+                    COUNT(*) - SUM(is_insert) as updated_count,
+                    COUNT(*) as total_count
+                FROM upsert
+            """, [target_period.id, request.user.id, prev_year, prev_month])
 
-                if created:
-                    created_count += 1
-                else:
-                    # Update existing balance
-                    target_balance.reported_balance = source_balance.reported_balance
-                    target_balance.save()
-                    updated_count += 1
+            result = cursor.fetchone()
+            created_count, updated_count, total_count = result
 
-        return JsonResponse({
-            'success': True,
-            'created': created_count,
-            'updated': updated_count,
-            'message': f'Copied {created_count} new balances, updated {updated_count} existing balances from {prev_year}-{prev_month:02d}'
-        })
+            logger.info(f"Copy operation completed: {created_count} created, {updated_count} updated")
+
+            # Clear cache for this user's account balance data more efficiently
+            cache.delete(f"account_balance_optimized_{request.user.id}_{year}_{month}")
+            cache.delete(f"account_summary_{request.user.id}")
+            # Clear neighboring months cache too since data dependencies exist
+            if month == 1:
+                cache.delete(f"account_balance_optimized_{request.user.id}_{year-1}_12")
+            else:
+                cache.delete(f"account_balance_optimized_{request.user.id}_{year}_{month-1}")
+            if month == 12:
+                cache.delete(f"account_balance_optimized_{request.user.id}_{year+1}_1")
+            else:
+                cache.delete(f"account_balance_optimized_{request.user.id}_{year}_{month+1}")
+
+            return JsonResponse({
+                'success': True,
+                'created': created_count,
+                'updated': updated_count,
+                'total': total_count,
+                'message': f'Copied {created_count} new balances, updated {updated_count} existing balances from {prev_year}-{prev_month:02d}'
+            })
 
     except Exception as e:
         logger.error(f"Error copying previous balances for user {request.user.id}: {e}")

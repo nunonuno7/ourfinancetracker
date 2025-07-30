@@ -309,10 +309,10 @@ class FinanceEstimationService:
                     # Real vs Estimated breakdown
                     'real_income': float(abs(real_transactions['income'] or Decimal('0'))),
                     'real_expenses': float(abs(real_transactions['expenses'] or Decimal('0'))),
-                    'real_investments': float(abs(real_transactions['investments'] or Decimal('0'))),
+                    'real_investments': float(real_transactions['investments'] or Decimal('0')),
                     'estimated_income': float(abs(estimated_transactions['income'] or Decimal('0'))),
                     'estimated_expenses_tx': float(abs(estimated_transactions['expenses'] or Decimal('0'))),
-                    'estimated_investments': float(abs(estimated_transactions['investments'] or Decimal('0')))
+                    'estimated_investments': float(estimated_transactions['investments'] or Decimal('0'))
                 }
             }
 

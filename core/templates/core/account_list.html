@@ -47,10 +47,15 @@
     {% endfor %}
   </div>
 
-<!-- CSRF token para JavaScript -->
-<form style="display: none;">
+<!-- CSRF token for JavaScript -->
+<div style="display: none;">
   {% csrf_token %}
-</form>
+</div>
+
+<!-- Alternative CSRF token method -->
+<script>
+  window.csrfToken = '{{ csrf_token }}';
+</script>
 
 
   <!-- Tabela de contas -->
@@ -106,8 +111,8 @@
       </thead>
       <tbody id="account-table" class="sortable-table" data-reorder-url="{% url 'account_reorder' %}">
         {% for account in accounts %}
-        <tr data-id="{{ account.pk }}">
-          <td class="text-center handle">⋮⋮</td>
+        <tr data-id="{{ account.pk }}" class="draggable-row">
+          <td class="text-center handle" style="cursor: grab;">⋮⋮</td>
           <td><strong>{{ account.name }}</strong></td>
           <td>{{ account.account_type.name }}</td>
           <td>{{ account.currency.code }}</td>

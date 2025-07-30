@@ -453,6 +453,7 @@ class EstimationManager {
 
         // Calculation Results
         $('#detail-estimated-expenses').text(this.formatCurrency(details.estimated_expenses || 0));
+        $('#detail-actual-expenses').text(this.formatCurrency(combinedExpenses));
         $('#detail-missing-expenses').text(this.formatCurrency(details.missing_expenses || 0));
         $('#detail-missing-income').text(this.formatCurrency(details.missing_income || 0));
 

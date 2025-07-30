@@ -96,11 +96,7 @@ class TransactionManager {
       "input",
       this.debounce(() => this.onFilterChange(), 300),
     );
-    $("#include-system-toggle").on("change", () => {
-      this.onFilterChange();
-      // Show/hide legend based on toggle
-      $("#synthetic-legend").toggle($("#include-system-toggle").is(":checked"));
-    });
+    
 
     // Page size selector
     $("#page-size-selector").on("change", (e) =>
@@ -130,6 +126,64 @@ class TransactionManager {
 
     // Column sorting
     $(document).on("click", ".sortable-header", (e) => this.handleSort(e));
+
+    // Main filters collapse handlers
+    $('#filtersCollapse').on('shown.bs.collapse', () => {
+      $('#filters-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+      $('#filters-toggle').attr('aria-expanded', 'true');
+      console.log('✅ Main filters opened');
+    });
+    
+    $('#filtersCollapse').on('hidden.bs.collapse', () => {
+      $('#filters-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+      $('#filters-toggle').attr('aria-expanded', 'false');
+      console.log('✅ Main filters closed');
+    });
+
+    // Advanced filters collapse handlers
+    $('#advancedFilters').on('shown.bs.collapse', () => {
+      $('#advanced-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+      $('#advanced-filters-toggle').attr('aria-expanded', 'true');
+      console.log('✅ Advanced filters opened');
+    });
+    
+    $('#advancedFilters').on('hidden.bs.collapse', () => {
+      $('#advanced-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+      $('#advanced-filters-toggle').attr('aria-expanded', 'false');
+      console.log('✅ Advanced filters closed');
+    });
+
+    // Initialize collapse states properly after DOM is ready
+    this.initializeCollapseStates();
+  }
+
+  initializeCollapseStates() {
+    // Set initial states without triggering events
+    const mainFiltersOpen = $('#filtersCollapse').hasClass('show');
+    const advancedFiltersOpen = $('#advancedFilters').hasClass('show');
+    
+    console.log('🔧 Initializing collapse states:', {
+      mainFilters: mainFiltersOpen,
+      advancedFilters: advancedFiltersOpen
+    });
+    
+    // Set main filters chevron
+    if (mainFiltersOpen) {
+      $('#filters-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+      $('#filters-toggle').attr('aria-expanded', 'true');
+    } else {
+      $('#filters-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+      $('#filters-toggle').attr('aria-expanded', 'false');
+    }
+    
+    // Set advanced filters chevron
+    if (advancedFiltersOpen) {
+      $('#advanced-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+      $('#advanced-filters-toggle').attr('aria-expanded', 'true');
+    } else {
+      $('#advanced-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+      $('#advanced-filters-toggle').attr('aria-expanded', 'false');
+    }
   }
 
   debounce(func, wait) {
@@ -208,31 +262,27 @@ class TransactionManager {
       return !excludeKeys.includes(key) && filters[key] && filters[key] !== "";
     });
     
-    const indicator = $("#filter-indicator");
+    const countElement = $("#active-filters-count");
+    const collapseButton = $('[data-bs-target="#filtersCollapse"]');
+    const chevron = collapseButton.find('.fa-chevron-down, .fa-chevron-up');
 
     if (activeFilters.length > 0) {
-      // Build detailed filter description
-      const filterDescriptions = activeFilters.map(key => {
-        const value = filters[key];
-        const displayKey = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-        return `${displayKey}: ${value}`;
-      }).join(', ');
-
-      if (indicator.length === 0) {
-        $("#filters-row").prepend(`
-          <div id="filter-indicator" class="col-12">
-            <div class="alert alert-info alert-sm mb-2">
-              <i class="fas fa-filter"></i> <span id="filter-count">${activeFilters.length}</span> active filter(s) - Excel-style cascading
-              <small class="d-block mt-1" id="filter-details">${filterDescriptions}</small>
-            </div>
-          </div>
-        `);
-      } else {
-        $("#filter-count").text(activeFilters.length);
-        $("#filter-details").text(filterDescriptions);
-      }
+      countElement.text(`${activeFilters.length} active filter${activeFilters.length > 1 ? 's' : ''}`);
+      countElement.removeClass('text-muted').addClass('text-primary fw-bold');
     } else {
-      indicator.remove();
+      countElement.text('No active filters');
+      countElement.removeClass('text-primary fw-bold').addClass('text-muted');
+    }
+
+    // Update collapse button chevron based on actual state
+    const isCollapsed = !$('#filtersCollapse').hasClass('show');
+    const filtersChevron = $('#filters-chevron');
+    if (isCollapsed) {
+      filtersChevron.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+      $('#filters-toggle').attr('aria-expanded', 'false');
+    } else {
+      filtersChevron.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+      $('#filters-toggle').attr('aria-expanded', 'true');
     }
   }
 
@@ -264,7 +314,7 @@ class TransactionManager {
       page_size: this.pageSize,
       sort_field: this.sortField,
       sort_direction: this.sortDirection,
-      include_system: $("#include-system-toggle").is(":checked"),
+      include_system: true,
     };
 
     // Filter out empty values to prevent backend filter issues
@@ -281,7 +331,7 @@ class TransactionManager {
     cleanFilters.page_size = this.pageSize;
     cleanFilters.sort_field = this.sortField;
     cleanFilters.sort_direction = this.sortDirection;
-    cleanFilters.include_system = $("#include-system-toggle").is(":checked");
+    cleanFilters.include_system = true;
 
     return cleanFilters;
   }
@@ -309,7 +359,6 @@ class TransactionManager {
     $("#date-end").val(new Date().toISOString().split("T")[0]);
     $("#filter-type, #filter-account, #filter-category, #filter-period").val("");
     $("#filter-amount-min, #filter-amount-max, #filter-tags, #global-search").val("");
-    $("#include-system-toggle").prop("checked", true);
 
     sessionStorage.removeItem("transaction_filters_v2");
     this.currentPage = 1;
@@ -584,13 +633,16 @@ class TransactionManager {
   createTransactionRow(tx, index) {
     const isSelected = this.selectedRows.has(tx.id);
 
-    // Style for system transactions
+    // Style for system transactions and estimated transactions
     const isSystemRow = tx.is_system;
+    const isEstimatedRow = tx.is_estimated;
     const rowClass = isSystemRow ? "table-warning" : "";
     let systemBadge = "";
 
     if (isSystemRow) {
       systemBadge = '<span class="badge bg-info ms-1" title="Automatically calculated">AUTO</span>';
+    } else if (isEstimatedRow) {
+      systemBadge = '<span class="badge bg-warning ms-1" title="Estimated transaction - edit via /transactions/estimate/">EST</span>';
     }
 
     // Format type with colored badge
@@ -661,25 +713,47 @@ class TransactionManager {
       return `<span class="text-nowrap">${day}/${month}/${year}</span>`;
     };
 
-    // Disable actions for non-editable system transactions
-    const actionsHtml = tx.editable
-      ? `
-      <div class="btn-group btn-group-sm" role="group">
-        <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit transaction">
-          <i class="fas fa-edit"></i>
-        </a>
-        <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete transaction">
-          <i class="fas fa-trash"></i>
-        </a>
-      </div>
-    `
-      : `
-      <div class="btn-group btn-group-sm">
-        <button class="btn btn-outline-secondary btn-sm" disabled title="System transaction - read only">
-          <i class="fas fa-lock"></i>
-        </button>
-      </div>
-    `;
+    // Handle actions based on transaction type and editability
+    let actionsHtml = '';
+    
+    console.log(`🔍 [createTransactionRow] Transaction ${tx.id}: editable=${tx.editable}, is_estimated=${tx.is_estimated}, is_system=${tx.is_system}`);
+    
+    if (!tx.editable) {
+      // System transactions - completely read only
+      actionsHtml = `
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary btn-sm" disabled title="System transaction - read only">
+            <i class="fas fa-lock"></i>
+          </button>
+        </div>
+      `;
+    } else if (tx.is_estimated === true || tx.is_estimated === 'true' || tx.is_estimated === 1) {
+      // Estimated transactions - can delete but not edit directly
+      console.log(`🧮 [createTransactionRow] Detected estimated transaction ${tx.id}`);
+      actionsHtml = `
+        <div class="btn-group btn-group-sm" role="group">
+          <button class="btn btn-outline-secondary btn-sm" disabled title="Estimated transaction - edit via /transactions/estimate/">
+            <i class="fas fa-calculator"></i>
+          </button>
+          <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete estimated transaction">
+            <i class="fas fa-trash"></i>
+          </a>
+        </div>
+      `;
+    } else {
+      // Regular transactions - full edit capabilities
+      console.log(`✏️ [createTransactionRow] Regular editable transaction ${tx.id}`);
+      actionsHtml = `
+        <div class="btn-group btn-group-sm" role="group">
+          <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit transaction">
+            <i class="fas fa-edit"></i>
+          </a>
+          <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete transaction">
+            <i class="fas fa-trash"></i>
+          </a>
+        </div>
+      `;
+    }
 
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
     const checkboxVisibility = this.bulkMode ? "" : 'style="display: none;"';
@@ -739,33 +813,69 @@ class TransactionManager {
       balance,
     });
 
-    $("#total-income").text(income);
-    $("#total-expenses").text(expenses);
-    $("#total-investments").text(investments);
-    $("#total-balance").text(balance);
+    // Update values with animation
+    this.updateCardValue("#total-income", income, ".income-card");
+    this.updateCardValue("#total-expenses", expenses, ".expense-card");
+    this.updateCardValue("#total-investments", investments, ".investment-card");
+    this.updateCardValue("#total-balance", balance, ".balance-card");
+
+    // Handle negative balance styling
+    const balanceCard = $(".balance-card");
+    if (totals.balance < 0) {
+      balanceCard.addClass("negative");
+    } else {
+      balanceCard.removeClass("negative");
+    }
 
     console.log("✅ [renderTotals] Totais atualizados na interface");
   }
 
+  updateCardValue(selector, newValue, cardSelector) {
+    const element = $(selector);
+    const card = $(cardSelector);
+    
+    // Only animate if value has changed
+    if (element.text() !== newValue) {
+      // Add updated animation class
+      card.addClass("updated");
+      
+      // Update the value
+      element.text(newValue);
+      
+      // Remove animation class after animation completes
+      setTimeout(() => {
+        card.removeClass("updated");
+      }, 600);
+    } else {
+      element.text(newValue);
+    }
+  }
+
   formatCurrency(amount) {
-    return new Intl.NumberFormat("pt-PT", {
-      style: "currency",
-      currency: "EUR",
-    }).format(amount);
+    // Use our custom Portuguese formatting for consistency
+    return this.formatCurrencyPortuguese(amount);
   }
 
   formatCurrencyPortuguese(amount) {
-    // Format number in Portuguese style: -1.234,56 €
+    // Format number in Portuguese style: 1.234,56 €
     const isNegative = amount < 0;
     const absAmount = Math.abs(amount);
 
-    // Format with Portuguese locale
-    const formatted = absAmount
-      .toFixed(2)
-      .replace(".", ",") // Decimal separator
-      .replace(/\B(?=(\d{3})+(?!\d))/g, "."); // Thousands separator
+    // Convert to string with 2 decimals
+    let formatted = absAmount.toFixed(2);
+    
+    // Split into integer and decimal parts
+    const parts = formatted.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
+    
+    // Add thousands separators (dots) to integer part
+    const withThousands = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    // Combine with comma as decimal separator
+    const finalFormatted = `${withThousands},${decimalPart}`;
 
-    return `${isNegative ? "-" : ""}${formatted} €`;
+    return `${isNegative ? "-" : ""}${finalFormatted} €`;
   }
 
   formatDisplayAmount(amount) {

@@ -35,150 +35,209 @@ today %} {% block content %} {% csrf_token %}
   </div>
 
   <!-- Filters Section -->
-  <div class="card mb-4 shadow-sm">
-    <div class="card-header">
+  <div class="card mb-3 shadow-sm">
+    <div class="card-header py-2">
       <div class="d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="fas fa-filter"></i> Filters</h5>
-        <button class="btn btn-sm btn-outline-danger" id="clear-filters-btn">
-          <i class="fas fa-times"></i> Clear All
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" 
+                data-bs-target="#filtersCollapse" aria-expanded="true" aria-controls="filtersCollapse" id="filters-toggle">
+          <i class="fas fa-filter"></i> Filters <i class="fas fa-chevron-up ms-1" id="filters-chevron"></i>
         </button>
-      </div>
-    </div>
-    <div class="card-body">
-      <!-- Primary Filters Row -->
-      <div class="row g-3 mb-3">
-        <div class="col-md-3">
-          <label class="form-label fw-bold">📅 Date Range</label>
-          <div class="input-group">
-            <input
-              type="text"
-              id="date-start"
-              class="form-control"
-              placeholder="Start date"
-              value="2024-01-01"
-            />
-            <span class="input-group-text">to</span>
-            <input
-              type="text"
-              id="date-end"
-              class="form-control"
-              placeholder="End date"
-              value="{{ today }}"
-            />
-          </div>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label fw-bold">📊 Type</label>
-          <select id="filter-type" class="form-select">
-            <option value="">All Types</option>
-            <option value="Expense">💸 Expense</option>
-            <option value="Income">💰 Income</option>
-            <option value="Investment">📈 Investment</option>
-            <option value="Transfer">🔁 Transfer</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label fw-bold">🏦 Account</label>
-          <select id="filter-account" class="form-select">
-            <option value="">All Accounts</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label fw-bold">🏷️ Category</label>
-          <select id="filter-category" class="form-select">
-            <option value="">All Categories</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label fw-bold">📆 Period</label>
-          <select id="filter-period" class="form-select">
-            <option value="">All Periods</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Advanced Filters Row -->
-      <div class="row g-3">
-        <div class="col-md-2">
-          <label class="form-label">💰 Min Amount</label>
-          <input
-            type="number"
-            id="filter-amount-min"
-            class="form-control"
-            placeholder="0.00"
-            step="0.01"
-          />
-        </div>
-        <div class="col-md-2">
-          <label class="form-label">💰 Max Amount</label>
-          <input
-            type="number"
-            id="filter-amount-max"
-            class="form-control"
-            placeholder="999999"
-            step="0.01"
-          />
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">🏷️ Tags</label>
-          <input
-            type="text"
-            id="filter-tags"
-            class="form-control"
-            placeholder="tag1, tag2..."
-            data-bs-toggle="tooltip"
-            title="Separate multiple tags with commas"
-          />
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">🔍 Search</label>
-          <input
-            type="text"
-            id="global-search"
-            class="form-control"
-            placeholder="Search in all fields..."
-          />
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <button class="btn btn-primary w-100" id="apply-filters-btn">
-            <i class="fas fa-search"></i> Apply
+        <div class="d-flex gap-2">
+          <small class="text-muted align-self-center" id="active-filters-count">No active filters</small>
+          <button class="btn btn-sm btn-outline-danger" id="clear-filters-btn">
+            <i class="fas fa-times"></i> Clear
           </button>
         </div>
+      </div>
+    </div>
+    <div class="collapse show" id="filtersCollapse">
+      <div class="card-body py-3">
+        <form id="filter-form" method="get" action="{% url 'transaction_create' %}">
+          <!-- Primary Filters Row - Always visible -->
+          <div class="row g-2 mb-3">
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-bold small">📅 Date Range</label>
+              <div class="input-group input-group-sm">
+                <input
+                  type="text"
+                  id="date-start"
+                  class="form-control"
+                  placeholder="Start"
+                  value="2024-01-01"
+                />
+                <span class="input-group-text px-2">to</span>
+                <input
+                  type="text"
+                  id="date-end"
+                  class="form-control"
+                  placeholder="End"
+                  value="{{ today }}"
+                />
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-3 col-6">
+              <label class="form-label fw-bold small">📊 Type</label>
+              <select id="filter-type" class="form-select form-select-sm">
+                <option value="">All Types</option>
+                <option value="Expense">💸 Expense</option>
+                <option value="Income">💰 Income</option>
+                <option value="Investment">📈 Investment</option>
+                <option value="Transfer">🔁 Transfer</option>
+              </select>
+            </div>
+            <div class="col-lg-2 col-md-3 col-6">
+              <label class="form-label fw-bold small">🏦 Account</label>
+              <select id="filter-account" class="form-select form-select-sm">
+                <option value="">All Accounts</option>
+              </select>
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-bold small">🏷️ Category</label>
+              <select id="filter-category" class="form-select form-select-sm">
+                <option value="">All Categories</option>
+              </select>
+            </div>
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label fw-bold small">📆 Period</label>
+              <select id="filter-period" class="form-select form-select-sm">
+                <option value="">All Periods</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Advanced Filters - Collapsible -->
+          <div class="border-top pt-3">
+            <button class="btn btn-sm btn-link text-decoration-none p-0 mb-2" type="button" 
+                    data-bs-toggle="collapse" data-bs-target="#advancedFilters" 
+                    aria-expanded="false" aria-controls="advancedFilters" id="advanced-filters-toggle">
+              <i class="fas fa-cog me-1"></i> Advanced Filters <i class="fas fa-chevron-down ms-1" id="advanced-chevron"></i>
+            </button>
+            <div class="collapse" id="advancedFilters">
+              <div class="row g-2">
+                <div class="col-lg-2 col-md-3 col-6">
+                  <label class="form-label small">💰 Min Amount</label>
+                  <input
+                    type="number"
+                    id="filter-amount-min"
+                    class="form-control form-control-sm"
+                    placeholder="0.00"
+                    step="0.01"
+                  />
+                </div>
+                <div class="col-lg-2 col-md-3 col-6">
+                  <label class="form-label small">💰 Max Amount</label>
+                  <input
+                    type="number"
+                    id="filter-amount-max"
+                    class="form-control form-control-sm"
+                    placeholder="999999"
+                    step="0.01"
+                  />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                  <label class="form-label small">🏷️ Tags</label>
+                  <input
+                    type="text"
+                    id="filter-tags"
+                    class="form-control form-control-sm"
+                    placeholder="tag1, tag2..."
+                    data-bs-toggle="tooltip"
+                    title="Separate multiple tags with commas"
+                  />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                  <label class="form-label small">🔍 Search</label>
+                  <input
+                    type="text"
+                    id="global-search"
+                    class="form-control form-control-sm"
+                    placeholder="Search in all fields..."
+                  />
+                </div>
+                <div class="col-lg-2 col-md-6 d-flex align-items-end">
+                  <button class="btn btn-primary btn-sm w-100" id="apply-filters-btn">
+                    <i class="fas fa-search"></i> Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   </div>
 
   <!-- Totals Section -->
   <div class="row mb-4" id="totals-section">
-    <div class="col-md-3">
-      <div class="card text-white bg-success">
-        <div class="card-body text-center">
-          <h5>💰 Income</h5>
-          <h3 id="total-income">€ 0.00</h3>
+    <div class="col-md-3 mb-3">
+      <div class="card financial-card income-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="card-icon income-icon">
+                <i class="fas fa-arrow-up"></i>
+              </div>
+            </div>
+            <div class="text-end">
+              <p class="card-category mb-0">Income</p>
+              <h3 class="card-value" id="total-income">€ 0.00</h3>
+            </div>
+          </div>
+          <div class="progress-line income-progress mt-2"></div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-danger">
-        <div class="card-body text-center">
-          <h5>💸 Expenses</h5>
-          <h3 id="total-expenses">€ 0.00</h3>
+    <div class="col-md-3 mb-3">
+      <div class="card financial-card expense-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="card-icon expense-icon">
+                <i class="fas fa-arrow-down"></i>
+              </div>
+            </div>
+            <div class="text-end">
+              <p class="card-category mb-0">Expenses</p>
+              <h3 class="card-value" id="total-expenses">€ 0.00</h3>
+            </div>
+          </div>
+          <div class="progress-line expense-progress mt-2"></div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-info">
-        <div class="card-body text-center">
-          <h5>📈 Investments</h5>
-          <h3 id="total-investments">€ 0.00</h3>
+    <div class="col-md-3 mb-3">
+      <div class="card financial-card investment-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="card-icon investment-icon">
+                <i class="fas fa-chart-line"></i>
+              </div>
+            </div>
+            <div class="text-end">
+              <p class="card-category mb-0">Investments</p>
+              <h3 class="card-value" id="total-investments">€ 0.00</h3>
+            </div>
+          </div>
+          <div class="progress-line investment-progress mt-2"></div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-primary">
-        <div class="card-body text-center">
-          <h5>💵 Balance</h5>
-          <h3 id="total-balance">€ 0.00</h3>
+    <div class="col-md-3 mb-3">
+      <div class="card financial-card balance-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="card-icon balance-icon">
+                <i class="fas fa-balance-scale"></i>
+              </div>
+            </div>
+            <div class="text-end">
+              <p class="card-category mb-0">Balance</p>
+              <h3 class="card-value" id="total-balance">€ 0.00</h3>
+            </div>
+          </div>
+          <div class="progress-line balance-progress mt-2"></div>
         </div>
       </div>
     </div>
@@ -206,18 +265,7 @@ today %} {% block content %} {% csrf_token %}
         </select>
       </div>
 
-      <!-- Legend for Calculated Transactions -->
-      <div
-        class="d-flex align-items-center gap-2"
-        id="synthetic-legend"
-        style="display: none"
-      >
-        <small class="text-muted">
-          <span class="badge bg-warning text-dark me-1">🧮</span>
-          Automatically calculated transactions using formula: Expenses =
-          Balance(n) - Balance(n+1) + Income - Investments
-        </small>
-      </div>
+
 
       <!-- Bulk Mode Toggle -->
       <div class="d-flex gap-2 align-items-center">
@@ -241,23 +289,7 @@ today %} {% block content %} {% csrf_token %}
         </div>
       </div>
 
-      <!-- System Transactions Toggle -->
-      <div class="d-flex gap-2 align-items-center">
-        <label class="form-check-label">
-          <input
-            type="checkbox"
-            class="form-check-input"
-            id="include-system-toggle"
-            checked
-          />
-          <span
-            data-bs-toggle="tooltip"
-            title="Show estimated expenses and unrecorded income calculated automatically"
-          >
-            💰 Show Calculated Transactions
-          </span>
-        </label>
-      </div>
+
     </div>
 
     <div class="d-flex gap-3 align-items-center">
@@ -428,17 +460,28 @@ today %} {% block content %} {% csrf_token %}
   }
 
   .table-dark {
-    background-color: #000000 !important;
+    background-color: #24282C !important; /* Charcoal Trust */
   }
 
   .table-dark th {
-    background-color: #000000 !important;
+    background-color: #24282C !important; /* Charcoal Trust */
     color: #ffffff !important;
-    border-color: #333333 !important;
+    border-color: #A0A4A8 !important; /* Ledger Grey */
+  }
+
+  .table-dark,
+  .table-dark td,
+  .table-dark th {
+    color: #ffffff !important;
+  }
+
+  .table thead th {
+    background-color: #24282C !important; /* Charcoal Trust */
+    color: #ffffff !important;
   }
 
   .table-hover tbody tr:hover {
-    background-color: rgba(0, 123, 255, 0.08);
+    background-color: rgba(58, 180, 158, 0.08); /* Growth Mint with opacity */
     transform: translateY(-1px);
     transition: all 0.2s ease;
   }
@@ -453,22 +496,51 @@ today %} {% block content %} {% csrf_token %}
     padding: 0.75rem;
     font-size: 0.85rem;
     font-weight: 600;
-    border-bottom: 2px solid #dee2e6;
+    border-bottom: 2px solid #A0A4A8; /* Ledger Grey */
   }
 
   .card {
-    border: none;
+    border: 1px solid #D9DBDD; /* Cloud Panel */
     border-radius: 12px;
     overflow: hidden;
+    background-color: #ffffff;
   }
 
   .btn {
     border-radius: 8px;
   }
 
+  .btn-primary {
+    background-color: #3AB49E; /* Growth Mint */
+    border-color: #3AB49E;
+  }
+
+  .btn-primary:hover {
+    background-color: #2E9A84;
+    border-color: #2E9A84;
+  }
+
+  .btn-outline-secondary {
+    border-color: #A0A4A8; /* Ledger Grey */
+    color: #A0A4A8;
+  }
+
+  .btn-outline-secondary:hover {
+    background-color: #A0A4A8;
+    border-color: #A0A4A8;
+    color: white;
+  }
+
   .form-select,
   .form-control {
     border-radius: 6px;
+    border-color: #D9DBDD; /* Cloud Panel */
+  }
+
+  .form-select:focus,
+  .form-control:focus {
+    border-color: #3AB49E; /* Growth Mint */
+    box-shadow: 0 0 0 0.2rem rgba(58, 180, 158, 0.25);
   }
 
   .transaction-amount {
@@ -485,11 +557,11 @@ today %} {% block content %} {% csrf_token %}
 
   /* Enhanced row styling */
   .table tbody tr {
-    border-bottom: 1px solid rgba(0,0,0,0.05);
+    border-bottom: 1px solid #D9DBDD; /* Cloud Panel */
   }
 
   .table tbody tr:nth-child(even) {
-    background-color: rgba(248, 249, 250, 0.5);
+    background-color: rgba(233, 229, 219, 0.3); /* Balanced Sand with opacity */
   }
 
   /* Type badges styling */
@@ -504,10 +576,22 @@ today %} {% block content %} {% csrf_token %}
     white-space: nowrap;
   }
 
-  .type-income { background-color: #d4edda; color: #155724; }
-  .type-expense { background-color: #f8d7da; color: #721c24; }
-  .type-investment { background-color: #d1ecf1; color: #0c5460; }
-  .type-transfer { background-color: #fff3cd; color: #856404; }
+  .type-income { 
+    background-color: rgba(58, 180, 158, 0.15); /* Growth Mint with opacity */
+    color: #2E9A84; 
+  }
+  .type-expense { 
+    background-color: rgba(36, 40, 44, 0.15); /* Charcoal Trust with opacity */
+    color: #24282C; 
+  }
+  .type-investment { 
+    background-color: rgba(233, 229, 219, 0.8); /* Balanced Sand */
+    color: #24282C; 
+  }
+  .type-transfer { 
+    background-color: rgba(217, 219, 221, 0.8); /* Cloud Panel */
+    color: #24282C; 
+  }
 
   /* Mobile optimizations */
   @media (max-width: 768px) {
@@ -540,28 +624,28 @@ today %} {% block content %} {% csrf_token %}
   }
 
   .amount-positive {
-    color: #198754;
+    color: #3AB49E; /* Growth Mint */
     font-weight: 600;
   }
 
   .amount-negative {
-    color: #dc3545;
+    color: #24282C; /* Charcoal Trust */
     font-weight: 600;
   }
 
   .amount-neutral {
-    color: #6c757d;
+    color: #A0A4A8; /* Ledger Grey */
     font-weight: 500;
   }
 
   /* Account and category pills */
   .account-pill, .category-pill {
-    background-color: #f8f9fa;
-    color: #495057;
+    background-color: #D9DBDD; /* Cloud Panel */
+    color: #24282C; /* Charcoal Trust */
     padding: 0.2rem 0.5rem;
     border-radius: 1rem;
     font-size: 0.75rem;
-    border: 1px solid #e9ecef;
+    border: 1px solid #A0A4A8; /* Ledger Grey */
     display: inline-block;
     max-width: 120px;
     overflow: hidden;
@@ -570,9 +654,9 @@ today %} {% block content %} {% csrf_token %}
   }
 
   .category-pill {
-    background-color: #e7f3ff;
-    color: #0056b3;
-    border-color: #b8daff;
+    background-color: #E9E5DB; /* Balanced Sand */
+    color: #24282C; /* Charcoal Trust */
+    border-color: #A0A4A8; /* Ledger Grey */
   }
 
   /* Tags styling */
@@ -584,12 +668,12 @@ today %} {% block content %} {% csrf_token %}
   }
 
   .tag-pill {
-    background-color: #fff2e6;
-    color: #cc5500;
+    background-color: #E9E5DB; /* Balanced Sand */
+    color: #24282C; /* Charcoal Trust */
     padding: 0.15rem 0.4rem;
     border-radius: 0.75rem;
     font-size: 0.7rem;
-    border: 1px solid #ffd4a8;
+    border: 1px solid #A0A4A8; /* Ledger Grey */
     white-space: nowrap;
   }
 
@@ -612,7 +696,7 @@ today %} {% block content %} {% csrf_token %}
   }
 
   #progressModal .modal-header {
-    background: linear-gradient(135deg, #007bff, #0056b3);
+    background: linear-gradient(135deg, #3AB49E, #2E9A84); /* Growth Mint gradient */
     color: white;
     border-radius: 15px 15px 0 0;
     border-bottom: none;
@@ -653,11 +737,11 @@ today %} {% block content %} {% csrf_token %}
   }
 
   .sortable-header:hover {
-    background-color: rgba(0, 123, 255, 0.1) !important;
+    background-color: rgba(58, 180, 158, 0.1) !important; /* Growth Mint with opacity */
   }
 
   .sortable-header.active {
-    background-color: rgba(0, 123, 255, 0.15) !important;
+    background-color: rgba(58, 180, 158, 0.15) !important; /* Growth Mint with opacity */
     font-weight: 600;
   }
 
@@ -674,7 +758,7 @@ today %} {% block content %} {% csrf_token %}
 
   .sortable-header.active .sort-icon {
     opacity: 1;
-    color: #007bff;
+    color: #3AB49E; /* Growth Mint */
   }
 
   .sort-asc .sort-icon::before {
@@ -687,21 +771,168 @@ today %} {% block content %} {% csrf_token %}
 
   /* Synthetic Transactions Styles */
   .table-warning {
-    background-color: rgba(255, 193, 7, 0.1) !important;
-    border-left: 4px solid #ffc107;
+    background-color: rgba(233, 229, 219, 0.3) !important; /* Balanced Sand with opacity */
+    border-left: 4px solid #E9E5DB; /* Balanced Sand */
   }
 
   .table-warning .transaction-amount {
     font-weight: 700;
-    text-shadow: 0 0 2px rgba(255, 193, 7, 0.3);
+    text-shadow: 0 0 2px rgba(233, 229, 219, 0.5);
   }
 
   .synthetic-transaction {
     background: linear-gradient(
       90deg,
-      rgba(255, 193, 7, 0.05) 0%,
+      rgba(233, 229, 219, 0.1) 0%, /* Balanced Sand with opacity */
       rgba(255, 255, 255, 0) 100%
     );
+  }
+
+  /* Professional Financial Cards */
+  .financial-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .financial-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  }
+
+  .financial-card .card-body {
+    padding: 1.5rem;
+    position: relative;
+    z-index: 2;
+  }
+
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .card-category {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.9;
+    margin-bottom: 0.25rem;
+  }
+
+  .card-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  .progress-line {
+    height: 3px;
+    border-radius: 2px;
+    opacity: 0.6;
+  }
+
+  /* Income Card - Growth Mint */
+  .income-card {
+    background: linear-gradient(135deg, #3AB49E 0%, #2E9A84 100%);
+    color: white;
+  }
+
+  .income-icon {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .income-progress {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Expense Card - Red */
+  .expense-card {
+    background: linear-gradient(135deg, #DC3545 0%, #B02A37 100%);
+    color: white;
+  }
+
+  .expense-icon {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .expense-progress {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Investment Card - Balanced Sand */.investment-card {
+    background: linear-gradient(135deg, #E9E5DB 0%, #D4CFC2 100%);
+    color: #24282C;
+  }
+
+  .investment-icon {
+    background: rgba(36, 40, 44, 0.1);
+    color: #24282C;
+  }
+
+  .investment-progress {
+    background: rgba(36, 40, 44, 0.2);
+  }
+
+  /* Balance Card - Growth Mint */
+  .balance-card {
+    background: linear-gradient(135deg, #3AB49E 0%, #2E9A84 100%);
+    color: white;
+  }
+
+  .balance-icon {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .balance-progress {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Negative balance handling - Charcoal Trust */
+  .balance-card.negative {
+    background: linear-gradient(135deg, #24282C 0%, #1A1D20 100%);
+  }
+
+  /* Card animations */
+  @keyframes cardPulse {
+    0% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+    50% { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15); }
+    100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+  }
+
+  .financial-card.updated {
+    animation: cardPulse 0.6s ease-in-out;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .financial-card .card-body {
+      padding: 1.25rem;
+    }
+
+    .card-value {
+      font-size: 1.5rem;
+    }
+
+    .card-icon {
+      width: 40px;
+      height: 40px;
+      font-size: 1.25rem;
+    }
   }
 </style>
 
