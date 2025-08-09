@@ -41,6 +41,15 @@ load_dotenv(BASE_DIR / ".env")
 ENV = os.getenv  # alias
 
 # ────────────────────────────────────────────────────
+# Authentication backends (django-axes must be first)
+# ────────────────────────────────────────────────────
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+    # add others here if you use them (e.g. allauth)
+]
+
+# ────────────────────────────────────────────────────
 # Segurança & chave secreta
 # ────────────────────────────────────────────────────
 DEBUG: bool = ENV("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
@@ -105,9 +114,17 @@ INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
     "widget_tweaks",
     "django.contrib.humanize",
+    "axes",
     # Internos
     "core",
 ]
+
+# Debug Toolbar only if explicitly toggled
+SHOW_DEBUG_TOOLBAR = False
+if DEBUG and SHOW_DEBUG_TOOLBAR:
+    INSTALLED_APPS += ["debug_toolbar"]
+    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    INTERNAL_IPS = ["127.0.0.1"]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -119,6 +136,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.log_filter.SuppressJsonLogMiddleware",
+    # django-axes should be last
+    "axes.middleware.AxesMiddleware",
 ]
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
@@ -266,6 +285,24 @@ LOGGING = {
 }
 
 # ────────────────────────────────────────────────────
+# Strong password hashing (Argon2 first)
+# ────────────────────────────────────────────────────
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+]
+
+# Strong password policy
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# ────────────────────────────────────────────────────
 # Segurança extra
 # ────────────────────────────────────────────────────
 if not DEBUG:
@@ -278,6 +315,24 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
+    
+    # Safer defaults in production
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    # If behind a proxy/Render/NGINX:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# SameSite cookies (safe default for both envs)
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+
+# ────────────────────────────────────────────────────
+# Login attempt throttling (brute-force protection)
+# ────────────────────────────────────────────────────
+AXES_ENABLED = not DEBUG
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1  # hours
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+AXES_LOCKOUT_CALLABLE = None
 
 # ────────────────────────────────────────────────────
 # Supabase creds (para RPC)

@@ -879,16 +879,22 @@ def import_transactions_xlsx(request):
             df = pd.read_excel(uploaded_file)
             logger.info(f"📊 [import_transactions_xlsx] Read Excel file with shape: {df.shape}")
             logger.info(f"📋 [import_transactions_xlsx] Columns found: {list(df.columns)}")
-            logger.info(f"🔍 [import_transactions_xlsx] First 3 rows:\n{df.head(3).to_string()}")
+            
+            # Only log sensitive data in DEBUG mode
+            if settings.DEBUG:
+                logger.debug(f"🔍 [import_transactions_xlsx] First 3 rows:\n{df.head(3).to_string()}")
             
             # Detailed analysis of tag columns
             tag_columns = ['Tags', 'tags', 'Tag', 'tag']
             for col in tag_columns:
                 if col in df.columns:
                     non_empty_count = df[col].notna().sum()
-                    unique_values = df[col].dropna().unique()[:5]  # First 5 unique values
                     logger.info(f"🏷️ [import_transactions_xlsx] Column '{col}' found: {non_empty_count} non-empty values")
-                    logger.info(f"🏷️ [import_transactions_xlsx] Sample values from '{col}': {unique_values}")
+                    
+                    # Only log actual tag values in DEBUG mode
+                    if settings.DEBUG:
+                        unique_values = df[col].dropna().unique()[:5]  # First 5 unique values
+                        logger.debug(f"🏷️ [import_transactions_xlsx] Sample values from '{col}': {unique_values}")
                     break
             else:
                 logger.warning(f"⚠️ [import_transactions_xlsx] No tags column found in: {list(df.columns)}")
@@ -905,34 +911,37 @@ def import_transactions_xlsx(request):
 
             # Clean and validate data upfront
             initial_rows = len(df)
-            logger.info(f"📋 [import_transactions_xlsx] Initial data preview:")
-            logger.info(f"📋 [import_transactions_xlsx] First 3 rows:\n{df.head(3).to_string()}")
+            logger.info(f"📋 [import_transactions_xlsx] Initial data has {initial_rows} rows")
             
             # Check for completely empty rows first
             df_non_empty = df.dropna(how='all')
-            logger.info(f"🧹 [import_transactions_xlsx] After removing completely empty rows: {len(df)} → {len(df_non_empty)}")
+            logger.debug(f"🧹 [import_transactions_xlsx] After removing completely empty rows: {len(df)} → {len(df_non_empty)}")
             
             # More flexible cleaning - only drop rows where ALL required columns are missing
             missing_mask = df_non_empty[required_cols].isna().all(axis=1)
             df_clean = df_non_empty[~missing_mask].copy()
             rows_after_dropna = len(df_clean)
-            logger.info(f"🧹 [import_transactions_xlsx] Rows after cleaning required columns: {initial_rows} → {rows_after_dropna}")
+            logger.debug(f"🧹 [import_transactions_xlsx] Rows after cleaning required columns: {initial_rows} → {rows_after_dropna}")
             
             # Log which columns have missing values
             for col in required_cols:
                 missing_count = df_clean[col].isna().sum()
                 if missing_count > 0:
                     logger.warning(f"⚠️ [import_transactions_xlsx] Column '{col}' has {missing_count} missing values")
-                    logger.warning(f"📋 [import_transactions_xlsx] Sample missing rows for '{col}':")
-                    sample_missing = df_clean[df_clean[col].isna()].head(3)
-                    logger.warning(f"{sample_missing.to_string()}")
+                    
+                    # Only log actual data samples in DEBUG mode
+                    if settings.DEBUG:
+                        logger.debug(f"📋 [import_transactions_xlsx] Sample missing rows for '{col}':")
+                        sample_missing = df_clean[df_clean[col].isna()].head(3)
+                        logger.debug(f"{sample_missing.to_string()}")
 
             if df_clean.empty:
                 logger.error(f"❌ [import_transactions_xlsx] No valid rows after cleaning")
-                logger.error(f"📋 [import_transactions_xlsx] Original DataFrame info:")
-                logger.error(f"Shape: {df.shape}")
-                logger.error(f"Columns: {list(df.columns)}")
-                logger.error(f"Data types: {df.dtypes.to_dict()}")
+                if settings.DEBUG:
+                    logger.debug(f"📋 [import_transactions_xlsx] Original DataFrame info:")
+                    logger.debug(f"Shape: {df.shape}")
+                    logger.debug(f"Columns: {list(df.columns)}")
+                    logger.debug(f"Data types: {df.dtypes.to_dict()}")
                 messages.error(request, 'No valid data rows found in the Excel file. Please check that your file has data in the required columns: Date, Type, Amount, Category, Account')
                 return render(request, 'core/import_form.html')
 
@@ -947,14 +956,17 @@ def import_transactions_xlsx(request):
                         df_clean.loc[empty_mask, col] = default_value
                         logger.warning(f"⚠️ [import_transactions_xlsx] Filled {empty_mask.sum()} empty {col} values with '{default_value}'")
 
-            logger.info(f"🏦 [import_transactions_xlsx] Unique accounts: {df_clean['Account'].unique()}")
-            logger.info(f"🏷️ [import_transactions_xlsx] Unique categories: {df_clean['Category'].unique()}")
+            # Only log unique values in DEBUG mode to prevent PII exposure
+            if settings.DEBUG:
+                logger.debug(f"🏦 [import_transactions_xlsx] Unique accounts: {df_clean['Account'].unique()}")
+                logger.debug(f"🏷️ [import_transactions_xlsx] Unique categories: {df_clean['Category'].unique()}")
 
             try:
                 logger.info(f"🔄 [import_transactions_xlsx] Converting data types...")
                 
                 # Convert dates more carefully
-                logger.info(f"📅 [import_transactions_xlsx] Sample date values: {df_clean['Date'].head().tolist()}")
+                if settings.DEBUG:
+                    logger.debug(f"📅 [import_transactions_xlsx] Sample date values: {df_clean['Date'].head().tolist()}")
                 df_clean['Date'] = pd.to_datetime(df_clean['Date'], errors='coerce').dt.date
                 invalid_dates = df_clean['Date'].isna().sum()
                 if invalid_dates > 0:
@@ -962,7 +974,8 @@ def import_transactions_xlsx(request):
                     df_clean = df_clean.dropna(subset=['Date'])
                 
                 # Convert amounts more carefully
-                logger.info(f"💰 [import_transactions_xlsx] Sample amount values: {df_clean['Amount'].head().tolist()}")
+                if settings.DEBUG:
+                    logger.debug(f"💰 [import_transactions_xlsx] Sample amount values: {df_clean['Amount'].head().tolist()}")
                 df_clean['Amount'] = pd.to_numeric(df_clean['Amount'], errors='coerce')
                 invalid_amounts = df_clean['Amount'].isna().sum()
                 if invalid_amounts > 0:
@@ -973,10 +986,11 @@ def import_transactions_xlsx(request):
                 logger.info(f"💰 [import_transactions_xlsx] Amount range: {df_clean['Amount'].min()} to {df_clean['Amount'].max()}")
                 
                 # Clean and normalize transaction types
-                logger.info(f"🏷️ [import_transactions_xlsx] Sample type values: {df_clean['Type'].head().tolist()}")
+                if settings.DEBUG:
+                    logger.debug(f"🏷️ [import_transactions_xlsx] Sample type values: {df_clean['Type'].head().tolist()}")
                 df_clean['Type'] = df_clean['Type'].fillna('').astype(str).str.strip().str.upper()
                 
-                # Log original types before normalization
+                # Log original types before normalization (types are not PII)
                 original_types = df_clean['Type'].value_counts().to_dict()
                 logger.info(f"📊 [import_transactions_xlsx] Original types: {original_types}")
                 
@@ -1005,12 +1019,14 @@ def import_transactions_xlsx(request):
                     logger.info(f"🏷️ [import_transactions_xlsx] Found column '{found_tag_col}' with {tags_with_data} rows containing tag data")
                     
                     if tags_with_data > 0:
-                        sample_tags = df_clean[tags_mask][found_tag_col].head(5).tolist()
-                        logger.info(f"🏷️ [import_transactions_xlsx] Sample tags: {sample_tags}")
-                        
-                        # Log each unique tag value for debugging
-                        unique_tags = df_clean[tags_mask][found_tag_col].unique()
-                        logger.info(f"🏷️ [import_transactions_xlsx] All unique tag values ({len(unique_tags)}): {unique_tags[:10]}")  # First 10
+                        # Only log actual tag content in DEBUG mode
+                        if settings.DEBUG:
+                            sample_tags = df_clean[tags_mask][found_tag_col].head(5).tolist()
+                            logger.debug(f"🏷️ [import_transactions_xlsx] Sample tags: {sample_tags}")
+                            
+                            # Log each unique tag value for debugging
+                            unique_tags = df_clean[tags_mask][found_tag_col].unique()
+                            logger.debug(f"🏷️ [import_transactions_xlsx] All unique tag values ({len(unique_tags)}): {unique_tags[:10]}")  # First 10
                 else:
                     logger.warning(f"⚠️ [import_transactions_xlsx] No tags column found. Available columns: {list(df_clean.columns)}")
                 

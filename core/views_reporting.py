@@ -20,70 +20,68 @@ def get_env_or_fail(key: str) -> str:
 @require_GET
 def proxy_report_csv_token(request):
     """
-    Endpoint público que aceita um token JWT no URL:
-    /reporting/data.csv?token=...
-
-    Este token deve conter o 'sub' com o user_id.
+    Public endpoint that accepts a short-lived JWT via the 'Authorization: Bearer <token>' header.
+    For backwards compatibility, a 'token' query string is still accepted but will be removed.
     """
-    token = request.GET.get("token", "")
+    # Prefer header over query string
+    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+    token = ""
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    else:
+        token = request.GET.get("token", "")  # deprecated fallback
+
     if not token:
-        logger.warning("❌ Token em falta")
-        return HttpResponseForbidden("❌ Token em falta.")
+        return HttpResponseForbidden("❌ Missing token.")
 
     try:
         service_role_key = get_env_or_fail("SUPABASE_SERVICE_ROLE_KEY")
         decoded = jwt.decode(token, service_role_key, algorithms=["HS256"])
-        logger.info(f"✅ Token original decodificado: {decoded}")
-
+        # Do not log decoded claims at INFO in production
+        logger.debug("✅ Decoded original token claims.")
         user_id = decoded.get("sub")
         if not user_id:
-            logger.warning("❌ JWT inválido – 'sub' ausente")
-            return HttpResponseForbidden("❌ JWT inválido – sub ausente.")
-
+            return HttpResponseForbidden("❌ Invalid JWT – missing 'sub'.")
     except jwt.ExpiredSignatureError:
-        logger.warning("❌ Token expirado")
-        return HttpResponseForbidden("❌ Token expirado.")
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"❌ Token inválido: {e}")
-        return HttpResponseForbidden("❌ Token inválido.")
+        return HttpResponseForbidden("❌ Token expired.")
+    except jwt.InvalidTokenError:
+        return HttpResponseForbidden("❌ Invalid token.")
     except ImproperlyConfigured as e:
-        logger.error(f"❌ Configuração inválida: {e}")
+        logger.error(f"❌ Misconfiguration: {e}")
         return HttpResponse(str(e), status=500)
 
-    # Gerar novo JWT curto (5 min) com o mesmo sub
+    # Mint a fresh 5-minute JWT scoped to the same subject
     fresh_payload = {
         "sub": str(user_id),
         "user_id": int(user_id),
         "role": "authenticated",
-        "exp": datetime.utcnow() + timedelta(minutes=5)
+        "exp": datetime.utcnow() + timedelta(minutes=5),
     }
     fresh_token = jwt.encode(fresh_payload, service_role_key, algorithm="HS256")
-    logger.info(f"🔐 Novo JWT gerado para Supabase: {fresh_token}")
-    logger.debug(f"🧾 Payload JWT novo: {fresh_payload}")
+    logger.debug("🔐 Minted fresh short-lived JWT for Supabase.")
 
     try:
         api_key = get_env_or_fail("SUPABASE_API_KEY")
         rest_url = get_env_or_fail("SUPABASE_REST_URL")
     except ImproperlyConfigured as e:
-        logger.error(f"❌ Configuração inválida: {e}")
+        logger.error(f"❌ Misconfiguration: {e}")
         return HttpResponse(str(e), status=500)
 
     headers = {
         "Authorization": f"Bearer {fresh_token}",
         "apikey": api_key,
-        "Accept": "text/csv"
+        "Accept": "text/csv",
     }
-    logger.debug(f"🔗 Headers enviados para Supabase: {headers}")
 
     url = f"{rest_url}/reporting_transactions?select=date,amount,type,category,account,notes"
-    logger.debug(f"🔗 URL chamada: {url}")
-
     r = requests.get(url, headers=headers)
-    logger.info(f"📥 Resposta Supabase: status={r.status_code}")
+    logger.info(f"📥 Supabase response status={r.status_code}")
     if r.status_code != 200:
-        logger.warning(f"❌ Conteúdo da resposta: {r.text}")
-        return HttpResponse(f"❌ Erro Supabase: {r.status_code}", status=r.status_code)
+        logger.warning(f"❌ Response body: {r.text}")
+        return HttpResponse(f"❌ Supabase error: {r.status_code}", status=r.status_code)
 
     response = HttpResponse(r.content, content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename=reporting.csv'
+    # Avoid leaking tokens via Referer just in case
+    response["Referrer-Policy"] = "no-referrer"
     return response
