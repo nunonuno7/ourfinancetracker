@@ -14,7 +14,7 @@ Principais características 🔧
 
 EnvVars mínimas ⬇️
 ─────────────────
-SECRET_KEY, DEBUG, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT (5432),
+SECRET_KEY, DEBUG, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT (5432),
 REDIS_URL *(opcional)*, SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET.
 """
 from __future__ import annotations
@@ -66,37 +66,41 @@ ALLOWED_HOSTS: List[str] = [
     "www.ourfinancetracker.com",
     "localhost",
     "127.0.0.1",
+    ".replit.dev",  # permite subdomínios de replit.dev
 ]
+
 if ext_host := ENV("RENDER_EXTERNAL_HOSTNAME"):
     ALLOWED_HOSTS.append(ext_host)
-if DEBUG:
-    ALLOWED_HOSTS += [
-        "4c95-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
-        # Permite qualquer subdomínio do replit.dev
-        ".replit.dev",
-    ]
-
-# Adiciona suporte dinâmico para hosts do Replit
-import re
-if DEBUG:
-    # Permite todos os hosts que terminam em .replit.dev
-    ALLOWED_HOSTS.append(re.compile(r'.*\.replit\.dev$'))
 
 CSRF_TRUSTED_ORIGINS: List[str] = [
     "https://ourfinancetracker.onrender.com",
     "https://ourfinancetracker.com",
 ]
-if DEBUG:
-    CSRF_TRUSTED_ORIGINS.extend([
-        "https://4aa6-2001-818-c407-a00-2d64-ff89-1771-c9e.ngrok-free.app",
-        # Adiciona suporte específico para o domínio atual do Replit
-        "https://6c6096cc-4db3-4fe3-b35f-c0fd62134325-00-opa5nkmzdu6i.riker.replit.dev",
-        "https://*.replit.dev",
-        "http://*.replit.dev",
-    ])
 
-# Adiciona configuração específica para CSRF em desenvolvimento
+# Em DEV, injeta dinamicamente o host completo do Replit/Ngrok via env
 if DEBUG:
+    # Adicionar host atual do Replit diretamente (com e sem porta)
+    current_replit_host = "29cea681-02b4-4bd0-9205-6c03862c1561-00-1wzbqrixt32bq.riker.replit.dev"
+    CSRF_TRUSTED_ORIGINS.append(f"https://{current_replit_host}")
+    CSRF_TRUSTED_ORIGINS.append(f"https://{current_replit_host}:5000")
+
+    # Tentar detectar automaticamente outros hosts
+    if replit_host := ENV("REPLIT_HOST"):   # ex: "abcd-...riker.replit.dev"
+        CSRF_TRUSTED_ORIGINS.append(f"https://{replit_host}")
+        CSRF_TRUSTED_ORIGINS.append(f"https://{replit_host}:5000")
+    if ngrok_host := ENV("NGROK_HOST"):     # ex: "1234-...ngrok-free.app"
+        CSRF_TRUSTED_ORIGINS.append(f"https://{ngrok_host}")
+        CSRF_TRUSTED_ORIGINS.append(f"https://{ngrok_host}:5000")
+
+    # Tentar detectar via REPLIT_URL
+    if replit_url := ENV("REPLIT_URL"):
+        if replit_url.startswith("https://"):
+            CSRF_TRUSTED_ORIGINS.append(replit_url)
+            # Adicionar também com porta 5000 se não estiver já incluída
+            if ":5000" not in replit_url:
+                CSRF_TRUSTED_ORIGINS.append(f"{replit_url}:5000")
+
+    # Adicionar configuração específica para CSRF em desenvolvimento
     CSRF_COOKIE_SECURE = False
     CSRF_COOKIE_SAMESITE = 'Lax'
 
@@ -115,16 +119,16 @@ INSTALLED_APPS = [
     "widget_tweaks",
     "django.contrib.humanize",
     "axes",
+    "anymail",
     # Internos
     "core",
+    "accounts",
 ]
 
 # Debug Toolbar only if explicitly toggled
-SHOW_DEBUG_TOOLBAR = False
+SHOW_DEBUG_TOOLBAR = ENV("SHOW_DEBUG_TOOLBAR", "False").lower() in {"1", "true", "yes", "on"}
 if DEBUG and SHOW_DEBUG_TOOLBAR:
     INSTALLED_APPS += ["debug_toolbar"]
-    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-    INTERNAL_IPS = ["127.0.0.1"]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -136,9 +140,19 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.log_filter.SuppressJsonLogMiddleware",
+    # Performance monitoring (only in DEBUG)
+    "core.middleware.performance.PerformanceMiddleware" if DEBUG else None,
     # django-axes should be last
     "axes.middleware.AxesMiddleware",
 ]
+
+# Remove None values from middleware list
+MIDDLEWARE = [m for m in MIDDLEWARE if m is not None]
+
+# Add Debug Toolbar middleware if enabled
+if DEBUG and SHOW_DEBUG_TOOLBAR:
+    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    INTERNAL_IPS = ["127.0.0.1"]
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
 WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
@@ -242,9 +256,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ────────────────────────────────────────────────────
 # Logging estruturado
 # ────────────────────────────────────────────────────
-class SuppressTransactionJsonFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
-        return "/transactions/json" not in record.getMessage()
+class SuppressNoisyEndpointsFilter(logging.Filter):
+    """Suppress logs for noisy API endpoints"""
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        noisy_paths = [
+            "/transactions/json",
+            "/transactions/totals-v2/",
+            "/dashboard/kpis/",
+            "/static/",
+            "/favicon.ico",
+            "/api/",
+        ]
+        return not any(path in message for path in noisy_paths)
 
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -252,19 +276,33 @@ LOG_DIR.mkdir(exist_ok=True)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "filters": {"suppress_transaction_json": {"()": SuppressTransactionJsonFilter}},
+    "filters": {
+        "suppress_noisy_endpoints": {"()": SuppressNoisyEndpointsFilter},
+        "require_debug_false": {"()": "django.utils.log.RequireDebugFalse"},
+        "require_debug_true": {"()": "django.utils.log.RequireDebugTrue"},
+    },
     "formatters": {
         "verbose": {
             "format": "[{levelname}] {asctime} {name} {process:d} {thread:d} {message}",
             "style": "{",
         },
         "simple": {"format": "[{levelname}] {message}", "style": "{"},
+        "performance": {
+            "format": "🚀 [{levelname}] {asctime} {message}",
+            "style": "{",
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "simple" if DEBUG else "verbose",
-            "filters": ["suppress_transaction_json"],
+            "filters": ["suppress_noisy_endpoints"],
+            "level": "DEBUG" if DEBUG else "INFO",
+        },
+        "console_noisy": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+            "level": "WARNING",  # Only warnings and errors for noisy endpoints
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
@@ -272,6 +310,15 @@ LOGGING = {
             "maxBytes": 5 * 1024 * 1024,
             "backupCount": 5,
             "formatter": "verbose",
+            "level": "INFO",  # File logs start at INFO
+        },
+        "performance_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "performance.log",
+            "maxBytes": 2 * 1024 * 1024,
+            "backupCount": 3,
+            "formatter": "performance",
+            "level": "WARNING",
         },
     },
     "root": {
@@ -279,8 +326,32 @@ LOGGING = {
         "level": "DEBUG" if DEBUG else "INFO",
     },
     "loggers": {
-        "django.server": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "core": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+        "django.server": {
+            "handlers": ["console_noisy", "file"],
+            "level": "WARNING",  # Reduce server log noise
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console", "file"],
+            "level": "WARNING",  # Only log request errors
+            "propagate": False,
+        },
+        "core": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+        "core.performance": {
+            "handlers": ["console", "performance_file"],
+            "level": "WARNING",  # Only log slow requests
+            "propagate": False,
+        },
+        # Suppress axios/CORS preflight noise
+        "django.security.csrf": {
+            "handlers": ["file"],
+            "level": "ERROR",
+            "propagate": False,
+        },
     },
 }
 
@@ -315,7 +386,7 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
-    
+
     # Safer defaults in production
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
     # If behind a proxy/Render/NGINX:
@@ -333,6 +404,44 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1  # hours
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_LOCKOUT_CALLABLE = None
+
+# ────────────────────────────────────────────────────
+# Email configuration (Resend via Anymail OR SMTP fallback)
+# ────────────────────────────────────────────────────
+import os
+
+def env_bool(key: str, default: bool = False) -> bool:
+    return os.getenv(key, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+def env_int(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+
+# Default from email
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@ourfinancetracker.com')
+
+# Domain for email links (forces HTTPS in password reset emails)
+EMAIL_LINK_DOMAIN = os.getenv('EMAIL_LINK_DOMAIN', 'ourfinancetracker.com')
+
+if RESEND_API_KEY:
+    # Use Resend via django-anymail
+    EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+    ANYMAIL = {"RESEND_API_KEY": RESEND_API_KEY}
+else:
+    # SMTP fallback (Plesk)
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST", "web4.sitedns.pt")  # change to mail.ourfinancetracker.com once the cert is fixed
+    EMAIL_PORT = env_int("EMAIL_PORT", 465)
+    EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", True)   # True for port 465
+    EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)  # True for port 587
+    # Prefer Django-conventional names; keep compatibility with old names
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER") or os.getenv("EMAIL_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD") or os.getenv("EMAIL_PASSWORD", "")
+    EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 20)
 
 # ────────────────────────────────────────────────────
 # Supabase creds (para RPC)

@@ -554,27 +554,32 @@ button:hover,
 }
 
 .navbar-brand {
-  color: var(--charcoal-trust) !important;
-  font-weight: 600;
+    color: #24282C !important;
+    font-weight: 600 !important;
 }
 
 .navbar-brand:hover {
-  color: var(--growth-mint) !important;
+    color: #3AB49E !important;
 }
 
-.navbar-nav .nav-link {
-  color: var(--charcoal-trust) !important;
-  font-weight: 500;
-  transition: color 0.2s ease;
+.nav-link {
+    color: #24282C !important;
 }
 
-.navbar-nav .nav-link:hover {
-  color: var(--growth-mint) !important;
+.nav-link:hover {
+    color: #3AB49E !important;
 }
 
-.navbar-nav .nav-link.active {
-  color: var(--growth-mint) !important;
-  font-weight: 600;
+.navbar-dark .navbar-brand {
+    color: #ffffff !important;
+}
+
+.navbar-dark .nav-link {
+    color: #ffffff !important;
+}
+
+.navbar-dark .nav-link:hover {
+    color: #3AB49E !important;
 }
 
 .navbar-toggler {
@@ -601,7 +606,7 @@ button:hover,
     padding-right: 0.75rem;
   }
 
-  /* Navbar mobile improvements */
+  /*Navbar mobile improvements */
   .navbar {
     padding: 0.5rem 0.75rem;
   }
@@ -1117,20 +1122,3 @@ button:hover,
 .reordering .handle {
   cursor: wait;
 }
-/* Navigation consistency */
-        .navbar-brand, .nav-link {
-            color: #333 !important;
-        }
-
-        .nav-link:hover {
-            color: #007bff !important;
-        }
-
-        .navbar-light .navbar-brand,
-        .navbar-light .nav-link {
-            color: #333 !important;
-        }
-
-        .navbar-light .nav-link:hover {
-            color: #007bff !important;
-        }

@@ -53,6 +53,11 @@ roadmap_notebook.py
 notas.txt
 
 # ──────────────────────────────
+# Git command noise files
+# ──────────────────────────────
+h git switch --detach *
+
+# ──────────────────────────────
 # Ficheiros de build / static
 #  (mantém se usares collectstatic
 #   no próprio repositório; caso
