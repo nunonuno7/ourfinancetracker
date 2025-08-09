@@ -108,8 +108,6 @@ INSTALLED_APPS = [
     # Internos
     "core",
 ]
-if DEBUG:
-    INSTALLED_APPS += ["debug_toolbar"]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -122,9 +120,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.log_filter.SuppressJsonLogMiddleware",
 ]
-if DEBUG:
-    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-    INTERNAL_IPS = ["127.0.0.1"]
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
 WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"

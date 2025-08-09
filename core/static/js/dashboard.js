@@ -124,72 +124,30 @@ document.addEventListener("DOMContentLoaded", () => {
           tooltip: {
             mode: 'index',
             intersect: false,
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            backgroundColor: 'rgba(0, 0, 0, 0.95)',
             titleColor: '#fff',
             bodyColor: '#fff',
             footerColor: '#a0a0a0',
-            borderColor: 'rgba(255, 255, 255, 0.2)',
-            borderWidth: 1,
-            cornerRadius: 8,
+            borderColor: 'rgba(255, 255, 255, 0.3)',
+            borderWidth: 2,
+            cornerRadius: 12,
+            titleFont: { size: 14, weight: 'bold' },
+            bodyFont: { size: 13 },
+            footerFont: { size: 11 },
+            padding: 12,
+            displayColors: true,
             callbacks: {
               title: function(tooltipItems) {
-                return tooltipItems[0]?.label ? `📅 ${tooltipItems[0].label}` : '';
+                return tooltipItems[0]?.label ? `📅 Period: ${tooltipItems[0].label}` : '';
               },
               label: function(context) {
-                return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                const value = context.parsed.y || 0;
+                const icon = context.dataset.label.includes('Savings') ? '💰' : 
+                           context.dataset.label.includes('Investment') ? '📈' : '💎';
+                return `${icon} ${context.dataset.label}: ${formatCurrency(value)}`;
               },
               afterBody: function(tooltipItems) {
-                if (tooltipItems.length === 0) return '';
-
-                // Calculate period-specific insights
-                let savings = 0;
-                let investments = 0;
-                let total = 0;
-
-                tooltipItems.forEach(item => {
-                  const value = item.parsed.y || 0;
-                  if (item.dataset.label.includes('Savings')) {
-                    savings = value;
-                  } else if (item.dataset.label.includes('Investments')) {
-                    investments = value;
-                  } else if (item.dataset.label.includes('Total')) {
-                    total = value;
-                  }
-                });
-
-                const result = [''];
-
-                // Show allocation percentages
-                if (total > 0) {
-                  const savingsPercent = ((savings / total) * 100).toFixed(1);
-                  const investmentsPercent = ((investments / total) * 100).toFixed(1);
-
-                  result.push('💼 Portfolio Allocation:');
-                  result.push(`   💰 Savings: ${savingsPercent}%`);
-                  result.push(`   📈 Investments: ${investmentsPercent}%`);
-                }
-
-                // Calculate growth from previous period if available
-                const currentIndex = tooltipItems[0].dataIndex;
-                if (currentIndex > 0 && charts.evolution.data.datasets.length > 0) {
-                  const totalDataset = charts.evolution.data.datasets.find(d => d.label.includes('Total'));
-                  if (totalDataset && totalDataset.data[currentIndex - 1] !== undefined) {
-                    const previousTotal = totalDataset.data[currentIndex - 1] || 0;
-                    const currentTotal = totalDataset.data[currentIndex] || 0;
-
-                    if (previousTotal > 0) {
-                      const growth = ((currentTotal - previousTotal) / previousTotal * 100);
-                      const growthText = growth >= 0 ? `+${growth.toFixed(1)}%` : `${growth.toFixed(1)}%`;
-                      const growthIcon = growth >= 0 ? '📈' : '📉';
-
-                      result.push('');
-                      result.push(`${growthIcon} Growth vs Previous Period: ${growthText}`);
-                      result.push(`   Absolute Change: ${formatCurrency(currentTotal - previousTotal)}`);
-                    }
-                  }
-                }
-
-                return result;
+                return [];
               }
             }
           }
@@ -213,8 +171,8 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         },
         interaction: {
-          intersect: false,
-          mode: 'index'
+          intersect: true,
+          mode: 'point'
         },
         elements: {
           point: {
@@ -248,22 +206,34 @@ document.addEventListener("DOMContentLoaded", () => {
             position: 'bottom',
           },
           tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.95)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            footerColor: '#a0a0a0',
+            borderColor: 'rgba(255, 255, 255, 0.3)',
+            borderWidth: 2,
+            cornerRadius: 12,
+            titleFont: { size: 14, weight: 'bold' },
+            bodyFont: { size: 13 },
+            footerFont: { size: 11 },
+            padding: 12,
             callbacks: {
+              title: function(context) {
+                return '💼 Portfolio Breakdown';
+              },
               label: function(context) {
                 const label = context.label || '';
                 const value = context.parsed;
                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
                 const percentage = ((value / total) * 100).toFixed(1);
-                return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                const icon = label.includes('Savings') ? '💰' : '📈';
+                return `${icon} ${label}: ${formatCurrency(value)} (${percentage}%)`;
+              },
+              afterLabel: function(context) {
+                return [];
               },
               footer: function(tooltipItems) {
-                if (tooltipItems.length === 0) return '';
-
-                const total = tooltipItems[0].dataset.data.reduce((a, b) => a + b, 0);
-                const numItems = tooltipItems[0].dataset.data.length;
-                const average = total / numItems;
-
-                return ['', '--- Current Total ---', `Total Portfolio: ${formatCurrency(total)}`];
+                return [];
               }
             }
           }
@@ -313,8 +283,8 @@ document.addEventListener("DOMContentLoaded", () => {
             text: 'Monthly Financial Flows'
           },
           tooltip: {
-            mode: 'index',
-            intersect: false,
+            mode: 'point',
+            intersect: true,
             backgroundColor: 'rgba(0, 0, 0, 0.9)',
             titleColor: '#fff',
             bodyColor: '#fff',
@@ -324,60 +294,16 @@ document.addEventListener("DOMContentLoaded", () => {
             cornerRadius: 8,
             callbacks: {
               title: function(tooltipItems) {
-                return tooltipItems[0]?.label ? `Month: ${tooltipItems[0].label}` : '';
+                return tooltipItems[0]?.label ? `📅 Financial Flow: ${tooltipItems[0].label}` : '';
               },
               label: function(context) {
-                return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                const value = context.parsed.y || 0;
+                const icon = context.dataset.label.includes('Income') ? '💰' : 
+                           context.dataset.label.includes('Expenses') ? '💸' : '📈';
+                return `${icon} ${context.dataset.label}: ${formatCurrency(Math.abs(value))}`;
               },
               afterBody: function(tooltipItems) {
-                if (tooltipItems.length === 0) return '';
-
-                // Calculate savings rate for this month
-                let monthlyIncome = 0;
-                let monthlyExpenses = 0;
-                let monthlyInvestments = 0;
-
-                tooltipItems.forEach(item => {
-                  const value = item.parsed.y || 0;
-                  if (item.dataset.label.includes('Income')) {
-                    monthlyIncome = value;
-                  } else if (item.dataset.label.includes('Expenses')) {
-                    monthlyExpenses = value;
-                  } else if (item.dataset.label.includes('Investments')) {
-                    monthlyInvestments = value;
-                  }
-                });
-
-                const monthlySavings = monthlyIncome - monthlyExpenses - monthlyInvestments;
-                const savingsRate = monthlyIncome > 0 ? (monthlySavings / monthlyIncome * 100) : 0;
-
-                // Calculate period averages
-                const periodStats = [];
-                tooltipItems.forEach(item => {
-                  const dataset = item.dataset;
-                  const data = dataset.data;
-                  if (data && data.length > 0) {
-                    const validData = data.filter(val => val !== null && val !== undefined && !isNaN(val));
-                    if (validData.length > 0) {
-                      const average = validData.reduce((sum, val) => sum + val, 0) / validData.length;
-                      const total = validData.reduce((sum, val) => sum + val, 0);
-
-                      periodStats.push(`📊 ${dataset.label} (Period):`);
-                      periodStats.push(`   Average: ${formatCurrency(average)}`);
-                      periodStats.push(`   Total: ${formatCurrency(total)}`);
-                      periodStats.push('');
-                    }
-                  }
-                });
-
-                const result = [''];
-                if (monthlyIncome > 0) {
-                  result.push(`💰 Monthly Savings: ${formatCurrency(monthlySavings)}`);
-                  result.push(`📈 Savings Rate: ${savingsRate.toFixed(1)}%`);
-                  result.push('');
-                }
-
-                return [...result, ...periodStats];
+                return [];
               }
             }
           }
@@ -419,6 +345,15 @@ document.addEventListener("DOMContentLoaded", () => {
           backgroundColor: 'rgba(23, 162, 184, 0.1)',
           tension: 0.4,
           fill: false
+        }, {
+          label: 'Annual Average Return (%)',
+          data: [],
+          borderColor: '#28a745',
+          backgroundColor: 'rgba(40, 167, 69, 0.1)',
+          tension: 0.4,
+          fill: false,
+          borderDash: [5, 5],
+          borderWidth: 2
         }]
       },
       options: {
@@ -432,8 +367,8 @@ document.addEventListener("DOMContentLoaded", () => {
             text: 'Investment Returns Over Time'
           },
           tooltip: {
-            mode: 'index',
-            intersect: false,
+            mode: 'point',
+            intersect: true,
             backgroundColor: 'rgba(0, 0, 0, 0.9)',
             titleColor: '#fff',
             bodyColor: '#fff',
@@ -443,36 +378,28 @@ document.addEventListener("DOMContentLoaded", () => {
             cornerRadius: 8,
             callbacks: {
               title: function(tooltipItems) {
-                return tooltipItems[0]?.label ? `Period: ${tooltipItems[0].label}` : '';
+                return tooltipItems[0]?.label ? `📅 ${tooltipItems[0].label}` : '';
               },
               label: function(context) {
-                return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                // Show Portfolio Return, Cumulative Return, Annual Average Return, and Compound Annual Return
+                if (!context.dataset.label.includes('Portfolio Return') && 
+                    !context.dataset.label.includes('Cumulative Return') &&
+                    !context.dataset.label.includes('Annual Average Return') &&
+                    !context.dataset.label.includes('Compound Annual Return')) {
+                  return null; // Hide other datasets if any
+                }
+                
+                const value = context.parsed.y;
+                if (value === null || value === undefined || isNaN(value)) {
+                  return `${context.dataset.label}: N/A`;
+                }
+                
+                // Format as percentage with 2 decimal places
+                const percentageValue = `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+                return `${context.dataset.label}: ${percentageValue}`;
               },
               afterBody: function(tooltipItems) {
-                if (tooltipItems.length === 0) return '';
-
-                // Calculate averages for the selected period
-                const periodAverages = [];
-                tooltipItems.forEach(item => {
-                  const dataset = item.dataset;
-                  const data = dataset.data;
-                  if (data && data.length > 0) {
-                    const validData = data.filter(val => val !== null && val !== undefined && !isNaN(val));
-                    if (validData.length > 0) {
-                      const average = validData.reduce((sum, val) => sum + val, 0) / validData.length;
-                      const maxValue = Math.max(...validData);
-                      const minValue = Math.min(...validData);
-
-                      periodAverages.push('');
-                      periodAverages.push(`📊 ${dataset.label} Statistics:`);
-                      periodAverages.push(`   Average: ${formatCurrency(average)}`);
-                      periodAverages.push(`   Maximum: ${formatCurrency(maxValue)}`);
-                      periodAverages.push(`   Minimum: ${formatCurrency(minValue)}`);
-                    }
-                  }
-                });
-
-                return periodAverages;
+                return [];
               }
             }
           }
@@ -481,8 +408,15 @@ document.addEventListener("DOMContentLoaded", () => {
           y: {
             ticks: {
               callback: function(value) {
-                return value + '%';
+                if (value === null || value === undefined || isNaN(value)) {
+                  return '0%';
+                }
+                return value.toFixed(1) + '%';
               }
+            },
+            title: {
+              display: true,
+              text: 'Return (%)'
             }
           }
         }
@@ -502,7 +436,7 @@ document.addEventListener("DOMContentLoaded", () => {
         datasets: [{
           data: [],
           backgroundColor: [
-            '#dc3545', '#fd7e14', '#ffc107', '#28a745', 
+            '#dc3545', '#fd7e14', '#ffc107', '#28a745',
             '#20c997', '#17a2b8', '#6f42c1', '#e83e8c'
           ],
           borderWidth: 2,
@@ -531,35 +465,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return `${context.label}: ${formatCurrency(value)} (${percentage}%)`;
               },
               footer: function(tooltipItems) {
-                if (tooltipItems.length === 0) return '';
-
-                const categoryName = tooltipItems[0].label;
-                const categoryTotal = tooltipItems[0].parsed;
-
-                // Get the current period range from slider
-                const [start, end] = periodSlider.noUiSlider.get();
-                const iStart = allPeriods.indexOf(start);
-                const iEnd = allPeriods.indexOf(end);
-                const numPeriods = iEnd - iStart + 1;
-
-                // Calculate detailed statistics for this category
-                const monthlyAverage = categoryTotal / numPeriods;
-                const dailyAverage = categoryTotal / (numPeriods * 30); // Approximate daily average
-
-                // Calculate percentage of total spending
-                const totalSpending = tooltipItems[0].dataset.data.reduce((a, b) => a + b, 0);
-                const percentage = ((categoryTotal / totalSpending) * 100).toFixed(1);
-
-                return [
-                  '',
-                  `--- ${categoryName} Details ---`,
-                  `Selected Period: ${start} to ${end}`,
-                  `Total Amount: ${formatCurrency(categoryTotal)}`,
-                  `Monthly Average: ${formatCurrency(monthlyAverage)}`,
-                  `Daily Average: ${formatCurrency(dailyAverage)}`,
-                  `% of Total Spending: ${percentage}%`,
-                  `Number of Periods: ${numPeriods} months`
-                ];
+                return [];
               }
             }
           }
@@ -579,9 +485,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const KPI_CACHE_DURATION = 60000; // 1 minute for KPIs
 
   const loadAccountBalances = async (useCache = true) => {
+    console.log('📊 [loadAccountBalances] Starting load, useCache:', useCache);
+
     // Check cache first - extended cache duration
     if (useCache && balanceCache && (Date.now() - balanceCacheTime) < CACHE_DURATION) {
-      console.log('🚀 Using cached balance data');
+      console.log('🚀 [loadAccountBalances] Using cached balance data');
 
       // Quick setup from cache without re-processing
       columns = balanceCache.columns || [];
@@ -594,11 +502,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
       fullPeriods = allPeriods;
 
+      console.log('📋 [loadAccountBalances] Cache data restored:', {
+        periods: allPeriods.length,
+        years: allYears.length,
+        rows: rows.length
+      });
+
       return balanceCache;
     }
 
     if (isLoadingBalances) {
-      console.log('🔄 Balance loading already in progress, waiting...');
+      console.log('🔄 [loadAccountBalances] Already loading, waiting...');
       // Wait for existing request instead of creating mock data
       return new Promise((resolve) => {
         const checkInterval = setInterval(() => {
@@ -613,21 +527,50 @@ document.addEventListener("DOMContentLoaded", () => {
     isLoadingBalances = true;
 
     try {
+      console.log('🌐 [loadAccountBalances] Fetching from API...');
       const response = await fetch('/account-balances/json/');
+
       if (!response.ok) {
-        console.warn('⚠️ Account balances endpoint not available, using mock data');
-        return generateMockBalanceData();
+        console.warn('⚠️ [loadAccountBalances] API response not OK:', response.status);
+        const mockData = generateMockBalanceData();
+        await initializeSlidersWithData(mockData);
+        return mockData;
       }
 
       const data = await response.json();
-      console.log('🔍 Dados de saldos carregados da API');
+      console.log('✅ [loadAccountBalances] API data received:', {
+        hasColumns: !!data.columns,
+        hasRows: !!data.rows,
+        columnsLength: data.columns?.length || 0,
+        rowsLength: data.rows?.length || 0
+      });
 
       // Pre-process and cache the data
       columns = data.columns || [];
       rows = data.rows || [];
 
+      if (columns.length === 0 || rows.length === 0) {
+        console.warn('⚠️ [loadAccountBalances] Empty data received, using mock data');
+        const mockData = generateMockBalanceData();
+        await initializeSlidersWithData(mockData);
+        return mockData;
+      }
+
+      // Pre-process and cache the data
+      columns = data.columns || [];
+      rows = data.rows || [];
+
+      if (columns.length === 0 || rows.length === 0) {
+        console.warn('⚠️ [loadAccountBalances] Empty data received, using mock data');
+        const mockData = generateMockBalanceData();
+        await initializeSlidersWithData(mockData);
+        return mockData;
+      }
+
       // Optimized number conversion - do it once and cache
       const periods = columns.slice(2);
+      console.log('📅 [loadAccountBalances] Processing periods:', periods);
+
       rows.forEach(row => {
         periods.forEach(period => {
           if (row[period] !== null && row[period] !== undefined) {
@@ -646,6 +589,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       fullPeriods = allPeriods;
 
+      console.log('📊 [loadAccountBalances] Data processed:', {
+        allPeriods: allPeriods.length,
+        allYears: allYears.length,
+        yearRange: selectedYearRange
+      });
+
       // Cache the processed data
       balanceCache = {
         ...data,
@@ -657,18 +606,8 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       balanceCacheTime = Date.now();
 
-      // Only initialize sliders once
-      if (!yearSlider.noUiSlider) {
-        if (allYears.length > 0) {
-          initYearSlider(allYears);
-          initPeriodSlider(fullPeriods, true, 12);
-          updateYearRangeDisplay();
-        } else {
-          const currentYear = new Date().getFullYear();
-          initYearSlider([currentYear]);
-          initPeriodSlider([`Jan/${currentYear.toString().slice(-2)}`], true, 12);
-        }
-      }
+      // Initialize sliders with data
+      await initializeSlidersWithData(balanceCache);
 
       // Update last update timestamp
       const lastUpdateEl = document.getElementById('last-update');
@@ -676,12 +615,74 @@ document.addEventListener("DOMContentLoaded", () => {
         lastUpdateEl.textContent = new Date().toLocaleString('en-GB');
       }
 
+      console.log('✅ [loadAccountBalances] Complete success');
       return balanceCache;
+
     } catch (error) {
-      console.error('❌ Erro ao carregar saldos:', error);
-      return generateMockBalanceData();
+      console.error('❌ [loadAccountBalances] Error loading balances:', error);
+      const mockData = generateMockBalanceData();
+      await initializeSlidersWithData(mockData);
+      return mockData;
     } finally {
       isLoadingBalances = false;
+    }
+  };
+
+  // Helper function to ensure sliders are always initialized
+  const initializeSlidersWithData = async (data) => {
+    console.log('🎛️ [initializeSlidersWithData] Initializing sliders...');
+
+    try {
+      // Only initialize sliders once
+      if (!yearSlider?.noUiSlider) {
+        if (allYears && allYears.length > 0) {
+          console.log('📅 [initializeSlidersWithData] Initializing year slider with years:', allYears);
+          initYearSlider(allYears);
+          console.log('📅 [initializeSlidersWithData] Initializing period slider with periods:', fullPeriods?.length || 0);
+          initPeriodSlider(fullPeriods || [], true, 12);
+          updateYearRangeDisplay();
+        } else {
+          console.warn('⚠️ [initializeSlidersWithData] No years available, using current year');
+          const currentYear = new Date().getFullYear();
+          initYearSlider([currentYear, currentYear]); // Ensure at least 2 values
+          const currentMonth = new Date().getMonth();
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const currentPeriod = `${monthNames[currentMonth]}/${currentYear.toString().slice(-2)}`;
+          initPeriodSlider([currentPeriod], true, 1);
+        }
+      } else {
+        console.log('ℹ️ [initializeSlidersWithData] Sliders already initialized');
+      }
+    } catch (error) {
+      console.error('❌ [initializeSlidersWithData] Error initializing sliders:', error);
+
+      // Show error message to user with recovery option
+      const yearSliderContainer = yearSlider?.parentElement;
+      const periodSliderContainer = periodSlider?.parentElement;
+
+      if (yearSliderContainer) {
+        yearSliderContainer.innerHTML = `
+          <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            Year slider initialization failed.
+            <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()">
+              Refresh Page
+            </button>
+          </div>
+        `;
+      }
+
+      if (periodSliderContainer) {
+        periodSliderContainer.innerHTML = `
+          <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            Period slider initialization failed.
+            <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()">
+              Refresh Page
+            </button>
+          </div>
+        `;
+      }
     }
   };
 
@@ -740,7 +741,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Don't reload same parameters within 2 seconds (reduced from 5)
     if (currentParams === lastKPIParams && (Date.now() - lastKPITime) < 2000) {
-      console.log('🔄 Ignorando chamada duplicada recente de KPIs:', currentParams);
+      console.log('🔄 Ignorando chamada duplicada de KPIs:', currentParams);
       return cachedKPI?.data || {};
     }
 
@@ -837,7 +838,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const prevPatrimonio = prevSavings + prevInvestments;
 
       // Calculate approximate growth
-      const wealthGrowth = prevPatrimonio > 0 ? 
+      const wealthGrowth = prevPatrimonio > 0 ?
         ((totalPatrimonio - prevPatrimonio) / prevPatrimonio * 100) : 0;
 
       // Estimate monthly flows from balance changes
@@ -970,7 +971,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
 
-    const avgReturn = data.length > 0 ? 
+    const avgReturn = data.length > 0 ?
       data.reduce((sum, d) => sum + d.portfolio_return, 0) / data.length : 0;
 
     return {
@@ -1006,6 +1007,13 @@ document.addEventListener("DOMContentLoaded", () => {
         element.textContent = value;
         element.style.opacity = '1'; // Remove loading state
 
+        // Enhanced tooltips for KPI cards
+        const tooltipContent = generateKPITooltip(id, value, data);
+        element.setAttribute('data-bs-toggle', 'tooltip');
+        element.setAttribute('data-bs-placement', 'top');
+        element.setAttribute('data-bs-html', 'true');
+        element.setAttribute('title', tooltipContent);
+
         // Add animation only if element is visible
         if (element.offsetParent !== null) {
           element.style.transform = 'scale(1.05)';
@@ -1019,11 +1027,84 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+    // Reinitialize tooltips for updated elements
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(el => {
+      // Dispose existing tooltip if any
+      const existingTooltip = bootstrap.Tooltip.getInstance(el);
+      if (existingTooltip) {
+        existingTooltip.dispose();
+      }
+      // Create new tooltip
+      new bootstrap.Tooltip(el);
+    });
+
     // Update progress bars and trends with error handling
     try {
       updateProgressBarsAndTrends(data);
     } catch (error) {
       console.warn('⚠️ Error updating progress bars:', error);
+    }
+  };
+
+  // Helper function to generate enhanced KPI tooltips
+  const generateKPITooltip = (id, value, data) => {
+    const receita = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
+    const despesa = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
+    const investido = parseFloat((data.valor_investido_total || '0').replace(/[^\d.-]/g, '')) || 0;
+    const patrimonio = parseFloat((data.patrimonio_total || '0').replace(/[^\d.-]/g, '')) || 0;
+
+    switch(id) {
+      case 'receita-media':
+        return `
+          <div class="text-start">
+            <strong>💰 Average Income</strong><br>
+            Current: <span class="text-success">${value}</span><br>
+            <small>📊 Monthly average across selected period</small><br>
+            <small>💡 Tip: Higher income enables better investment opportunities</small>
+          </div>
+        `;
+      case 'despesa-estimada':
+        const expenseRatio = receita > 0 ? (despesa / receita * 100).toFixed(1) : 0;
+        return `
+          <div class="text-start">
+            <strong>💸 Average Expenses</strong><br>
+            Current: <span class="text-danger">${value}</span><br>
+            <small>📊 ${expenseRatio}% of income</small><br>
+            <small>💡 ${expenseRatio < 70 ? 'Excellent expense control!' : 'Consider reducing expenses'}</small>
+          </div>
+        `;
+      case 'taxa-poupanca':
+        const rate = parseFloat(value.replace('%', ''));
+        return `
+          <div class="text-start">
+            <strong>📈 Savings Rate</strong><br>
+            Current: <span class="${rate >= 20 ? 'text-success' : rate >= 10 ? 'text-warning' : 'text-danger'}">${value}</span><br>
+            <small>🎯 Target: 20% or higher</small><br>
+            <small>💡 ${rate >= 20 ? 'Outstanding!' : rate >= 10 ? 'Good progress' : 'Room for improvement'}</small>
+          </div>
+        `;
+      case 'valor-investido':
+        const investmentRatio = patrimonio > 0 ? (investido / patrimonio * 100).toFixed(1) : 0;
+        return `
+          <div class="text-start">
+            <strong>📈 Total Invested</strong><br>
+            Amount: <span class="text-primary">${value}</span><br>
+            <small>📊 ${investmentRatio}% of net worth</small><br>
+            <small>💡 ${investmentRatio > 60 ? 'High growth focus' : investmentRatio > 30 ? 'Balanced approach' : 'Conservative strategy'}</small>
+          </div>
+        `;
+      case 'patrimonio-total':
+        return `
+          <div class="text-start">
+            <strong>💎 Total Net Worth</strong><br>
+            Current: <span class="text-success fw-bold">${value}</span><br>
+            <small>📊 All accounts combined</small><br>
+            <small>💡 Your complete financial position</small>
+          </div>
+        `;
+      default:
+        return `<strong>${value}</strong><br><small>Financial metric</small>`;
     }
   };
 
@@ -1075,20 +1156,22 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const updateCharts = async () => {
-    if (!charts.evolution || !periodSlider) return;
+    if (!charts.evolution || !periodSlider || !periodSlider.noUiSlider) return;
 
     // Use requestAnimationFrame for smoother updates
     return new Promise((resolve) => {
-      requestAnimationFrame(async () => {        try {
+      requestAnimationFrame(async () => {
+        try {
           const [start, end] = periodSlider.noUiSlider.get();
           const iStart = allPeriods.indexOf(start);
           const iEnd = allPeriods.indexOf(end);
           const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
 
           // Get filter settings
-          const includeSavings = true;
-          const includeInvestments = true;
-          const includeCurrent = true;
+          const includeSavings = document.getElementById('include-savings')?.checked ?? true;
+          const includeInvestments = document.getElementById('include-investments')?.checked ?? true;
+          const includeCurrent = document.getElementById('include-current')?.checked ?? true;
+
 
           // Pre-calculate all data in one pass for better performance
           const chartData = visiblePeriods.map(period => {
@@ -1096,7 +1179,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let investments = 0;
 
             rows.forEach(row => {
-              const value = row[period] || 0;
+              const value = parseFloat(row[period]) || 0;
               const rowType = (row.type || '').toLowerCase();
 
               if (rowType.includes('savings') && includeSavings) {
@@ -1147,7 +1230,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             datasets.push({
-              label: 'Total Net Worth',  
+              label: 'Total Net Worth',
               data: totalData,
               borderColor: '#6f42c1',
               backgroundColor: 'rgba(111, 66, 193, 0.1)',
@@ -1163,7 +1246,7 @@ document.addEventListener("DOMContentLoaded", () => {
           } else if (currentChartType === 'flows') {
             await updateFlowsChart(analysisData);
           } else if (currentChartType === 'returns') {
-            updateReturnsChart();
+            await updateReturnsChart();
           } else if (currentChartType === 'expenses') {
             updateExpensesChart();
           }
@@ -1203,7 +1286,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!charts.flows) return;
 
     try {
-      // Get the current period range from slider
+      // Get the current period range from slider with safety check
+      if (!periodSlider || !periodSlider.noUiSlider || !allPeriods || allPeriods.length === 0) {
+        console.warn('⚠️ [updateFlowsChart] Period slider or periods not available');
+        return;
+      }
+
       const [start, end] = periodSlider.noUiSlider.get();
       const iStart = allPeriods.indexOf(start);
       const iEnd = allPeriods.indexOf(end);
@@ -1243,7 +1331,7 @@ document.addEventListener("DOMContentLoaded", () => {
           return {
             period,
             income: Math.abs(data.income || 0),  // Ensure positive
-            expenses: Math.abs(data.expenses || 0),  // Ensure positive  
+            expenses: Math.abs(data.expenses || 0),  // Ensure positive
             investments: data.investments || 0,  // Keep original sign for investments
             balance: data.balance || 0
           };
@@ -1353,6 +1441,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Comprehensive fallback method when API calls fail
   const updateFlowsChartFallback = async () => {
+    if (!periodSlider || !periodSlider.noUiSlider || !allPeriods || allPeriods.length === 0) {
+      console.warn('⚠️ [updateFlowsChartFallback] Period slider or periods not available');
+      return;
+    }
+
     const [start, end] = periodSlider.noUiSlider.get();
     const iStart = allPeriods.indexOf(start);
     const iEnd = allPeriods.indexOf(end);
@@ -1397,8 +1490,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return months[monthName] || 1;
   };
 
-  const updateReturnsChart = () => {
-    if (!charts.returns || !periodSlider) return;
+  const updateReturnsChart = async () => {
+    if (!charts.returns || !periodSlider || !periodSlider.noUiSlider) return;
 
     const [start, end] = periodSlider.noUiSlider.get();
     const iStart = allPeriods.indexOf(start);
@@ -1407,12 +1500,61 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const monthlyReturns = [];
     const cumulativeReturns = [];
+    const annualAverageReturns = [];
+    const compoundAnnualReturns = [];
     let cumulativeReturn = 0;
+
+    // Get investment flows for each period to calculate correct returns
+    const investmentFlows = {};
+
+    try {
+      // Fetch investment flows for all periods
+      const flowPromises = visiblePeriods.map(async (period) => {
+        const [month, year] = period.split('/');
+        const fullYear = 2000 + parseInt(year);
+        const monthNum = getMonthNumber(month);
+        const monthInt = getMonthNumberInt(month);
+        const lastDay = new Date(fullYear, monthInt, 0).getDate();
+
+        try {
+          const response = await fetch('/transactions/totals-v2/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+              date_start: `${fullYear}-${monthNum}-01`,
+              date_end: `${fullYear}-${monthNum}-${lastDay}`,
+              include_system: false
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            investmentFlows[period] = data.investments || 0;
+          } else {
+            investmentFlows[period] = 0;
+          }
+        } catch (error) {
+          console.warn(`⚠️ Failed to get investment flow for ${period}:`, error);
+          investmentFlows[period] = 0;
+        }
+      });
+
+      await Promise.all(flowPromises);
+    } catch (error) {
+      console.warn('⚠️ Failed to load investment flows, using fallback calculation');
+    }
+
+    // Calculate compound returns
+    let compoundFactor = 1.0; // Start with 1 for compound calculation
 
     visiblePeriods.forEach((period, index) => {
       let currentValue = 0;
       let previousValue = 0;
 
+      // Get current period investment value
       rows.forEach(row => {
         const value = parseFloat(row[period]) || 0;
         const rowType = (row.type || '').toLowerCase();
@@ -1423,6 +1565,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (index > 0) {
         const prevPeriod = visiblePeriods[index - 1];
+
+        // Get previous period investment value
         rows.forEach(row => {
           const value = parseFloat(row[prevPeriod]) || 0;
           const rowType = (row.type || '').toLowerCase();
@@ -1431,24 +1575,93 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
 
-        const monthlyReturn = previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : 0;
+        // Get investment flow for current period
+        const periodInvestmentFlow = investmentFlows[period] || 0;
+
+        // Correct formula: ((valor_atual - (valor_anterior + investimentos_do_periodo)) / (valor_anterior + investimentos_do_periodo)) * 100
+        const adjustedPreviousValue = previousValue + periodInvestmentFlow;
+        const monthlyReturn = adjustedPreviousValue > 0 ? 
+          ((currentValue - adjustedPreviousValue) / adjustedPreviousValue) * 100 : 0;
+
         monthlyReturns.push(monthlyReturn);
         cumulativeReturn += monthlyReturn;
         cumulativeReturns.push(cumulativeReturn);
+
+        // Calculate compound factor
+        const monthlyReturnDecimal = monthlyReturn / 100;
+        compoundFactor *= (1 + monthlyReturnDecimal);
+
+        // Calculate compound annual return for the filtered period
+        const monthsFromStart = index;
+        const yearsFromStart = monthsFromStart / 12;
+
+        if (yearsFromStart > 0 && compoundFactor > 0) {
+          // CAGR formula: (End Value / Start Value)^(1/years) - 1
+          const compoundAnnualReturn = (Math.pow(compoundFactor, 1/yearsFromStart) - 1) * 100;
+          compoundAnnualReturns.push(compoundAnnualReturn);
+        } else {
+          compoundAnnualReturns.push(0);
+        }
+
+        console.log(`📊 [updateReturnsChart] ${period}: Current=${currentValue.toFixed(2)}, Previous=${previousValue.toFixed(2)}, Flow=${periodInvestmentFlow.toFixed(2)}, Return=${monthlyReturn.toFixed(2)}%, Compound=${compoundAnnualReturns[compoundAnnualReturns.length-1]?.toFixed(2)}%`);
+
+        // Calculate rolling annual average (last 12 months)
+        const startIdx = Math.max(0, index - 11);
+        const recentReturns = monthlyReturns.slice(startIdx);
+        const avgMonthlyReturn = recentReturns.reduce((sum, ret) => sum + ret, 0) / recentReturns.length;
+        const annualAverage = avgMonthlyReturn * 12;
+        annualAverageReturns.push(annualAverage);
       } else {
         monthlyReturns.push(0);
         cumulativeReturns.push(0);
+        annualAverageReturns.push(0);
+        compoundAnnualReturns.push(0);
       }
     });
 
+    // Update chart datasets
     charts.returns.data.labels = visiblePeriods;
     charts.returns.data.datasets[0].data = monthlyReturns;
     charts.returns.data.datasets[1].data = cumulativeReturns;
+    charts.returns.data.datasets[2].data = annualAverageReturns;
+
+    // Add or update compound annual return dataset
+    if (charts.returns.data.datasets.length < 4) {
+      charts.returns.data.datasets.push({
+        label: 'Compound Annual Return (%)',
+        data: compoundAnnualReturns,
+        borderColor: '#ff6384',
+        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+        tension: 0.4,
+        fill: false,
+        borderDash: [10, 5],
+        borderWidth: 3
+      });
+    } else {
+      charts.returns.data.datasets[3].data = compoundAnnualReturns;
+    }
+
     charts.returns.update('none');
+
+    // Calculate and display overall compound annual return for the filtered period
+    const totalMonths = visiblePeriods.length - 1; // Exclude first period (no return)
+    const totalYears = totalMonths / 12;
+
+    if (totalYears > 0 && compoundFactor > 0) {
+      const overallCAGR = (Math.pow(compoundFactor, 1/totalYears) - 1) * 100;
+      console.log(`🎯 [updateReturnsChart] Overall Compound Annual Return for filtered period: ${overallCAGR.toFixed(2)}%`);
+
+      // Update chart title to include CAGR
+      charts.returns.options.plugins.title.text = `Investment Returns - CAGR: ${overallCAGR.toFixed(2)}%`;
+    } else {
+      charts.returns.options.plugins.title.text = 'Investment Returns Over Time';
+    }
+
+    console.log('✅ [updateReturnsChart] Returns calculated with compound annual return');
   };
 
   const updateExpensesChart = async () => {
-    if (!charts.expenses || !periodSlider) return;
+    if (!charts.expenses || !periodSlider || !periodSlider.noUiSlider) return;
 
     try {
       // Get current period range from slider
@@ -1650,24 +1863,40 @@ document.addEventListener("DOMContentLoaded", () => {
   // Enhanced slider initialization functions with better UX
   const initYearSlider = (years) => {
     if (yearSlider && yearSlider.noUiSlider) yearSlider.noUiSlider.destroy();
-    if (!yearSlider) return;
+    if (!yearSlider || !years || years.length === 0) return;
+
+    // Ensure we have at least two different years for the slider range
+    let minYear, maxYear;
+    if (years.length === 1) {
+      minYear = years[0];
+      maxYear = years[0];
+    } else {
+      minYear = Math.min(...years);
+      maxYear = Math.max(...years);
+    }
+
+    // For pips configuration, we need at least 2 values for 'count' mode
+    const pipsConfig = years.length > 1 && maxYear > minYear ? {
+      mode: 'count',
+      values: Math.min(5, years.length),
+      density: 4,
+      stepped: true
+    } : {
+      mode: 'steps',
+      density: 10
+    };
 
     noUiSlider.create(yearSlider, {
-      start: [years[0], years[years.length - 1]],
+      start: [minYear, maxYear],
       connect: true,
       step: 1,
-      range: { min: years[0], max: years[years.length - 1] },
+      range: { min: minYear, max: maxYear },
       format: {
         to: value => Math.round(value),
         from: value => parseInt(value),
       },
       tooltips: [true, true],
-      pips: {
-        mode: 'count',
-        values: Math.min(5, years.length),
-        density: 4,
-        stepped: true
-      }
+      pips: pipsConfig
     });
 
     const [s, e] = yearSlider.noUiSlider.get();
@@ -1714,67 +1943,243 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const initPeriodSlider = (periods, preselectLast = true, numMonths = 12) => {
-    if (!periodSlider) return;
-    if (periodSlider.noUiSlider) periodSlider.noUiSlider.destroy();
+    if (!periodSlider) {
+      console.error('❌ [initPeriodSlider] Period slider element not found');
+      return;
+    }
+
+    console.log('🔧 [initPeriodSlider] Initializing with periods:', periods.length);
+
+    // Always destroy existing slider first
+    if (periodSlider.noUiSlider) {
+      console.log('🗑️ [initPeriodSlider] Destroying existing slider');
+      periodSlider.noUiSlider.destroy();
+    }
+
+    // Create fallback periods if none exist
+    if (!periods || periods.length === 0) {
+      console.warn('⚠️ [initPeriodSlider] No periods available, creating fallback');
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear().toString().slice(-2);
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const currentMonth = monthNames[currentDate.getMonth()];
+      periods = [`${currentMonth}/${currentYear}`];
+    }
 
     let startIdx = 0;
-    let endIdx = periods.length - 1;
+    let endIdx = Math.max(0, periods.length - 1);
     if (preselectLast && periods.length > numMonths) {
       endIdx = periods.length - 1;
       startIdx = Math.max(0, endIdx - (numMonths - 1));
     }
 
-    noUiSlider.create(periodSlider, {
-      start: [startIdx, endIdx],
-      connect: true,
-      step: 1,
-      range: { min: 0, max: Math.max(0, periods.length - 1) },
-      format: {
-        to: value => periods[Math.round(value)] || '',
-        from: val => periods.indexOf(val),
-      },
-      tooltips: [true, true],
-      pips: {
-        mode: 'steps',
-        density: Math.max(2, Math.floor(100 / periods.length)),
-        filter: (value) => {
-          // Show every 3rd tick for better readability
-          return value % 3 === 0 ? 1 : 0;
-        },
+    try {
+      console.log('🎛️ [initPeriodSlider] Creating noUiSlider with range:', {
+        min: 0,
+        max: Math.max(0, periods.length - 1),
+        start: [startIdx, endIdx],
+        periodsLength: periods.length
+      });
+
+      noUiSlider.create(periodSlider, {
+        start: [startIdx, endIdx],
+        connect: true,
+        step: 1,
+        range: { min: 0, max: Math.max(0, periods.length - 1) },
         format: {
-          to: (value) => {
-            const period = periods[Math.round(value)];
-            return period ? period.split('/')[0] : '';
+          to: value => periods[Math.round(value)] || '',
+          from: val => periods.indexOf(val),
+        },
+        tooltips: [true, true],
+        pips: {
+          mode: 'steps',
+          density: Math.max(2, Math.floor(100 / Math.max(1, periods.length))),
+          filter: (value) => {
+            // Show every 3rd tick for better readability, but ensure we show at least first and last
+            if (periods.length <= 3) return 1; // Show all for small datasets
+            return value % 3 === 0 ? 1 : 0;
+          },
+          format: {
+            to: (value) => {
+              const period = periods[Math.round(value)];
+              return period ? period.split('/')[0] : '';
+            }
           }
         }
+      });
+
+      console.log('✅ [initPeriodSlider] noUiSlider created successfully');
+
+      // Create period count elements immediately after slider creation
+      const startPeriod = periods[startIdx] || periods[0];
+      const endPeriod = periods[endIdx] || periods[periods.length - 1];
+
+      // Remove any existing period info elements first
+      const existingInfos = document.querySelectorAll('.period-info');
+      existingInfos.forEach(info => info.remove());
+
+      // Create period info element immediately
+      const periodInfo = document.createElement('div');
+      periodInfo.className = 'period-info mt-2 text-center';
+      periodInfo.innerHTML = `
+        <small class="text-muted">
+          📅 Selected: <span id="period-count" class="fw-bold">0</span> periods 
+          <span class="ms-2">📊 From <span id="period-start" class="text-primary">${startPeriod}</span> to <span id="period-end" class="text-primary">${endPeriod}</span></span>
+        </small>
+      `;
+
+      // Insert after the period slider
+      periodSlider.insertAdjacentElement('afterend', periodInfo);
+      console.log('✅ [initPeriodSlider] Period count elements created immediately');
+
+      // Set initial values
+      if (periods.length > 0) {
+        console.log('🎯 [initPeriodSlider] Setting initial values:', [startPeriod, endPeriod]);
+        periodSlider.noUiSlider.set([startPeriod, endPeriod]);
+
+        // Update count immediately with initial values
+        const count = Math.max(1, endIdx - startIdx + 1);
+        const countElement = document.getElementById('period-count');
+        if (countElement) {
+          countElement.textContent = count;
+          console.log('📊 [initPeriodSlider] Initial period count set:', count);
+        }
       }
-    });
 
-    if (periods.length > 0) {
-      periodSlider.noUiSlider.set([periods[startIdx] || '', periods[endIdx] || '']);
+      // Bind events
+      periodSlider.noUiSlider.on("update", (values) => {
+        updatePeriodCount(values[0], values[1]);
+      });
+
+      periodSlider.noUiSlider.on("set", updateDashboard);
+      periodSlider.noUiSlider.on("change", updateDashboard);
+
+      console.log('🔗 [initPeriodSlider] Event listeners attached');
+
+      // Add enhanced period navigation controls
+      initPeriodNavigationControls(periods);
+
+      console.log('✅ [initPeriodSlider] Period slider fully initialized');
+
+      // Initial render
+      updateDashboard();
+
+    } catch (error) {
+      console.error('❌ [initPeriodSlider] Error creating slider:', error);
+
+      // Show error message to user
+      periodSlider.innerHTML = `
+        <div class="alert alert-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          Period slider could not be initialized.
+          <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()">
+            Refresh Page
+          </button>
+        </div>
+      `;
     }
-
-    periodSlider.noUiSlider.on("update", (values) => {
-      updatePeriodCount(values[0], values[1]);
-    });
-
-    periodSlider.noUiSlider.on("set", updateDashboard);
-    periodSlider.noUiSlider.on("change", updateDashboard);
-
-    // Add enhanced period navigation controls
-    initPeriodNavigationControls(periods);
-
-    updateDashboard(); // Initial render
   };
 
   const updatePeriodCount = (start, end) => {
-    const startIdx = allPeriods.indexOf(start);
-    const endIdx = allPeriods.indexOf(end);
-    const count = endIdx - startIdx + 1;
-    const countElement = document.getElementById('period-count');
-    if (countElement) {
-      countElement.textContent = count;
-      countElement.parentElement.className = count > 18 ? 'text-warning' : count > 12 ? 'text-info' : 'text-success';
+    try {
+      if (!allPeriods || allPeriods.length === 0) {
+        console.warn('⚠️ [updatePeriodCount] No periods available');
+        return;
+      }
+
+      const startIdx = allPeriods.indexOf(start);
+      const endIdx = allPeriods.indexOf(end);
+
+      if (startIdx === -1 || endIdx === -1) {
+        console.warn('⚠️ [updatePeriodCount] Invalid period indices:', { start, end, startIdx, endIdx });
+        return;
+      }
+
+      const count = Math.max(1, endIdx - startIdx + 1);
+
+      // Get the period slider element first
+      const periodSliderElement = document.getElementById('period-range');
+      if (!periodSliderElement) {
+        console.warn('⚠️ [updatePeriodCount] Period slider element not found');
+        return;
+      }
+
+      // Try to find existing elements
+      let countElement = document.getElementById('period-count');
+      let periodStartElement = document.getElementById('period-start');
+      let periodEndElement = document.getElementById('period-end');
+
+      // Always ensure we have the elements - create if missing
+      if (!countElement || !periodStartElement || !periodEndElement) {
+        console.log('🔧 [updatePeriodCount] Creating/recreating period count elements');
+
+        // Remove any existing period info elements
+        const existingInfos = document.querySelectorAll('.period-info');
+        existingInfos.forEach(info => info.remove());
+
+        // Create new period info element
+        const periodInfo = document.createElement('div');
+        periodInfo.className = 'period-info mt-2 text-center';
+        periodInfo.innerHTML = `
+          <small class="text-muted">
+            📅 Selected: <span id="period-count" class="fw-bold">${count}</span> periods 
+            <span class="ms-2">📊 From <span id="period-start" class="text-primary">${start}</span> to <span id="period-end" class="text-primary">${end}</span></span>
+          </small>
+        `;
+
+        // Insert after the period slider
+        periodSliderElement.insertAdjacentElement('afterend', periodInfo);
+
+        console.log('✅ [updatePeriodCount] Created period count elements');
+      } else {
+        // Update existing elements
+        if (countElement) countElement.textContent = count;
+        if (periodStartElement) periodStartElement.textContent = start;
+        if (periodEndElement) periodEndElement.textContent = end;
+        console.log('📊 [updatePeriodCount] Updated existing elements');
+      }
+
+      // Update styling based on period count - get fresh reference
+      const finalCountElement = document.getElementById('period-count');
+      if (finalCountElement) {
+        const parentElement = finalCountElement.closest('.period-info');
+        if (parentElement) {
+          // Reset classes first
+          parentElement.className = 'period-info mt-2 text-center';
+
+          if (count > 18) {
+            parentElement.classList.add('text-warning');
+            finalCountElement.title = 'Long period - may affect performance';
+          } else if (count > 12) {
+            parentElement.classList.add('text-info');
+            finalCountElement.title = 'Extended period analysis';
+          } else {
+            parentElement.classList.add('text-success');
+            finalCountElement.title = 'Optimal period range';
+          }
+        }
+      }
+
+      console.log('📊 [updatePeriodCount] Updated count:', count, `(${start} to ${end})`);
+    } catch (error) {
+      console.error('❌ [updatePeriodCount] Error:', error);
+      // Fallback: try to create basic elements
+      try {
+        const periodSliderElement = document.getElementById('period-range');
+        if (periodSliderElement && !document.getElementById('period-count')) {
+          const fallbackInfo = document.createElement('div');
+          fallbackInfo.className = 'period-info mt-2 text-center';
+          fallbackInfo.innerHTML = `
+            <small class="text-muted">
+              📅 Period range selected
+            </small>
+          `;
+          periodSliderElement.insertAdjacentElement('afterend', fallbackInfo);
+          console.log('🔧 [updatePeriodCount] Created fallback period info');
+        }
+      } catch (fallbackError) {
+        console.error('❌ [updatePeriodCount] Fallback also failed:', fallbackError);
+      }
     }
   };
 
@@ -1881,7 +2286,7 @@ document.addEventListener("DOMContentLoaded", () => {
             td.textContent = val || "–";
             td.className = "fw-bold";
           } else {
-            td.textContent = typeof val === "number" 
+            td.textContent = typeof val === "number"
               ? formatCurrency(val)
               : "–";
             td.className = "text-end";
@@ -1948,6 +2353,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const includeInvestments = document.getElementById('include-investments')?.checked ?? true;
       const includeCurrent = document.getElementById('include-current')?.checked ?? true;
 
+
       // Run fast operations in parallel for better perceived performance
       const fastOperations = [
         updateCharts(),  // Charts update from cached data
@@ -1980,7 +2386,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Connect all filter inputs to update dashboard immediately
   const filterInputs = [
-    'analysis-period', 'show-trends'
+    'analysis-period', 'show-trends', 'include-savings', 'include-investments', 'include-current'
   ];
 
   filterInputs.forEach(inputId => {
@@ -1993,6 +2399,105 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Smart Search functionality
+  const searchInput = document.getElementById('smart-search-input');
+  const searchBtn = document.getElementById('smart-search-btn');
+
+  const executeSmartSearch = async (query) => {
+    if (!query) return;
+
+    query = query.toLowerCase().trim();
+    console.log('🔍 Executing smart search for:', query);
+
+    const [start, end] = periodSlider.noUiSlider.get();
+    const iStart = allPeriods.indexOf(start);
+    const iEnd = allPeriods.indexOf(end);
+    const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
+
+    // Logic for different query types
+    if (query.match(/^\d{4}$/)) { // Year search
+      const year = parseInt(query);
+      const newStart = `${allPeriods.filter(p => 2000 + parseInt(p.split('/')[1]) === year)[0]}`;
+      const newEnd = `${allPeriods.filter(p => 2000 + parseInt(p.split('/')[1]) === year)[allPeriods.filter(p => 2000 + parseInt(p.split('/')[1]) === year).length - 1]}`;
+      if (newStart && newEnd) {
+        periodSlider.noUiSlider.set([newStart, newEnd]);
+      }
+    } else if (query.startsWith("last ")) { // Relative period search
+      const parts = query.split(" ");
+      if (parts.length === 3 && parts[2] === "months") {
+        const numMonths = parseInt(parts[1]);
+        if (numMonths && !isNaN(numMonths) && visiblePeriods.length >= numMonths) {
+          const endIdx = visiblePeriods.length - 1;
+          const startIdx = Math.max(0, endIdx - (numMonths - 1));
+          periodSlider.noUiSlider.set([visiblePeriods[startIdx], visiblePeriods[endIdx]]);
+        }
+      } else if (query === "current year") {
+        const currentYear = new Date().getFullYear();
+        const yearPeriods = allPeriods.filter(p => 2000 + parseInt(p.split('/')[1]) === currentYear);
+        if (yearPeriods.length > 0) {
+          periodSlider.noUiSlider.set([yearPeriods[0], yearPeriods[yearPeriods.length - 1]]);
+        }
+      }
+    } else if (query.includes(" to ")) { // Range search
+      const [qStart, qEnd] = query.split(" to ");
+      if (allPeriods.includes(qStart.trim()) && allPeriods.includes(qEnd.trim())) {
+        periodSlider.noUiSlider.set([qStart.trim(), qEnd.trim()]);
+      }
+    } else if (query.match(/^q[1-4]$/)) { // Quarter search
+      const quarter = parseInt(query[1]);
+      const currentYear = parseInt(visiblePeriods[0].split('/')[1]); // Assuming visible periods are in the same year
+      let startMonth, endMonth;
+      if (quarter === 1) { startMonth = 0; endMonth = 2; } // Jan-Mar
+      else if (quarter === 2) { startMonth = 3; endMonth = 5; } // Apr-Jun
+      else if (quarter === 3) { startMonth = 6; endMonth = 8; } // Jul-Sep
+      else if (quarter === 4) { startMonth = 9; endMonth = 11; } // Oct-Dec
+
+      const quarterPeriods = allPeriods.filter(p => {
+        const month = getMonthNumberInt(p.split('/')[0]);
+        return month >= startMonth + 1 && month <= endMonth + 1;
+      });
+
+      if (quarterPeriods.length > 0) {
+        periodSlider.noUiSlider.set([quarterPeriods[0], quarterPeriods[quarterPeriods.length - 1]]);
+      }
+    }
+
+    // Clear search input after execution
+    searchInput.value = '';
+  };
+
+  if (searchInput && searchBtn) {
+    searchBtn.addEventListener('click', () => executeSmartSearch(searchInput.value));
+    searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        executeSmartSearch(searchInput.value);
+      }
+    });
+  }
+
+  // Add preset filter buttons
+  const presetButtons = document.querySelectorAll('.filter-preset-btn');
+  presetButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const periodRange = button.dataset.period;
+      if (periodRange && periodSlider && periodSlider.noUiSlider) {
+        // Apply the period range
+        if (periodRange === 'last_3m') {
+          document.getElementById('last-3m')?.click();
+        } else if (periodRange === 'last_6m') {
+          document.getElementById('last-6m')?.click();
+        } else if (periodRange === 'last_12m') {
+          document.getElementById('last-12m')?.click();
+        } else if (periodRange === 'all') {
+          document.getElementById('all-periods')?.click();
+        }
+
+        // Update active state
+        presetButtons.forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+      }
+    });
+  });
 
 
   // Connect slider events to update dashboard with optimized debounce
@@ -2072,6 +2577,10 @@ document.addEventListener("DOMContentLoaded", () => {
     balanceCacheTime = 0;
     kpiCache.clear();
 
+    // Reset preset filter buttons
+    document.querySelectorAll('.filter-preset-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('.filter-preset-btn[data-period="last_12m"]')?.classList.add('active');
+
     console.log('✅ All filters reset, updating dashboard');
     updateDashboard();
   });
@@ -2103,7 +2612,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-  // Initialize dashboard - optimized to prevent multiple initializations
+  // Start the enhanced dashboard
   const init = async () => {
     if (isInitialized) {
       console.log('⚠️ Dashboard já inicializado, ignorando');

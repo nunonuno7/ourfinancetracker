@@ -2849,7 +2849,7 @@ def account_balance_template_xlsx(request):
     data = {
         'Year': [2025, 2025],
         'Month': [1, 1], 
-        'Account': ['Checking', 'Savings'],
+        'Account': ['Savings', 'Investment Account'],
         'Balance': [1000.00, 5000.00]
     }
     df = pd.DataFrame(data)
@@ -2874,12 +2874,16 @@ def account_balance_template_xlsx(request):
 @login_required
 def estimate_transaction_view(request):
     """Transaction estimation management view."""
-    # Get available periods with account balances, optimized query
-    periods_with_balances = DatePeriod.objects.filter(
+    # Get available periods with account balances, excluding the most recent period
+    # because we need the next period's data to estimate transactions
+    all_periods_with_balances = DatePeriod.objects.filter(
         account_balances__account__user=request.user
-    ).distinct().select_related().order_by('-year', '-month')[:12]  # Last 12 months
+    ).distinct().select_related().order_by('-year', '-month')
+    
+    # Exclude the most recent period (first in the ordered list)
+    periods_with_balances = all_periods_with_balances[1:13]  # Skip first, get next 12 months
 
-    logger.debug(f"Found {periods_with_balances.count()} periods with balances for user {request.user.id}")
+    logger.debug(f"Found {periods_with_balances.count()} periods with balances for user {request.user.id} (excluding latest period)")
 
     context = {
         'periods': periods_with_balances,
@@ -2964,7 +2968,8 @@ def get_estimation_summaries(request):
             except (ValueError, TypeError):
                 logger.warning(f"Invalid year filter: {year_filter}")
 
-        periods = periods_qs[:12]
+        # Exclude the most recent period because we need next period data for estimation
+        periods = periods_qs[1:13]  # Skip first, get next 12 months
 
         logger.debug(f"Found {periods.count()} periods for user {request.user.id}")
 

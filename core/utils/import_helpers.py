@@ -82,7 +82,7 @@ class BulkTransactionImporter:
             defaults={'name': 'Euro', 'symbol': '€'}
         )
         self.default_account_type, _ = AccountType.objects.get_or_create(
-            name='Checking'
+            name='Savings'
         )
 
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -127,29 +127,113 @@ class TransactionManager {
     // Column sorting
     $(document).on("click", ".sortable-header", (e) => this.handleSort(e));
 
-    // Main filters collapse handlers
-    $('#filtersCollapse').on('shown.bs.collapse', () => {
+    // Initialize collapse state tracking with timing controls
+    this.collapseStates = {
+      mainFilters: false,
+      advancedFilters: false,
+      mainFiltersProcessing: false,
+      advancedFiltersProcessing: false
+    };
+
+    // Main filters collapse handlers - with robust event control
+    $('#filtersCollapse').on('show.bs.collapse', (e) => {
+      e.stopPropagation();
+      if (this.collapseStates.mainFiltersProcessing) {
+        console.log('🚧 Main filters already processing, skipping...');
+        return false;
+      }
+      
+      this.collapseStates.mainFiltersProcessing = true;
+      this.collapseStates.mainFilters = true;
+      
       $('#filters-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
       $('#filters-toggle').attr('aria-expanded', 'true');
+      console.log('🔄 Main filters expanding...');
+      
+      // Release processing lock after animation
+      setTimeout(() => {
+        this.collapseStates.mainFiltersProcessing = false;
+      }, 100);
+    });
+    
+    $('#filtersCollapse').on('shown.bs.collapse', (e) => {
+      e.stopPropagation();
       console.log('✅ Main filters opened');
     });
     
-    $('#filtersCollapse').on('hidden.bs.collapse', () => {
+    $('#filtersCollapse').on('hide.bs.collapse', (e) => {
+      e.stopPropagation();
+      if (this.collapseStates.mainFiltersProcessing) {
+        console.log('🚧 Main filters already processing, skipping...');
+        return false;
+      }
+      
+      this.collapseStates.mainFiltersProcessing = true;
+      this.collapseStates.mainFilters = false;
+      
       $('#filters-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
       $('#filters-toggle').attr('aria-expanded', 'false');
+      console.log('🔄 Main filters collapsing...');
+      
+      // Release processing lock after animation
+      setTimeout(() => {
+        this.collapseStates.mainFiltersProcessing = false;
+      }, 100);
+    });
+    
+    $('#filtersCollapse').on('hidden.bs.collapse', (e) => {
+      e.stopPropagation();
       console.log('✅ Main filters closed');
     });
 
-    // Advanced filters collapse handlers
-    $('#advancedFilters').on('shown.bs.collapse', () => {
+    // Advanced filters collapse handlers - with robust event control
+    $('#advancedFilters').on('show.bs.collapse', (e) => {
+      e.stopPropagation();
+      if (this.collapseStates.advancedFiltersProcessing) {
+        console.log('🚧 Advanced filters already processing, skipping...');
+        return false;
+      }
+      
+      this.collapseStates.advancedFiltersProcessing = true;
+      this.collapseStates.advancedFilters = true;
+      
       $('#advanced-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
       $('#advanced-filters-toggle').attr('aria-expanded', 'true');
+      console.log('🔄 Advanced filters expanding...');
+      
+      // Release processing lock after animation
+      setTimeout(() => {
+        this.collapseStates.advancedFiltersProcessing = false;
+      }, 100);
+    });
+    
+    $('#advancedFilters').on('shown.bs.collapse', (e) => {
+      e.stopPropagation();
       console.log('✅ Advanced filters opened');
     });
     
-    $('#advancedFilters').on('hidden.bs.collapse', () => {
+    $('#advancedFilters').on('hide.bs.collapse', (e) => {
+      e.stopPropagation();
+      if (this.collapseStates.advancedFiltersProcessing) {
+        console.log('🚧 Advanced filters already processing, skipping...');
+        return false;
+      }
+      
+      this.collapseStates.advancedFiltersProcessing = true;
+      this.collapseStates.advancedFilters = false;
+      
       $('#advanced-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
       $('#advanced-filters-toggle').attr('aria-expanded', 'false');
+      console.log('🔄 Advanced filters collapsing...');
+      
+      // Release processing lock after animation
+      setTimeout(() => {
+        this.collapseStates.advancedFiltersProcessing = false;
+      }, 100);
+    });
+    
+    $('#advancedFilters').on('hidden.bs.collapse', (e) => {
+      e.stopPropagation();
       console.log('✅ Advanced filters closed');
     });
 
@@ -158,32 +242,47 @@ class TransactionManager {
   }
 
   initializeCollapseStates() {
-    // Set initial states without triggering events
-    const mainFiltersOpen = $('#filtersCollapse').hasClass('show');
-    const advancedFiltersOpen = $('#advancedFilters').hasClass('show');
-    
-    console.log('🔧 Initializing collapse states:', {
-      mainFilters: mainFiltersOpen,
-      advancedFilters: advancedFiltersOpen
-    });
-    
-    // Set main filters chevron
-    if (mainFiltersOpen) {
-      $('#filters-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
-      $('#filters-toggle').attr('aria-expanded', 'true');
-    } else {
-      $('#filters-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
-      $('#filters-toggle').attr('aria-expanded', 'false');
-    }
-    
-    // Set advanced filters chevron
-    if (advancedFiltersOpen) {
-      $('#advanced-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-up');
-      $('#advanced-filters-toggle').attr('aria-expanded', 'true');
-    } else {
-      $('#advanced-chevron').removeClass('fa-chevron-up').addClass('fa-chevron-down');
-      $('#advanced-filters-toggle').attr('aria-expanded', 'false');
-    }
+    // Wait for DOM to be fully ready before checking states
+    setTimeout(() => {
+      // Set initial states without triggering events
+      const mainFiltersOpen = $('#filtersCollapse').hasClass('show');
+      const advancedFiltersOpen = $('#advancedFilters').hasClass('show');
+      
+      // Initialize the state tracking variables
+      this.collapseStates.mainFilters = mainFiltersOpen;
+      this.collapseStates.advancedFilters = advancedFiltersOpen;
+      
+      console.log('🔧 Initializing collapse states:', {
+        mainFilters: mainFiltersOpen,
+        advancedFilters: advancedFiltersOpen
+      });
+      
+      // Set main filters chevron and aria attributes
+      const filtersToggle = $('#filters-toggle');
+      const filtersChevron = $('#filters-chevron');
+      
+      if (mainFiltersOpen) {
+        filtersChevron.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+        filtersToggle.attr('aria-expanded', 'true');
+      } else {
+        filtersChevron.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+        filtersToggle.attr('aria-expanded', 'false');
+      }
+      
+      // Set advanced filters chevron and aria attributes
+      const advancedToggle = $('#advanced-filters-toggle');
+      const advancedChevron = $('#advanced-chevron');
+      
+      if (advancedFiltersOpen) {
+        advancedChevron.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+        advancedToggle.attr('aria-expanded', 'true');
+      } else {
+        advancedChevron.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+        advancedToggle.attr('aria-expanded', 'false');
+      }
+      
+      console.log('✅ Collapse states initialized with proper state tracking');
+    }, 100);
   }
 
   debounce(func, wait) {
