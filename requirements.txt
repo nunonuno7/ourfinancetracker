@@ -1,65 +1,62 @@
+
 Django==5.1.4
-# Requirements corrigidos para ourfinancetracker – compatível com django-cachalot
 
-# Django e extensões essenciais
+# Django extensions and utilities
 django-extensions==3.2.3
+django-widget-tweaks==1.5.0
+django-cors-headers==4.4.0
 
-# Base de dados
+# Database
 psycopg2-binary==2.9.9
 dj-database-url==2.2.0
 
-# Cache (Redis para produção)
-redis==5.0.8
+# Cache (Redis for production)
+redis==5.1.1
 django-redis==5.4.0
 
-# Configuração segura de ambiente
+# Security and authentication
+django-axes==6.5.1
+django-ratelimit==4.1.0
+argon2-cffi==23.1.0
+PyJWT==2.10.1
+
+# Environment configuration
 python-dotenv==1.0.1
 
-# Análise de dados e manipulação
-pandas==2.2.2
-numpy==1.26.4
+# Data analysis and manipulation
+pandas==2.2.3
+numpy==2.2.1
 
-# Exportação de ficheiros
+# File export
 openpyxl==3.1.5
 xlsxwriter==3.2.0
 
-# Processamento de datas
-python-dateutil==2.9.0
+# Date processing
+python-dateutil==2.9.0.post0
 
-# Desenvolvimento e debug
+# Development and debug
 django-debug-toolbar==4.4.6
 
-# Produção
-gunicorn==22.0.0
-whitenoise==6.7.0
+# Production server
+gunicorn==23.0.0
+whitenoise==6.8.2
 
-# Segurança e monitoring
-django-cors-headers==4.4.0
-django-ratelimit==4.1.0
-
-# Utilitários
+# HTTP requests and utilities
 requests==2.32.3
-pytz==2024.1
+pytz==2024.2
 
-# Validação e linting (desenvolvimento)
-flake8==7.1.1
-black==24.8.0
-isort==5.13.2
-
-# Testes
-pytest==8.3.2
-pytest-django==4.8.0
-pytest-cov==5.0.0
-
-
-# Logs estruturados
+# Structured logging
 django-structlog==8.1.0
 
-# Backup e utilitários
+# Backup utilities
 django-dbbackup==4.2.0
 
+# Code quality (development)
+flake8==7.1.1
+black==24.10.0
+isort==5.13.2
 
-
-#others
-django-widget-tweaks==1.5.0
-PyJWT==2.8.0
+# Testing
+pytest==8.3.4
+pytest-django==4.9.0
+pytest-cov==6.0.0
