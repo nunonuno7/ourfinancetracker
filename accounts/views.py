@@ -1,3 +1,4 @@
+import logging
 from django.contrib.auth.models import User
 from django.contrib.sites.shortcuts import get_current_site
 from django.template.loader import render_to_string
@@ -12,6 +13,8 @@ from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
 from .tokens import account_activation_token
+
+logger = logging.getLogger(__name__)
 
 def signup(request):
     if request.method == "POST":
@@ -102,16 +105,32 @@ def signup(request):
     return render(request, "accounts/signup.html")
 
 def activate(request, uidb64, token):
+    """
+    Activate an account from the emailed link.
+
+    Behaviour:
+    - Decodes uidb64 -> user id
+    - Verifies the token
+    - Marks user as active if needed
+    - Logs the user in with an explicit backend to avoid ValueError
+    - Renders success or invalid templates instead of 500
+    """
+    user = None
     try:
         uid = urlsafe_base64_decode(uidb64).decode()
         user = User.objects.get(pk=uid)
-    except Exception:
-        user = None
+    except Exception as exc:
+        logger.warning("Activation: could not resolve user from uidb64=%s (%s)", uidb64, exc)
+
     if user and account_activation_token.check_token(user, token):
-        user.is_active = True
-        user.save()
-        login(request, user)
-        return render(request, "accounts/activation_success.html")
+        if not user.is_active:
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+        # IMPORTANT: specify backend or Django will raise ValueError
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        return render(request, "accounts/activation_success.html", status=200)
+
+    logger.info("Activation failed for uidb64=%s", uidb64)
     return render(request, "accounts/activation_invalid.html", status=400)
 
 
