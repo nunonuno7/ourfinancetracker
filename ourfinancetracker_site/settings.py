@@ -62,6 +62,9 @@ if not SECRET_KEY:
 # ────────────────────────────────────────────────────
 # Hosts allowed to serve the app (no scheme here)
 ALLOWED_HOSTS = [
+    "www.ourfinancetracker.com",
+    ".www.ourfinancetracker.com",
+    "ourfinancetracker.com",
     ".ourfinancetracker.com",   # both ourfinancetracker.com and subdomains
     ".onrender.com",            # Render
     ".replit.dev",              # Replit
@@ -108,6 +111,7 @@ if DEBUG:
 # ────────────────────────────────────────────────────
 INSTALLED_APPS = [
     "django.contrib.admin",
+    "django.contrib.sites",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
