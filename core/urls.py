@@ -41,6 +41,8 @@ from .views import (
     estimate_transaction_for_period,
     delete_estimated_transaction,
     delete_estimated_transaction_by_period,
+    # Health check
+    healthz,
 )
 
 from .views_reporting import proxy_report_csv_token
@@ -131,4 +133,7 @@ urlpatterns = [
 
     # Reporting (token-based)
     path("reporting/data.csv", proxy_report_csv_token, name="reporting_csv_token"),
+
+    # Health check
+    path("healthz", healthz, name="healthz"),
 ]

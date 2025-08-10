@@ -3803,3 +3803,15 @@ def clear_transaction_cache_view(request):
     user_id = request.user.id
     clear_tx_cache(user_id)
     return JsonResponse({"status": "success", "message": "Transaction cache cleared successfully."})
+
+
+def healthz(_request):
+    """
+    Lightweight health endpoint used by external monitors to keep the app warm.
+    Must not touch the database or perform expensive work.
+    """
+    response = HttpResponse("ok", content_type="text/plain", status=200)
+    # Avoid intermediary caches; make sure the request reaches the app
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
