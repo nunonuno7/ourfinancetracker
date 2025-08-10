@@ -246,7 +246,17 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "core" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Use WhiteNoise with proper fallback for missing files
+if DEBUG:
+    STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
+else:
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Ensure WhiteNoise serves static files with correct MIME types
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = DEBUG
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
