@@ -4,7 +4,7 @@ from django.template.loader import render_to_string
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 from django.shortcuts import render, redirect
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.core.mail import send_mail
 from django.contrib.auth import login
 from django.contrib.auth.views import PasswordResetView
@@ -118,13 +118,16 @@ def activate(request, uidb64, token):
 class CustomPasswordResetView(PasswordResetView):
     """Custom password reset view that adds expiry_human to email context"""
     template_name = 'accounts/password_reset.html'
-    
+    email_template_name = 'accounts/emails/password_reset_email.txt'
+    html_email_template_name = 'accounts/emails/password_reset_email.html'
+    subject_template_name = 'accounts/emails/password_reset_subject.txt'
+    success_url = reverse_lazy('accounts:password_reset_done')
+
     def form_valid(self, form):
         expiry_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600 or 1
-        # Inject extra context so the email template has what it needs
         self.extra_email_context = {
             'expiry_human': f"{expiry_hours} hour{'s' if expiry_hours != 1 else ''}",
             'protocol': 'https' if self.request.is_secure() else 'http',
             'domain': getattr(settings, 'EMAIL_LINK_DOMAIN', self.request.get_host()),
         }
-        return super().form_valid(form)  # Do not call form.save() here
+        return super().form_valid(form)

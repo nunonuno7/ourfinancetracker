@@ -60,49 +60,43 @@ if not SECRET_KEY:
 # ────────────────────────────────────────────────────
 # Hosts e CSRF
 # ────────────────────────────────────────────────────
-ALLOWED_HOSTS: List[str] = [
-    "ourfinancetracker.onrender.com",
-    "ourfinancetracker.com",
-    "www.ourfinancetracker.com",
+# Hosts allowed to serve the app (no scheme here)
+ALLOWED_HOSTS = [
+    ".ourfinancetracker.com",   # both ourfinancetracker.com and subdomains
+    ".onrender.com",            # Render
+    ".replit.dev",              # Replit
     "localhost",
     "127.0.0.1",
-    ".replit.dev",  # permite subdomínios de replit.dev
-    "85f9bb51-88d3-43ef-b55d-205b6269aa2a-00-3qj0ybax71h26.kirk.replit.dev",  # domínio atual do Replit
 ]
 
-if ext_host := ENV("RENDER_EXTERNAL_HOSTNAME"):
-    ALLOWED_HOSTS.append(ext_host)
-
-CSRF_TRUSTED_ORIGINS: List[str] = [
-    "https://ourfinancetracker.onrender.com",
+# CSRF trusted origins (must include scheme; ports allowed for non-standard ports)
+CSRF_TRUSTED_ORIGINS = [
     "https://ourfinancetracker.com",
+    "https://www.ourfinancetracker.com",
+    "https://*.onrender.com",
+    "https://*.replit.dev",
+    "https://*.replit.dev:5000",
+    "http://localhost:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001",
 ]
 
-# Em DEV, injeta dinamicamente o host completo do Replit/Ngrok via env
+def _extend_from_env_list(env_key, target_list, require_scheme=False):
+    raw = os.getenv(env_key, "")
+    if not raw:
+        return
+    for item in [x.strip() for x in raw.split(",") if x.strip()]:
+        if require_scheme and not (item.startswith("http://") or item.startswith("https://")):
+            # Skip invalid origin if scheme is missing
+            continue
+        target_list.append(item)
+
+_extend_from_env_list("EXTRA_ALLOWED_HOSTS", ALLOWED_HOSTS, require_scheme=False)
+_extend_from_env_list("EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True)
+
+# Adicionar configuração específica para CSRF em desenvolvimento
 if DEBUG:
-    # Adicionar host atual do Replit diretamente (com e sem porta)
-    current_replit_host = "85f9bb51-88d3-43ef-b55d-205b6269aa2a-00-3qj0ybax71h26.kirk.replit.dev"
-    CSRF_TRUSTED_ORIGINS.append(f"https://{current_replit_host}")
-    CSRF_TRUSTED_ORIGINS.append(f"https://{current_replit_host}:5000")
-
-    # Tentar detectar automaticamente outros hosts
-    if replit_host := ENV("REPLIT_HOST"):   # ex: "abcd-...riker.replit.dev"
-        CSRF_TRUSTED_ORIGINS.append(f"https://{replit_host}")
-        CSRF_TRUSTED_ORIGINS.append(f"https://{replit_host}:5000")
-    if ngrok_host := ENV("NGROK_HOST"):     # ex: "1234-...ngrok-free.app"
-        CSRF_TRUSTED_ORIGINS.append(f"https://{ngrok_host}")
-        CSRF_TRUSTED_ORIGINS.append(f"https://{ngrok_host}:5000")
-
-    # Tentar detectar via REPLIT_URL
-    if replit_url := ENV("REPLIT_URL"):
-        if replit_url.startswith("https://"):
-            CSRF_TRUSTED_ORIGINS.append(replit_url)
-            # Adicionar também com porta 5000 se não estiver já incluída
-            if ":5000" not in replit_url:
-                CSRF_TRUSTED_ORIGINS.append(f"{replit_url}:5000")
-
-    # Adicionar configuração específica para CSRF em desenvolvimento
-    CSRF_COOKIE_SECURE = False
     CSRF_COOKIE_SAMESITE = 'Lax'
     CSRF_USE_SESSIONS = False
     CSRF_COOKIE_HTTPONLY = False
@@ -397,8 +391,6 @@ AUTH_PASSWORD_VALIDATORS = [
 # ────────────────────────────────────────────────────
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
@@ -425,42 +417,28 @@ AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_LOCKOUT_CALLABLE = None
 
 # ────────────────────────────────────────────────────
-# Email configuration (Resend via Anymail OR SMTP fallback)
+# Email configuration
 # ────────────────────────────────────────────────────
-import os
+# --- Email configuration ---
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 
-def env_bool(key: str, default: bool = False) -> bool:
-    return os.getenv(key, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com")
+EMAIL_LINK_DOMAIN = os.getenv("EMAIL_LINK_DOMAIN", "ourfinancetracker.com")
 
-def env_int(key: str, default: int) -> int:
-    try:
-        return int(os.getenv(key, str(default)))
-    except (TypeError, ValueError):
-        return default
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = (os.getenv("EMAIL_USE_TLS", "true").lower() == "true")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
 
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+# In development, default to console backend so emails are visible in the terminal.
+if DEBUG and not os.getenv("EMAIL_HOST"):
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-# Default from email
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@ourfinancetracker.com')
-
-# Domain for email links (forces HTTPS in password reset emails)
-EMAIL_LINK_DOMAIN = os.getenv('EMAIL_LINK_DOMAIN', 'ourfinancetracker.com')
-
-if RESEND_API_KEY:
-    # Use Resend via django-anymail
-    EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
-    ANYMAIL = {"RESEND_API_KEY": RESEND_API_KEY}
-else:
-    # SMTP fallback (Plesk)
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = os.getenv("EMAIL_HOST", "mail.ourfinancetracker.com")
-    EMAIL_PORT = env_int("EMAIL_PORT", 465)
-    EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", True)   # True for port 465
-    EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)  # True for port 587
-    # Prefer Django-conventional names; keep compatibility with old names
-    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER") or os.getenv("EMAIL_USER", "")
-    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD") or os.getenv("EMAIL_PASSWORD", "")
-    EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 20)
+# Security for cookies (HTTPS in production)
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
 
 # Server email for Django system messages (error reports, etc.)
 SERVER_EMAIL = os.getenv("SERVER_EMAIL", os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com"))
