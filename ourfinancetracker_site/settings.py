@@ -75,6 +75,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.ourfinancetracker.com",
     "https://*.onrender.com",
     "https://*.replit.dev",
+    "https://*.replit.dev:3000",
     "https://*.replit.dev:5000",
     "http://localhost:8000",
     "http://localhost:8001",
@@ -113,6 +114,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
     # Terceiros
     "whitenoise.runserver_nostatic",
     "widget_tweaks",
@@ -261,10 +263,13 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
-# Password reset timeout (10 minutes = 600 seconds)
-PASSWORD_RESET_TIMEOUT = 600
+# Password reset timeout (1 hour = 3600 seconds)
+PASSWORD_RESET_TIMEOUT = 3600
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Sites framework
+SITE_ID = 1
 
 # ────────────────────────────────────────────────────
 # Logging estruturado
@@ -359,6 +364,11 @@ LOGGING = {
             "level": "WARNING",  # Only log slow requests
             "propagate": False,
         },
+        "accounts": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
         # Suppress axios/CORS preflight noise
         "django.security.csrf": {
             "handlers": ["file"],
@@ -423,7 +433,7 @@ AXES_LOCKOUT_CALLABLE = None
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com")
-EMAIL_LINK_DOMAIN = os.getenv("EMAIL_LINK_DOMAIN", "ourfinancetracker.com")
+EMAIL_LINK_DOMAIN = os.getenv("EMAIL_LINK_DOMAIN", "www.ourfinancetracker.com")
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))

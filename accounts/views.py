@@ -134,31 +134,18 @@ def activate(request, uidb64, token):
     return render(request, "accounts/activation_invalid.html", status=400)
 
 
-class CustomPasswordResetView(PasswordResetView):
-    """Custom password reset view that adds expiry_human to email context"""
+class OFTPasswordResetView(PasswordResetView):
+    """Custom password reset view with consistent styling and domain override."""
     template_name = 'accounts/password_reset.html'
     email_template_name = 'accounts/emails/password_reset_email.txt'
     html_email_template_name = 'accounts/emails/password_reset_email.html'
     subject_template_name = 'accounts/emails/password_reset_subject.txt'
     success_url = reverse_lazy('accounts:password_reset_done')
 
-    def form_valid(self, form):
-        expiry_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600 or 1
-        
-        # Build domain with proper port for development
-        if hasattr(settings, 'EMAIL_LINK_DOMAIN') and settings.EMAIL_LINK_DOMAIN:
-            domain = settings.EMAIL_LINK_DOMAIN
-        else:
-            # In development, include the port
-            host = self.request.get_host()
-            if ':' not in host and not self.request.is_secure() and settings.DEBUG:
-                domain = f"{host}:5000"
-            else:
-                domain = host
-        
-        self.extra_email_context = {
-            'expiry_human': f"{expiry_hours} hour{'s' if expiry_hours != 1 else ''}",
-            'protocol': 'https' if self.request.is_secure() else 'http',
-            'domain': domain,
-        }
-        return super().form_valid(form)
+    def get_form(self, form_class=None):
+        """Override to ensure consistent domain and protocol"""
+        form = super().get_form(form_class)
+        # Store these on the form so they're used when form.save() is called
+        form.domain_override = 'www.ourfinancetracker.com'
+        form.use_https = True
+        return form

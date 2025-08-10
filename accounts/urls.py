@@ -1,7 +1,7 @@
-
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
+from .views import signup, activate, OFTPasswordResetView
 
 app_name = "accounts"
 
@@ -13,7 +13,7 @@ urlpatterns = [
     path("activate/<uidb64>/<token>/", views.activate, name="activate"),
 
     # Password reset flow
-    path("password-reset/", views.CustomPasswordResetView.as_view(), name="password_reset"),
+    path("password-reset/", OFTPasswordResetView.as_view(), name="password_reset"),
     path(
         "password-reset/done/",
         auth_views.PasswordResetDoneView.as_view(
