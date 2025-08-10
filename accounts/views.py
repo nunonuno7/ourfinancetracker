@@ -7,6 +7,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.core.mail import send_mail
 from django.contrib.auth import login
+from django.contrib.auth.views import PasswordResetView
 from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
@@ -112,3 +113,31 @@ def activate(request, uidb64, token):
         login(request, user)
         return render(request, "accounts/activation_success.html")
     return render(request, "accounts/activation_invalid.html", status=400)
+
+
+class CustomPasswordResetView(PasswordResetView):
+    """Custom password reset view that adds expiry_human to email context"""
+    template_name = 'accounts/password_reset.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return context
+    
+    def form_valid(self, form):
+        # Override to add custom context to the email
+        opts = {
+            'use_https': self.request.is_secure(),
+            'token_generator': self.token_generator,
+            'from_email': getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+            'email_template_name': self.email_template_name,
+            'subject_template_name': self.subject_template_name,
+            'request': self.request,
+            'html_email_template_name': self.html_email_template_name,
+            'extra_email_context': {
+                'expiry_human': f"{settings.PASSWORD_RESET_TIMEOUT // 3600} hour{'s' if settings.PASSWORD_RESET_TIMEOUT // 3600 != 1 else ''}",
+                'protocol': 'https' if self.request.is_secure() else 'http',
+                'domain': getattr(settings, 'EMAIL_LINK_DOMAIN', self.request.get_host()),
+            }
+        }
+        form.save(**opts)
+        return super().form_valid(form)

@@ -64,3 +64,4 @@ h git switch --detach *
 #   contrário, ignora-os)
 # ──────────────────────────────
 staticfiles/
+testes.ipynb

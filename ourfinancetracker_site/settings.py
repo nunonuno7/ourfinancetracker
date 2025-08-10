@@ -441,7 +441,7 @@ if RESEND_API_KEY:
 else:
     # SMTP fallback (Plesk)
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = os.getenv("EMAIL_HOST", "web4.sitedns.pt")  # change to mail.ourfinancetracker.com once the cert is fixed
+    EMAIL_HOST = os.getenv("EMAIL_HOST", "mail.ourfinancetracker.com")
     EMAIL_PORT = env_int("EMAIL_PORT", 465)
     EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", True)   # True for port 465
     EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)  # True for port 587
@@ -449,6 +449,9 @@ else:
     EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER") or os.getenv("EMAIL_USER", "")
     EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD") or os.getenv("EMAIL_PASSWORD", "")
     EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 20)
+
+# Server email for Django system messages (error reports, etc.)
+SERVER_EMAIL = os.getenv("SERVER_EMAIL", os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com"))
 
 # ────────────────────────────────────────────────────
 # Supabase creds (para RPC)
