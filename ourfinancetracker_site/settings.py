@@ -62,9 +62,6 @@ if not SECRET_KEY:
 # ────────────────────────────────────────────────────
 # Hosts allowed to serve the app (no scheme here)
 ALLOWED_HOSTS = [
-    "www.ourfinancetracker.com",
-    ".www.ourfinancetracker.com",
-    "ourfinancetracker.com",
     ".ourfinancetracker.com",   # both ourfinancetracker.com and subdomains
     ".onrender.com",            # Render
     ".replit.dev",              # Replit
@@ -111,7 +108,6 @@ if DEBUG:
 # ────────────────────────────────────────────────────
 INSTALLED_APPS = [
     "django.contrib.admin",
-    "django.contrib.sites",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -265,8 +261,8 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
-# Password reset timeout (1 hour = 3600 seconds)
-PASSWORD_RESET_TIMEOUT = 3600
+# Password reset timeout (10 minutes = 600 seconds)
+PASSWORD_RESET_TIMEOUT = 600
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -363,11 +359,6 @@ LOGGING = {
             "level": "WARNING",  # Only log slow requests
             "propagate": False,
         },
-        "accounts": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": False,
-        },
         # Suppress axios/CORS preflight noise
         "django.security.csrf": {
             "handlers": ["file"],
@@ -432,7 +423,7 @@ AXES_LOCKOUT_CALLABLE = None
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com")
-EMAIL_LINK_DOMAIN = os.getenv("EMAIL_LINK_DOMAIN", "www.ourfinancetracker.com")
+EMAIL_LINK_DOMAIN = os.getenv("EMAIL_LINK_DOMAIN", "ourfinancetracker.com")
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
