@@ -16,7 +16,7 @@ urlpatterns = [
     path("password-reset/",
          views.CustomPasswordResetView.as_view(
              template_name="accounts/password_reset.html",
-             email_template_name="accounts/emails/password_reset_email.html",  # Updated to use HTML template
+             email_template_name="accounts/emails/password_reset_email.html",  # Use our custom template
              subject_template_name="accounts/emails/password_reset_subject.txt",
              extra_email_context={
                  "domain": getattr(settings, 'EMAIL_LINK_DOMAIN', 'localhost:5000'),

@@ -125,6 +125,10 @@ class CustomPasswordResetView(PasswordResetView):
     
     def form_valid(self, form):
         # Override to add custom context to the email
+        expiry_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600
+        if expiry_hours == 0:
+            expiry_hours = 1  # Minimum 1 hour display
+            
         opts = {
             'use_https': self.request.is_secure(),
             'token_generator': self.token_generator,
@@ -132,9 +136,9 @@ class CustomPasswordResetView(PasswordResetView):
             'email_template_name': self.email_template_name,
             'subject_template_name': self.subject_template_name,
             'request': self.request,
-            'html_email_template_name': self.html_email_template_name,
+            'html_email_template_name': self.email_template_name,  # Use the same HTML template
             'extra_email_context': {
-                'expiry_human': f"{settings.PASSWORD_RESET_TIMEOUT // 3600} hour{'s' if settings.PASSWORD_RESET_TIMEOUT // 3600 != 1 else ''}",
+                'expiry_human': f"{expiry_hours} hour{'s' if expiry_hours != 1 else ''}",
                 'protocol': 'https' if self.request.is_secure() else 'http',
                 'domain': getattr(settings, 'EMAIL_LINK_DOMAIN', self.request.get_host()),
             }

@@ -258,6 +258,9 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
+# Password reset timeout (10 minutes = 600 seconds)
+PASSWORD_RESET_TIMEOUT = 600
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ────────────────────────────────────────────────────
