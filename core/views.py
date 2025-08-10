@@ -88,13 +88,7 @@ def signup(request):
     return render(request, 'registration/signup.html', {'form': form})
 
 
-class LogoutView(View):
-    """Custom logout view with redirect."""
-
-    def get(self, request):
-        auth_logout(request)
-        messages.info(request, 'You have been logged out successfully.')
-        return redirect('/')
+# LogoutView removida - usando Django's built-in LogoutView via accounts app
 
 class HomeView(TemplateView):
     """Home page view."""

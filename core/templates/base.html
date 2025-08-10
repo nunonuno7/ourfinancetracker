@@ -123,15 +123,15 @@
             background-color: #ffffff !important;
             border-bottom: 1px solid #D9DBDD !important;
         }
-        
+
         .navbar-brand, .navbar-nav .nav-link {
             color: #24282C !important;
         }
-        
+
         .navbar-brand:hover, .navbar-nav .nav-link:hover {
             color: #3AB49E !important;
         }
-        
+
         .navbar-nav .nav-link.active {
             color: #3AB49E !important;
             font-weight: 600;
@@ -149,8 +149,8 @@
         }
 
         /* Navigation consistency */
-        .navbar-brand, .nav-link {
-            color: #ffffff !important;
+        .nav-link {
+            color: #24282C !important;
         }
 
         .nav-link:hover {
@@ -250,22 +250,25 @@
             </span>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="{% url 'logout' %}">
-              <i class="bi bi-box-arrow-right me-1"></i> Logout
-            </a>
+            <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
+              {% csrf_token %}
+              <button type="submit" class="nav-link btn btn-link border-0 p-0" style="background: none; color: inherit; text-decoration: none;">
+                <i class="bi bi-box-arrow-right me-1"></i> Logout
+              </button>
+            </form>
           </li>
         </ul>
       {% else %}
         <ul class="navbar-nav ms-auto">
           <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'login' %}active{% endif %}"
-               href="{% url 'login' %}">
-              <i class="bi bi-box-arrow-in-right me-1"></i> Log In
+            <a class="nav-link {% if 'accounts:login' in request.resolver_match.view_name %}active{% endif %}"
+               href="{% url 'accounts:login' %}">
+              <i class="bi bi-box-arrow-in-right me-1"></i> Login
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'signup' %}active{% endif %}"
-               href="{% url 'signup' %}">
+            <a class="nav-link {% if 'accounts:signup' in request.resolver_match.view_name %}active{% endif %}"
+               href="{% url 'accounts:signup' %}">
               <i class="bi bi-person-plus me-1"></i> Sign Up
             </a>
           </li>

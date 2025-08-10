@@ -6,7 +6,7 @@ from .forms import CustomUserCreationForm
 from . import views
 from .views import (
     # Home & Auth
-    HomeView, LogoutView,
+    HomeView,
     # Transactions
     TransactionCreateView,
     TransactionUpdateView, TransactionDeleteView,
@@ -49,9 +49,7 @@ urlpatterns = [
     # Home
     path("", HomeView.as_view(), name="home"),
 
-    # Authentication
-    path("login/", auth_views.LoginView.as_view(), name="login"),
-    path("logout/", LogoutView.as_view(), name="logout"),
+    # Authentication moved to accounts app
     
     
 
