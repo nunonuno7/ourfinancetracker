@@ -67,6 +67,7 @@ ALLOWED_HOSTS: List[str] = [
     "localhost",
     "127.0.0.1",
     ".replit.dev",  # permite subdomínios de replit.dev
+    "85f9bb51-88d3-43ef-b55d-205b6269aa2a-00-3qj0ybax71h26.kirk.replit.dev",  # domínio atual do Replit
 ]
 
 if ext_host := ENV("RENDER_EXTERNAL_HOSTNAME"):
@@ -80,7 +81,7 @@ CSRF_TRUSTED_ORIGINS: List[str] = [
 # Em DEV, injeta dinamicamente o host completo do Replit/Ngrok via env
 if DEBUG:
     # Adicionar host atual do Replit diretamente (com e sem porta)
-    current_replit_host = "29cea681-02b4-4bd0-9205-6c03862c1561-00-1wzbqrixt32bq.riker.replit.dev"
+    current_replit_host = "85f9bb51-88d3-43ef-b55d-205b6269aa2a-00-3qj0ybax71h26.kirk.replit.dev"
     CSRF_TRUSTED_ORIGINS.append(f"https://{current_replit_host}")
     CSRF_TRUSTED_ORIGINS.append(f"https://{current_replit_host}:5000")
 

@@ -16,14 +16,9 @@ urlpatterns = [
     path("password-reset/",
          views.CustomPasswordResetView.as_view(
              template_name="accounts/password_reset.html",
-             email_template_name="accounts/emails/password_reset_email.html",  # Use our custom template
+             email_template_name="accounts/emails/password_reset_email.html",
+             html_email_template_name="accounts/emails/password_reset_email.html",
              subject_template_name="accounts/emails/password_reset_subject.txt",
-             extra_email_context={
-                 "domain": getattr(settings, 'EMAIL_LINK_DOMAIN', 'localhost:5000'),
-                 "site_name": "OurFinanceTracker",
-                 "protocol": "https",
-                 "expiry_human": f"{settings.PASSWORD_RESET_TIMEOUT // 60} hour(s)" # Added expiry_human
-             },
              success_url="/accounts/password-reset/done/",
          ), name="password_reset"),
     path("password-reset/done/",

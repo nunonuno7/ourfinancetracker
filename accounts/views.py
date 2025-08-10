@@ -119,29 +119,12 @@ class CustomPasswordResetView(PasswordResetView):
     """Custom password reset view that adds expiry_human to email context"""
     template_name = 'accounts/password_reset.html'
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        return context
-    
     def form_valid(self, form):
-        # Override to add custom context to the email
-        expiry_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600
-        if expiry_hours == 0:
-            expiry_hours = 1  # Minimum 1 hour display
-            
-        opts = {
-            'use_https': self.request.is_secure(),
-            'token_generator': self.token_generator,
-            'from_email': getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-            'email_template_name': self.email_template_name,
-            'subject_template_name': self.subject_template_name,
-            'request': self.request,
-            'html_email_template_name': self.email_template_name,  # Use the same HTML template
-            'extra_email_context': {
-                'expiry_human': f"{expiry_hours} hour{'s' if expiry_hours != 1 else ''}",
-                'protocol': 'https' if self.request.is_secure() else 'http',
-                'domain': getattr(settings, 'EMAIL_LINK_DOMAIN', self.request.get_host()),
-            }
+        expiry_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600 or 1
+        # Inject extra context so the email template has what it needs
+        self.extra_email_context = {
+            'expiry_human': f"{expiry_hours} hour{'s' if expiry_hours != 1 else ''}",
+            'protocol': 'https' if self.request.is_secure() else 'http',
+            'domain': getattr(settings, 'EMAIL_LINK_DOMAIN', self.request.get_host()),
         }
-        form.save(**opts)
-        return super().form_valid(form)
+        return super().form_valid(form)  # Do not call form.save() here
