@@ -14,7 +14,7 @@ urlpatterns = [
     path("signup/", signup_redirect, name="signup"),  # Redirect to accounts signup
 ]
 
-# Django auth password reset URLs
+# Django auth password reset URLs - centralized in main URLs
 urlpatterns += [
     path("accounts/password-reset/",
          auth_views.PasswordResetView.as_view(
@@ -22,7 +22,7 @@ urlpatterns += [
              email_template_name="accounts/emails/password_reset_email.txt",
              subject_template_name="accounts/emails/password_reset_subject.txt",
              extra_email_context={
-                 "domain": settings.EMAIL_LINK_DOMAIN,
+                 "domain": getattr(settings, 'EMAIL_LINK_DOMAIN', 'localhost:5000'),
                  "site_name": "OurFinanceTracker",
                  "protocol": "https",
              },

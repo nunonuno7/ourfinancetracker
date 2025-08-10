@@ -121,8 +121,8 @@ INSTALLED_APPS = [
     "axes",
     "anymail",
     # Internos
+    "accounts",  # Moved before core to prioritize its templates
     "core",
-    "accounts",
 ]
 
 # Debug Toolbar only if explicitly toggled
@@ -163,7 +163,10 @@ WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "core" / "templates"],
+        "DIRS": [
+            BASE_DIR / "accounts" / "templates",
+            BASE_DIR / "core" / "templates"
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
