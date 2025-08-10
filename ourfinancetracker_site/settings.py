@@ -359,6 +359,11 @@ LOGGING = {
             "level": "WARNING",  # Only log slow requests
             "propagate": False,
         },
+        "accounts": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
         # Suppress axios/CORS preflight noise
         "django.security.csrf": {
             "handlers": ["file"],
