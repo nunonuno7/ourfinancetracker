@@ -1,5 +1,7 @@
-{% extends "base.html" %} {% load static %} {% load filtros %} {% now "Y-m-d" as
-today %} {% block content %} {% csrf_token %}
+{% extends "base.html" %}
+{% load static %}
+{% load filtros %}
+{% now "Y-m-d" as today %} {% block content %} {% csrf_token %}
 <div class="container-fluid mt-4">
   <!-- CSRF Token -->
   <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
@@ -937,6 +939,6 @@ today %} {% block content %} {% csrf_token %}
 </style>
 
 <!-- Custom JavaScript -->
-<script src="{% static 'js/transaction_list_v2.js' %}"></script>
+<script src="{% static 'js/transaction_list_ajax.js' %}"></script>
 
 {% endblock %}

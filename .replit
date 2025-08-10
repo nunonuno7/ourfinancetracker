@@ -6,7 +6,8 @@ channel = "stable-25_05"
 packages = ["glibcLocales"]
 
 [deployment]
-run = ["sh", "-c", "python3 manage.py runserver 0.0.0.0:3000"]
+run = ["sh", "-c", "python manage.py runserver 0.0.0.0:5000"]
+build = ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate"]
 
 [[ports]]
 localPort = 3000

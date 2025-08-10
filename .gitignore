@@ -63,5 +63,6 @@ h git switch --detach *
 #   no próprio repositório; caso
 #   contrário, ignora-os)
 # ──────────────────────────────
-staticfiles/
+/staticfiles/
+/media/
 testes.ipynb
