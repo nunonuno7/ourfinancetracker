@@ -144,9 +144,21 @@ class CustomPasswordResetView(PasswordResetView):
 
     def form_valid(self, form):
         expiry_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600 or 1
+        
+        # Build domain with proper port for development
+        if hasattr(settings, 'EMAIL_LINK_DOMAIN') and settings.EMAIL_LINK_DOMAIN:
+            domain = settings.EMAIL_LINK_DOMAIN
+        else:
+            # In development, include the port
+            host = self.request.get_host()
+            if ':' not in host and not self.request.is_secure() and settings.DEBUG:
+                domain = f"{host}:5000"
+            else:
+                domain = host
+        
         self.extra_email_context = {
             'expiry_human': f"{expiry_hours} hour{'s' if expiry_hours != 1 else ''}",
             'protocol': 'https' if self.request.is_secure() else 'http',
-            'domain': getattr(settings, 'EMAIL_LINK_DOMAIN', self.request.get_host()),
+            'domain': domain,
         }
         return super().form_valid(form)
