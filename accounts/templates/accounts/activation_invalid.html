@@ -1,11 +1,16 @@
-
-<!-- accounts/templates/accounts/activation_invalid.html -->
-<!doctype html>
-<html lang="en">
-  <head><meta charset="utf-8"><title>Invalid activation link</title></head>
-  <body>
-    <h1>Activation link is invalid or expired</h1>
-    <p>Please request a new activation email or contact support.</p>
-    <p><a href="/accounts/resend-activation/">Resend activation</a> (if implemented)</p>
-  </body>
-</html>
+{% extends "base.html" %}
+{% block title %}Activation Link Invalid{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="card-title mb-3">Invalid Activation Link</h3>
+                <p class="card-text">The activation link is invalid or has expired.</p>
+                <p class="card-text">Please sign up again to receive a new activation email.</p>
+                <a href="{% url 'accounts:signup' %}" class="btn btn-primary mt-3">Sign Up</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

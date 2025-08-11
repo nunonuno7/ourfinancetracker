@@ -44,14 +44,26 @@ def signup(request):
             )
 
             try:
-                send_mail(
-                    'Activate your account',
-                    render_to_string('accounts/emails/account_activation_email.txt', {
+                message = render_to_string(
+                    'accounts/emails/account_activation_email.txt',
+                    {
                         'user': existing_inactive,
                         'activation_link': activation_link,
-                    }),
+                    },
+                )
+                html_message = render_to_string(
+                    'accounts/emails/account_activation_email.html',
+                    {
+                        'user': existing_inactive,
+                        'activation_link': activation_link,
+                    },
+                )
+                send_mail(
+                    'Activate your account',
+                    message,
                     settings.DEFAULT_FROM_EMAIL,
                     [existing_inactive.email],
+                    html_message=html_message,
                 )
             except Exception as e:
                 # Em desenvolvimento, apenas mostra o link de ativação no console
@@ -83,14 +95,26 @@ def signup(request):
         )
 
         try:
-            send_mail(
-                'Activate your account',
-                render_to_string('accounts/emails/account_activation_email.txt', {
+            message = render_to_string(
+                'accounts/emails/account_activation_email.txt',
+                {
                     'user': user,
                     'activation_link': activation_link,
-                }),
+                },
+            )
+            html_message = render_to_string(
+                'accounts/emails/account_activation_email.html',
+                {
+                    'user': user,
+                    'activation_link': activation_link,
+                },
+            )
+            send_mail(
+                'Activate your account',
+                message,
                 settings.DEFAULT_FROM_EMAIL,
                 [user.email],
+                html_message=html_message,
             )
         except Exception as e:
             # Em desenvolvimento, apenas mostra o link de ativação no console

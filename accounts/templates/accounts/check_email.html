@@ -1,2 +1,15 @@
-
-<p>Thanks. Please check your inbox for an activation link. The link will expire after a short period.</p>
+{% extends "base.html" %}
+{% block title %}Check Your Email{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="card-title mb-3">Verify Your Email</h3>
+                <p class="card-text">We've sent an activation link to your inbox. Please click the link to activate your account and start using OurFinanceTracker.</p>
+                <p class="card-text text-muted">If you don't see the email, check your spam folder.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

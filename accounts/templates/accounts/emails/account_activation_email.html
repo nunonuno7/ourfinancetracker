@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial, sans-serif; line-height:1.6; color:#333;">
+    <h2 style="color:#3AB49E;">Welcome to OurFinanceTracker</h2>
+    <p>Hello {{ user.username }},</p>
+    <p>Thanks for signing up. Please confirm your email address by clicking the button below:</p>
+    <p style="text-align:center;">
+      <a href="{{ activation_link }}" style="background-color:#3AB49E;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px;">Activate Account</a>
+    </p>
+    <p>If the button doesn't work, copy and paste the following link into your browser:</p>
+    <p><a href="{{ activation_link }}">{{ activation_link }}</a></p>
+    <p>If you did not create this account, you can safely ignore this email.</p>
+  </body>
+</html>
