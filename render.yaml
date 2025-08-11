@@ -1,0 +1,11 @@
+envVars:
+  - key: DB_NAME
+    value: postgres
+  - key: DB_USER
+    value: ${DB_USER}
+  - key: DB_PASSWORD
+    value: ${DB_PASSWORD}
+  - key: DB_HOST
+    value: ${DB_HOST}
+  - key: DB_PORT
+    value: 6543
