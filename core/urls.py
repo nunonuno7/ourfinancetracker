@@ -1,11 +1,8 @@
 from django.urls import path
-from django.contrib.auth import views as auth_views
-from django.views.generic import CreateView
-from .forms import CustomUserCreationForm
 
 from . import views
 from .views import (
-    # Home & Auth
+    # Home
     HomeView,
     # Transactions
     TransactionCreateView,
