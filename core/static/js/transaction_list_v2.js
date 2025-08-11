@@ -565,7 +565,7 @@ class TransactionManager {
   }
 
   async loadTotals() {
-    console.log("💰 [loadTotals] Iniciando carregamento de totais...");
+    console.log("💰 [loadTotals] Starting totals load...");
     try {
       const filters = this.getFilters();
       
@@ -576,7 +576,7 @@ class TransactionManager {
       delete totalsFilters.sort_field;
       delete totalsFilters.sort_direction;
       
-      console.log("🔍 [loadTotals] Filtros para totais (limpos):", totalsFilters);
+      console.log("🔍 [loadTotals] Filters for totals (cleaned):", totalsFilters);
 
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
@@ -591,29 +591,29 @@ class TransactionManager {
       });
 
       console.log(
-        "📡 [loadTotals] Resposta dos totais recebida, status:",
+        "📡 [loadTotals] Totals response received, status:",
         response.status,
       );
 
       if (!response.ok) throw new Error("Failed to load totals");
 
       const totals = await response.json();
-      console.log("📊 [loadTotals] Totais recebidos:", totals);
+      console.log("📊 [loadTotals] Totals received:", totals);
 
       this.renderTotals(totals);
       console.log(
-        "✅ [loadTotals] Totais carregados e renderizados com sucesso",
+        "✅ [loadTotals] Totals loaded and rendered successfully",
       );
     } catch (error) {
-      console.error("❌ [loadTotals] Erro ao carregar totais:", error);
+      console.error("❌ [loadTotals] Error loading totals:", error);
     }
   }
 
   renderTransactions(data) {
-    console.group("🎨 [renderTransactions] RENDERIZAÇÃO INICIADA");
+    console.group("🎨 [renderTransactions] RENDERING STARTED");
     console.log("Timestamp:", new Date().toISOString());
 
-    console.log("📋 VALIDAÇÃO DOS DADOS:");
+    console.log("📋 DATA VALIDATION:");
     console.table({
       hasData: !!data,
       hasTransactions: !!(data && data.transactions),
@@ -625,14 +625,14 @@ class TransactionManager {
 
     const tbody = $("#transactions-tbody");
     const currentRowCount = tbody.find("tr").length;
-    console.log("🗂️ DOM - Linhas antes de limpar:", currentRowCount);
+    console.log("🗂️ DOM - Rows before clearing:", currentRowCount);
     console.log("🗂️ DOM - Element exists:", tbody.length > 0);
 
     tbody.empty();
-    console.log("🧹 Tabela limpa");
+    console.log("🧹 Table cleared");
 
     if (!data || !data.transactions || data.transactions.length === 0) {
-      console.warn("⚠️ SEM TRANSAÇÕES - Exibindo mensagem vazia");
+      console.warn("⚠️ No transactions - displaying empty message");
       const emptyMessage = `
         <tr>
           <td colspan="9" class="text-center py-4 text-muted">
@@ -648,7 +648,7 @@ class TransactionManager {
       return;
     }
 
-    console.log("✏️ CRIANDO", data.transactions.length, "LINHAS DA TABELA");
+    console.log("✏️ CREATING", data.transactions.length, "TABLE ROWS");
 
     // Performance optimization for large datasets
     const batchSize = 50;
@@ -657,7 +657,7 @@ class TransactionManager {
     if (transactions.length > batchSize) {
       // Render in batches for better performance
       console.log(
-        `📊 [renderTransactions] Renderização em lotes: ${transactions.length} transações, lotes de ${batchSize}`,
+        `📊 [renderTransactions] Batch rendering: ${transactions.length} transactions, batches of ${batchSize}`,
       );
 
       let index = 0;
@@ -671,7 +671,7 @@ class TransactionManager {
             tbody.append(row);
           } catch (error) {
             console.error(
-              `❌ Erro ao criar linha ${index + batchIndex + 1}:`,
+              `❌ Error creating row ${index + batchIndex + 1}:`,
               error,
             );
           }
@@ -703,7 +703,7 @@ class TransactionManager {
             console.log(`✅ Row ${index + 1} added successfully`);
           }
         } catch (error) {
-          console.error(`❌ Erro ao criar linha ${index + 1}:`, error);
+          console.error(`❌ Error creating row ${index + 1}:`, error);
         }
       });
 
@@ -713,7 +713,7 @@ class TransactionManager {
 
   finishRendering(data) {
     const finalRowCount = $("#transactions-tbody tr").length;
-    console.log("📊 DOM - Linhas finais:", finalRowCount);
+    console.log("📊 DOM - Final rows:", finalRowCount);
 
     this.totalRecords = data.total_count;
     this.updatePagination(data.total_count, data.current_page);
@@ -725,7 +725,7 @@ class TransactionManager {
 
     $("#total-count").text(countMessage);
     console.log("📊 Count message set:", countMessage);
-    console.log("✅ RENDERIZAÇÃO CONCLUÍDA");
+    console.log("✅ RENDERING COMPLETED");
     console.groupEnd();
   }
 
@@ -993,15 +993,15 @@ class TransactionManager {
 
   updateFilterOptions(filters) {
     console.log(
-      "🔧 [updateFilterOptions] Atualizando opções dos filtros (estilo Excel)",
+      "🔧 [updateFilterOptions] Updating filter options (Excel-style)",
     );
     if (!filters) {
-      console.warn("⚠️ [updateFilterOptions] Nenhum dado de filtros recebido");
+      console.warn("⚠️ [updateFilterOptions] No filter data received");
       return;
     }
 
     console.log(
-      "📝 [updateFilterOptions] Filtros disponíveis (apenas com transações visíveis):",
+      "📝 [updateFilterOptions] Available filters (only with visible transactions):",
       {
         types: filters.types?.length || 0,
         categories: filters.categories?.length || 0,
@@ -1010,7 +1010,7 @@ class TransactionManager {
       },
     );
 
-    console.log("📋 [updateFilterOptions] Detalhes dos filtros:", {
+    console.log("📋 [updateFilterOptions] Filter details:", {
       typesList: filters.types || [],
       categoriesList: filters.categories || [],
       accountsList: filters.accounts || [],
@@ -1036,7 +1036,7 @@ class TransactionManager {
     this.updateSelectOptions("#filter-period", filters.periods || [], "period");
 
     console.log(
-      "✅ [updateFilterOptions] Opções de filtros atualizadas (estilo Excel)",
+      "✅ [updateFilterOptions] Filter options updated (Excel-style)",
     );
   }
 
@@ -1050,7 +1050,7 @@ class TransactionManager {
     const currentValue = select.val();
 
     console.log(
-      `🔧 [updateSelectOptions] Atualizando ${filterType} - valor atual: '${currentValue}', opções disponíveis:`,
+      `🔧 [updateSelectOptions] Updating ${filterType} - current value: '${currentValue}', available options:`,
       options,
     );
 
@@ -1071,7 +1071,7 @@ class TransactionManager {
     if (currentValue && !options.includes(currentValue)) {
       select.val("");
       console.log(
-        `🔄 [updateSelectOptions] Filtro ${filterType} resetado - valor '${currentValue}' não existe nos dados filtrados (estilo Excel)`,
+        `🔄 [updateSelectOptions] Filter ${filterType} reset - value '${currentValue}' not present in filtered data (Excel-style)`,
       );
 
       // Trigger change event to update other filters
@@ -1083,45 +1083,45 @@ class TransactionManager {
       }, 100);
     } else if (currentValue && options.includes(currentValue)) {
       console.log(
-        `✅ [updateSelectOptions] Filtro ${filterType} mantido - valor '${currentValue}' existe nos dados filtrados`,
+        `✅ [updateSelectOptions] Filter ${filterType} kept - value '${currentValue}' exists in filtered data`,
       );
     }
 
     console.log(
-      `📋 [updateSelectOptions] ${filterType}: ${options.length} opções disponíveis (estilo Excel)`,
+      `📋 [updateSelectOptions] ${filterType}: ${options.length} options available (Excel-style)`,
     );
   }
 
   changePageSize(newSize) {
-    console.log(`📄 [changePageSize] Alterando page size para: ${newSize}`);
+    console.log(`📄 [changePageSize] Changing page size to: ${newSize}`);
 
     if (newSize === "all") {
-      // Para "all", usar um número muito alto mas limitado por segurança
+      // For "all", use a very high number but limit for safety
       this.pageSize = Math.min(
         this.totalRecords || this.maxPageSize,
         this.maxPageSize,
       );
       console.log(
-        `📄 [changePageSize] Page size "all" definido como: ${this.pageSize}`,
+        `📄 [changePageSize] Page size "all" set to: ${this.pageSize}`,
       );
     } else {
       this.pageSize = parseInt(newSize);
-      console.log(`📄 [changePageSize] Page size numérico: ${this.pageSize}`);
+      console.log(`📄 [changePageSize] Numeric page size: ${this.pageSize}`);
     }
 
-    // Reset para primeira página quando mudar o tamanho
+    // Reset to first page when changing size
     this.currentPage = 1;
 
-    // Limpar cache porque mudou a paginação
+    // Clear cache because pagination changed
     this.cache.clear();
     console.log(
-      `📄 [changePageSize] Cache limpo devido a mudança de page size`,
+      `📄 [changePageSize] Cache cleared due to page size change`,
     );
 
-    // Recarregar transações
+    // Reload transactions
     this.loadTransactions();
 
-    // Guardar preferência no localStorage
+    // Save preference to localStorage
     if (newSize === "all") {
       localStorage.setItem("transaction_page_size", "all");
     } else {
@@ -1139,7 +1139,7 @@ class TransactionManager {
       `Page ${currentPage} of ${totalPages} (${totalRecords} total)`,
     );
 
-    // Se estamos mostrando todas as transações, não mostrar paginação
+    // If showing all transactions, hide pagination
     if (this.pageSize >= totalRecords) {
       $("#pagination-nav").hide();
       return;
@@ -1219,7 +1219,7 @@ class TransactionManager {
     $("#select-all").toggle(enabled);
     $("#bulk-actions").toggleClass("d-none", !enabled);
 
-    // Mostrar/ocultar a coluna inteira do checkbox no cabeçalho
+    // Show/hide the entire checkbox column in the header
     const checkboxHeader = $("#transactions-table thead th:first-child");
     if (enabled) {
       checkboxHeader.css("display", "");
@@ -1227,7 +1227,7 @@ class TransactionManager {
       checkboxHeader.css("display", "none");
     }
 
-    // Mostrar/ocultar todas as células da primeira coluna no tbody
+    // Show/hide all cells of the first column in the tbody
     $("#transactions-tbody tr").each(function () {
       const firstCell = $(this).find("td:first-child");
       if (enabled) {
@@ -1744,7 +1744,7 @@ function syncPeriodFields(tr) {
   }
 
   console.log(
-    `🔄 syncPeriodFields: Data ${dateInput.value} → Período ${yyyy}-${mm} (${monthName} ${yyyy})`,
+    `🔄 syncPeriodFields: Date ${dateInput.value} → Period ${yyyy}-${mm} (${monthName} ${yyyy})`,
   );
 }
 

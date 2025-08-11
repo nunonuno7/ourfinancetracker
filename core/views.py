@@ -325,7 +325,7 @@ def account_balances_pivot_json(request):
 # ==============================================================================
 
 class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
-    """Criar nova transação com validação de segurança."""
+    """Create a new transaction with security validation."""
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
@@ -345,7 +345,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
         if self.request.headers.get("HX-Request") == "true":
             return JsonResponse({"success": True, "reload_needed": True})
 
-        messages.success(self.request, "Transação criada com sucesso!")
+        messages.success(self.request, "Transaction created successfully!")
         return redirect(self.get_success_url())
 
     def form_invalid(self, form):
@@ -367,7 +367,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
         return context
 
 class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
-    """Atualizar transação existente com validação de proprietário."""
+    """Update an existing transaction with owner validation."""
     model = Transaction
     form_class = TransactionForm
     template_name = "core/transaction_form.html"
@@ -400,7 +400,7 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
         # Adicionar flag para JavaScript saber que deve recarregar
         self.request.session['transaction_changed'] = True
 
-        messages.success(self.request, "Transação atualizada com sucesso!")
+        messages.success(self.request, "Transaction updated successfully!")
 
         response = super().form_valid(form)
         if self.request.headers.get("HX-Request") == "true":
@@ -417,7 +417,7 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
 
 
 class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
-    """Eliminar transação com validação de proprietário."""
+    """Delete a transaction with owner validation."""
     model = Transaction
     template_name = "core/confirms/transaction_confirm_delete.html"
     success_url = reverse_lazy("transaction_list_v2")
@@ -436,10 +436,10 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
             return JsonResponse({
                 'success': True,
-                'message': 'Transação eliminada com sucesso!'
+                'message': 'Transaction deleted successfully!'
             })
 
-        messages.success(request, "Transação eliminada com sucesso!")
+        messages.success(request, "Transaction deleted successfully!")
         return response
 
     def post(self, request, *args, **kwargs):

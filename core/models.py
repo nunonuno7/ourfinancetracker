@@ -303,9 +303,9 @@ class Transaction(models.Model):
     )
 
     notes = models.TextField(blank=True)
-    is_estimated = models.BooleanField(default=False, help_text="Transação estimada/calculada automaticamente")
-    is_system = models.BooleanField(default=False, db_index=True, help_text="Transação automática do sistema (não afeta saldos das contas)")
-    editable = models.BooleanField(default=True, help_text="Se False, transação é só de leitura")
+    is_estimated = models.BooleanField(default=False, help_text="Estimated/automatically calculated transaction")
+    is_system = models.BooleanField(default=False, db_index=True, help_text="System automatic transaction (does not affect account balances)")
+    editable = models.BooleanField(default=True, help_text="If False, transaction is read-only")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -546,7 +546,7 @@ class Tag(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="tags",
-        help_text="(Opcional) Categoria associada a esta tag"
+        help_text="(Optional) Category associated with this tag"
     )
 
     class Meta:
