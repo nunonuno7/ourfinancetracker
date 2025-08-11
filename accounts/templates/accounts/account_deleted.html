@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Account deleted{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <h1>Account deleted</h1>
+  <p>Your account and all associated data have been permanently removed. This action cannot be undone.</p>
+  <a href="{% url 'home' %}" class="btn btn-primary">Back to Home</a>
+</div>
+{% endblock %}

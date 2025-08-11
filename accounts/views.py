@@ -7,8 +7,10 @@ from django.utils.encoding import force_bytes
 from django.shortcuts import render, redirect
 from django.urls import reverse, reverse_lazy
 from django.core.mail import send_mail
-from django.contrib.auth import login
+from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.views import PasswordResetView
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views import View
 from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
@@ -173,3 +175,26 @@ class OFTPasswordResetView(PasswordResetView):
         form.domain_override = 'www.ourfinancetracker.com'
         form.use_https = True
         return form
+
+
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
+def profile(request):
+    return render(request, "accounts/profile.html")
+
+
+class DeleteAccountView(LoginRequiredMixin, View):
+    def post(self, request):
+        password = request.POST.get("password", "")
+        confirmation = request.POST.get("confirmation", "")
+        user = request.user
+        if confirmation != "DELETE" or not authenticate(username=user.username, password=password):
+            referer = request.META.get("HTTP_REFERER") or reverse("home")
+            separator = "&" if "?" in referer else "?"
+            return redirect(f"{referer}{separator}delete_error=1")
+        with transaction.atomic():
+            user.delete()
+            logout(request)
+        return redirect(reverse("accounts:account_deleted"))
