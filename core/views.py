@@ -1088,14 +1088,14 @@ def import_transactions_xlsx(request):
 
 @login_required
 def import_transactions_template(request):
-    """Download Excel template for transaction import."""
-    # Create sample data
+    """Download Excel template for transaction import using Savings and Investments accounts."""
+    # Create sample data using supported account types
     data = {
         'Date': ['2025-01-01', '2025-01-02', '2025-01-03'],
         'Type': ['Income', 'Expense', 'Investment'],
         'Amount': [1000.00, -50.00, -200.00],
         'Category': ['Salary', 'Food', 'Stocks'],
-        'Account': ['Checking', 'Cash', 'Investment'],
+        'Account': ['Savings', 'Savings', 'Investments'],
         'Tags': ['monthly', 'daily', 'monthly'],
         'Notes': ['Monthly salary', 'Lunch', 'ETF purchase']
     }
@@ -2862,11 +2862,11 @@ def account_balance_import_xlsx(request):
 
 @login_required
 def account_balance_template_xlsx(request):
-    """Download template for account balance import."""
+    """Download template for account balance import using Savings and Investments accounts."""
     data = {
         'Year': [2025, 2025],
-        'Month': [1, 1], 
-        'Account': ['Savings', 'Investment Account'],
+        'Month': [1, 1],
+        'Account': ['Savings', 'Investments'],
         'Balance': [1000.00, 5000.00]
     }
     df = pd.DataFrame(data)
