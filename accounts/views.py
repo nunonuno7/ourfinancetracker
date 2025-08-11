@@ -56,8 +56,8 @@ def signup(request):
             except Exception as e:
                 # Em desenvolvimento, apenas mostra o link de ativação no console
                 if settings.DEBUG:
-                    print(f"📧 Email sending failed in development: {e}")
-                    print(f"🔗 Activation link: {activation_link}")
+                    logger.exception("📧 Email sending failed in development: %s", e)
+                    logger.warning("🔗 Activation link: %s", activation_link)
                 else:
                     raise
 
@@ -95,8 +95,8 @@ def signup(request):
         except Exception as e:
             # Em desenvolvimento, apenas mostra o link de ativação no console
             if settings.DEBUG:
-                print(f"📧 Email sending failed in development: {e}")
-                print(f"🔗 Activation link: {activation_link}")
+                logger.exception("📧 Email sending failed in development: %s", e)
+                logger.warning("🔗 Activation link: %s", activation_link)
             else:
                 raise
 
