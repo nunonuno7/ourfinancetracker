@@ -7,6 +7,8 @@ from django.conf import settings
 from django.db.models import QuerySet
 from datetime import date, timedelta
 
+from core.utils.cache_helpers import _clear_specific_cache_keys
+
 logger = logging.getLogger(__name__)
 
 class CacheManager:
@@ -41,17 +43,30 @@ class CacheManager:
         )
     
     def invalidate_user_cache(self, user_id: int, cache_types: List[str] = None):
-        """Invalida cache de um utilizador por tipo"""
+        """Invalida cache de um utilizador removendo efetivamente as chaves.
+
+        Usa correspondência por padrão quando o backend é Redis e recorre ao
+        utilitário `_clear_specific_cache_keys` caso contrário.
+        """
         if cache_types is None:
             cache_types = ["transactions", "balances", "dashboard", "kpis"]
-        
-        # Em produção, usaria padrões mais específicos
-        # Por agora, invalidamos todas as chaves relacionadas
+
+        secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:10]
+
         for cache_type in cache_types:
             pattern_key = f"{self.cache_prefix}:*{user_id}*{cache_type}*"
-            # Django não suporta wildcard delete nativamente
-            # Implementação simples para desenvolvimento
-            logger.info(f"Invalidating cache pattern: {pattern_key}")
+            try:
+                from django.core.cache.backends.redis import RedisCache
+
+                if isinstance(cache, RedisCache):
+                    client = cache._cache.get_client()
+                    keys = client.keys(pattern_key)
+                    if keys:
+                        client.delete(*keys)
+                else:
+                    _clear_specific_cache_keys(user_id, secret_hash)
+            except Exception:
+                _clear_specific_cache_keys(user_id, secret_hash)
     
     def get_or_set(self, key: str, callable_func, timeout: int = None) -> Any:
         """Get or set com logging melhorado"""
