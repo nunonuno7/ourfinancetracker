@@ -250,7 +250,7 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountMenu">
               <li><a class="dropdown-item" href="{% url 'accounts:profile' %}">Profile</a></li>
-              <li><a class="dropdown-item" href="{% url 'transaction_export_xlsx' %}">Export data</a></li>
+              <li><a class="dropdown-item" href="{% url 'data_export_xlsx' %}">Export data</a></li>
               {% if request.user.is_staff %}
               <li><a class="dropdown-item" href="/admin/">Admin</a></li>
               {% endif %}
@@ -314,7 +314,7 @@
           <input class="form-check-input" type="checkbox" id="confirmDeleteCheckbox">
           <label class="form-check-label" for="confirmDeleteCheckbox">I understand this action is permanent and cannot be undone.</label>
         </div>
-        <p class="mt-3"><a href="{% url 'transaction_export_xlsx' %}">Export my data first</a></p>
+        <p class="mt-3"><a href="{% url 'data_export_xlsx' %}">Export my data first</a></p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" autofocus>Cancel</button>

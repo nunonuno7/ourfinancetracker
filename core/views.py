@@ -1151,6 +1151,96 @@ def export_transactions_xlsx(request):
 
 
 @login_required
+def export_data_xlsx(request):
+    """Export both transactions and account balances to a single Excel file."""
+    user_id = request.user.id
+
+    # Date range for transactions
+    start_date = parse_safe_date(request.GET.get("date_start"), date(date.today().year, 1, 1))
+    end_date = parse_safe_date(request.GET.get("date_end"), date.today())
+
+    # Fetch transactions
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT tx.date, tx.type, tx.amount,
+                   COALESCE(cat.name, '') AS category,
+                   COALESCE(acc.name, '') AS account,
+                   COALESCE(STRING_AGG(tag.name, ', '), '') AS tags,
+                   tx.notes
+            FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
+            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
+            WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
+            GROUP BY tx.id, tx.date, tx.type, tx.amount, cat.name, acc.name, tx.notes
+            ORDER BY tx.date DESC
+            """,
+            [user_id, start_date, end_date],
+        )
+        tx_rows = cursor.fetchall()
+
+    tx_df = pd.DataFrame(
+        tx_rows,
+        columns=["Date", "Type", "Amount", "Category", "Account", "Tags", "Notes"],
+    )
+
+    # Fetch account balances for all periods
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                dp.year,
+                dp.month,
+                CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
+                a.name as account_name,
+                at.name as account_type,
+                cur.code as currency,
+                ab.reported_balance
+            FROM core_accountbalance ab
+            INNER JOIN core_account a ON ab.account_id = a.id
+            INNER JOIN core_accounttype at ON a.account_type_id = at.id
+            INNER JOIN core_currency cur ON a.currency_id = cur.id
+            INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
+            WHERE a.user_id = %s
+            ORDER BY dp.year DESC, dp.month DESC, at.name, a.name;
+            """,
+            [user_id],
+        )
+        bal_rows = cursor.fetchall()
+
+    bal_df = pd.DataFrame(
+        bal_rows,
+        columns=[
+            "Year",
+            "Month",
+            "Period",
+            "Account_Name",
+            "Account_Type",
+            "Currency",
+            "Balance",
+        ],
+    )
+
+    # Write both datasets to Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        tx_df.to_excel(writer, sheet_name="Transactions", index=False)
+        bal_df.to_excel(writer, sheet_name="Account_Balances", index=False)
+
+    output.seek(0)
+
+    filename = f"data_export_{start_date}_{end_date}.xlsx"
+    response = HttpResponse(
+        output.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
 def transaction_clear_cache(request):
     """Clear transaction cache for current user."""
     try:
