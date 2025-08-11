@@ -8,15 +8,21 @@ from django.shortcuts import render, redirect
 from django.urls import reverse, reverse_lazy
 from django.core.mail import send_mail
 from django.contrib.auth import login, logout, authenticate
-from django.contrib.auth.views import PasswordResetView
+from django.contrib.auth.views import PasswordResetView, LoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
+from django.core.cache import cache
+from django.utils import timezone
+from datetime import timedelta
 from .tokens import account_activation_token
 
 logger = logging.getLogger(__name__)
+
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_TIMEOUT = 600  # 10 minutes in seconds
 
 def signup(request):
     if request.method == "POST":
@@ -158,6 +164,45 @@ def activate(request, uidb64, token):
 
     logger.info("Activation failed for uidb64=%s", uidb64)
     return render(request, "accounts/activation_invalid.html", status=400)
+
+
+class CustomLoginView(LoginView):
+    """Login view that locks an account after too many failed attempts."""
+
+    template_name = "accounts/login.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        username = request.POST.get("username")
+        if username:
+            lock_key = f"lockout_{username}"
+            if cache.get(lock_key):
+                messages.error(
+                    request,
+                    "Account locked: too many login attempts. Please try again later.",
+                )
+                return self.render_to_response(self.get_context_data())
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        username = self.request.POST.get("username")
+        if username:
+            attempts_key = f"failed_{username}"
+            lock_key = f"lockout_{username}"
+            attempts = cache.get(attempts_key, 0) + 1
+            cache.set(attempts_key, attempts, LOCKOUT_TIMEOUT)
+            if attempts >= MAX_FAILED_ATTEMPTS:
+                cache.set(lock_key, True, LOCKOUT_TIMEOUT)
+                messages.error(
+                    self.request,
+                    "Account locked: too many login attempts. Please try again later.",
+                )
+        return super().form_invalid(form)
+
+    def form_valid(self, form):
+        username = form.get_user().get_username()
+        cache.delete(f"failed_{username}")
+        cache.delete(f"lockout_{username}")
+        return super().form_valid(form)
 
 
 class OFTPasswordResetView(PasswordResetView):
