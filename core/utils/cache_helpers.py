@@ -84,7 +84,7 @@ def clear_tx_cache(user_id: int) -> None:
 
     # Patterns de cache a limpar
     cache_patterns = [
-        f"ourfinance:tx_cache_user_{user_id}_*_*:{secret_hash}",
+        f"tx_cache_user_{user_id}_*",
         f"ourfinance:account_balance_user_{user_id}_*:{secret_hash}",
         f"ourfinance:category_cache_user_{user_id}_*:{secret_hash}",
     ]
@@ -111,35 +111,37 @@ def clear_tx_cache(user_id: int) -> None:
 def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
     """
     Limpa chaves específicas de cache quando Redis não está disponível.
-    
+
     Args:
         user_id: ID do utilizador
-        secret_hash: Hash da SECRET_KEY
+        secret_hash: Hash derivado da ``SECRET_KEY`` para outras chaves.
     """
     # Lista de chaves específicas a limpar
     cache_keys_to_clear = []
-    
+
     # Gerar chaves para os últimos 12 meses
     from datetime import date, timedelta
     today = date.today()
-    
+
     for i in range(12):
         month_date = today - timedelta(days=i*30)
         start_date = month_date.replace(day=1)
         end_date = month_date
-        
-        # Chaves de transações
-        tx_key = f"ourfinance:tx_cache_user_{user_id}_{start_date}_{end_date}:{secret_hash}"
+
+        # Chaves de transações usam hash dedicado com SECRET_KEY + user + datas
+        raw = f"{settings.SECRET_KEY}:{user_id}:{start_date}:{end_date}".encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        tx_key = f"tx_cache_user_{user_id}_{start_date}_{end_date}_{digest}"
         cache_keys_to_clear.append(tx_key)
-        
+
         # Chaves de saldos
         balance_key = f"ourfinance:account_balance_user_{user_id}_{start_date}:{secret_hash}"
         cache_keys_to_clear.append(balance_key)
-        
+
         # Chaves de categorias
         category_key = f"ourfinance:category_cache_user_{user_id}_{start_date}:{secret_hash}"
         cache_keys_to_clear.append(category_key)
-    
+
     # Limpar todas as chaves
     for key in cache_keys_to_clear:
         try:
@@ -160,5 +162,6 @@ def get_cache_key_for_transactions(user_id: int, start_date: str, end_date: str)
     Returns:
         Chave de cache segura
     """
-    base_key = f"tx_cache_user_{user_id}_{start_date}_{end_date}"
-    return make_key(base_key, key_prefix="ourfinance")
+    raw = f"{settings.SECRET_KEY}:{user_id}:{start_date}:{end_date}".encode()
+    digest = hashlib.sha256(raw).hexdigest()
+    return f"tx_cache_user_{user_id}_{start_date}_{end_date}_{digest}"
