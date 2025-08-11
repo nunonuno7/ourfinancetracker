@@ -66,7 +66,7 @@
                        for="type-{{ value }}"
                        data-bs-toggle="tooltip"
                        data-bs-placement="top"
-                       title="{% if value == 'EX' %}Gasto (ex: compras, contas, etc.){% elif value == 'IN' %}Receita (salário, prémios, etc.){% elif value == 'IV' %}Investimento (ações, fundos...){% elif value == 'TR' %}Transferência entre contas tuas{% endif %}">
+                       title="{% if value == 'EX' %}Expense (e.g. shopping, bills, etc.){% elif value == 'IN' %}Income (salary, bonuses, etc.){% elif value == 'IV' %}Investment (shares, funds, etc.){% elif value == 'TR' %}Transfer between your accounts{% endif %}">
                   <div class="fs-6">
                     {% if value == 'EX' %}💸{% elif value == 'IN' %}💰{% elif value == 'IV' %}📈{% elif value == 'TR' %}🔁{% endif %}
                   </div>

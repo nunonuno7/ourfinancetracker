@@ -555,8 +555,8 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
 
 class TransactionImportForm(forms.Form):
     file = forms.FileField(
-        label="Ficheiro Excel",
-        help_text="Seleciona um ficheiro .xlsx com as transações",
+        label="Excel File",
+        help_text="Select a .xlsx file with the transactions",
         widget=forms.ClearableFileInput(attrs={
             "class": "form-control"
         })

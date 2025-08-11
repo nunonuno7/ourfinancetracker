@@ -1,38 +1,38 @@
 # ourfinancetracker
 
-> **Aplicação web de controlo financeiro pessoal**
+> **Personal finance management web application**
 
-Este repositório contém o código‑fonte do **ourfinancetracker**, uma aplicação em Django que permite aos utilizadores registar saldos mensais, rendimentos e despesas, obtendo assim uma visão consolidada da sua saúde financeira, sem dependência de APIs bancárias externas.
+This repository contains the source code for **ourfinancetracker**, a Django application that allows users to record monthly balances, income, and expenses, giving them a consolidated view of their financial health without relying on external banking APIs.
 
-## ✨ Funcionalidades principais
+## ✨ Key features
 
-- Dashboard mensal com receitas, despesas estimadas e saldos
-- Contas bancárias e de investimento ilimitadas
-- Categorias personalizáveis por utilizador
-- Etiquetas (tags) reutilizáveis para categorizar transações
-- Estimativa automática de despesas com base no saldo
-- Multi-moeda com suporte a diferentes tipos de contas
-- Relatórios baseados em períodos mensais
-- Interface responsiva com formulários dinâmicos
+- Monthly dashboard with income, estimated expenses, and balances
+- Unlimited bank and investment accounts
+- Customisable categories per user
+- Reusable tags to categorise transactions
+- Automatic expense estimates based on balance
+- Multi-currency with support for different account types
+- Reports based on monthly periods
+- Responsive interface with dynamic forms
 
-## 🏗️ Tech Stack
+## 🏗️ Tech stack
 
-| Camada        | Tecnologia                                  |
-| ------------- | ------------------------------------------- |
-| Backend       | Django 5.2.1 · Python 3.12                  |
-| Base de dados | PostgreSQL (via Supabase)                   |
-| Frontend      | Django Templates (fase inicial)             |
-| Deploy        | Render.com (config via `render.yaml`)       |
-| Dev Tools     | pip · pre‑commit · GitHub Actions           |
+| Layer         | Technology                                |
+| ------------- | ----------------------------------------- |
+| Backend       | Django 5.2.1 · Python 3.12                |
+| Database      | PostgreSQL (via Supabase)                 |
+| Frontend      | Django Templates (initial phase)          |
+| Deployment    | Render.com (configured via `render.yaml`) |
+| Dev Tools     | pip · pre-commit · GitHub Actions         |
 
-## 📐 Modelo de Dados
+## 📐 Data model
 
-### Diagrama ER
+### ER diagram
 
 ```mermaid
 erDiagram
 
-%% ---------- AUTENTICAÇÃO ----------
+%% ---------- AUTHENTICATION ----------
 auth_user||--o{auth_user_groups: has
 auth_user||--o{auth_user_user_permissions: has
 auth_group||--o{auth_group_permissions: has
@@ -54,45 +54,45 @@ core_account}o--||core_currency: in_currency
 core_accountbalance}o--||core_account: for_account
 core_accountbalance}o--||date_period: for_period
 
-core_transaction}o--||core_category: categorized_as
+core_transaction}o--||core_category: categorised_as
 core_transaction}o--||date_period: for_period
 
 core_transaction_tags}o--||core_transaction: tags_txn
 core_transaction_tags}o--||core_tag: with_tag
 ```
 
-## 🚀 Como começar
+## 🚀 Getting started
 
 ```bash
-# Clonar o repositório
+# Clone the repository
 git clone https://github.com/nunonuno7/ourfinancetracker.git
 cd ourfinancetracker
 
-# Instalar dependências
+# Install dependencies
 pip install -r requirements.txt
 
-# Copiar e configurar variáveis de ambiente
+# Copy and configure environment variables
 cp .env.example .env
-# editar valores conforme necessário
+# edit values as needed
 
-# Criar base de dados e aplicar migrações
+# Create the database and apply migrations
 python manage.py migrate
 
-# Iniciar servidor local
+# Start the local server
 python manage.py runserver
 ```
 
-## 🌐 Domínios adicionais
+## 🌐 Additional domains
 
-Para autorizar novos domínios no `ALLOWED_HOSTS` ou na lista de origens confiáveis do CSRF, defina variáveis de ambiente adicionais:
+To authorise new domains in `ALLOWED_HOSTS` or the list of CSRF trusted origins, set additional environment variables:
 
 ```bash
-EXTRA_ALLOWED_HOSTS=exemplo.com,sub.dominio.com
-EXTRA_CSRF_TRUSTED_ORIGINS=https://exemplo.com,https://sub.dominio.com
+EXTRA_ALLOWED_HOSTS=example.com,sub.domain.com
+EXTRA_CSRF_TRUSTED_ORIGINS=https://example.com,https://sub.domain.com
 ```
 
-Use valores separados por vírgulas. No caso de `EXTRA_CSRF_TRUSTED_ORIGINS`, cada origem deve incluir o esquema (`http://` ou `https://`).
+Use comma-separated values. For `EXTRA_CSRF_TRUSTED_ORIGINS`, each origin must include the scheme (`http://` or `https://`).
 
-## 📄 Licença
+## 📄 Licence
 
-Distribuído sob a licença MIT. Ver ficheiro `LICENSE` para mais detalhes.
+Distributed under the MIT licence. See the `LICENSE` file for more details.
