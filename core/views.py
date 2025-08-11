@@ -17,6 +17,7 @@ PRINCIPAIS CORREÇÕES IMPLEMENTADAS:
 
 import json
 import logging
+import hashlib
 from calendar import monthrange
 from datetime import date, datetime
 from decimal import Decimal
@@ -117,9 +118,14 @@ class HomeView(TemplateView):
 
 def _cache_key(user_id: int, start: date, end: date) -> str:
     """
-    Gera cache key segura para prevenir colisões.
+    Gera uma chave de cache segura combinando ``SECRET_KEY``, ``user_id``,
+    ``start`` e ``end`` através de um hash ``SHA256``. Desta forma,
+    diferentes utilizadores ou intervalos de datas produzem chaves
+    exclusivamente ligadas ao ambiente atual.
     """
-    return f"tx_cache_user_{user_id}_{start}_{end}"
+    raw = f"{settings.SECRET_KEY}:{user_id}:{start}:{end}".encode()
+    digest = hashlib.sha256(raw).hexdigest()
+    return f"tx_cache_user_{user_id}_{start}_{end}_{digest}"
 
 
 def parse_safe_date(value: str | None, fallback: date) -> date:
