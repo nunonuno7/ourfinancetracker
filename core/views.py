@@ -563,8 +563,8 @@ def transactions_json(request):
             df_for_type = df_for_type[(df_for_type["year"] == y) & (df_for_type["month"] == m)]
             df_for_category = df_for_category[(df_for_category["year"] == y) & (df_for_category["month"] == m)]
             df_for_account = df_for_account[(df_for_account["year"] == y) & (df_for_account["month"] == m)]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Invalid period value '{period}': {e}")
 
     if search:
         df = df[
@@ -636,8 +636,8 @@ def transactions_json(request):
     if sort_col in df.columns:
         try:
             df.sort_values(by=sort_col, ascending=ascending, inplace=True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to sort by '{sort_col}': {e}")
 
     # Formatar montantes
     df["amount"] = df.apply(
@@ -1431,14 +1431,14 @@ def transactions_json_v2(request):
                     try:
                         min_val = float(filter_value)
                         temp_df = temp_df[temp_df["amount"] >= min_val]
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid amount_min filter value '{filter_value}': {e}")
                 elif filter_name == "amount_max":
                     try:
                         max_val = float(filter_value)
                         temp_df = temp_df[temp_df["amount"] <= max_val]
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid amount_max filter value '{filter_value}': {e}")
                 elif filter_name == "tags":
                     tag_list = [t.strip().lower() for t in filter_value.split(",") if t.strip()]
                     if tag_list:
@@ -1587,8 +1587,8 @@ def transactions_totals_v2(request):
             year, month = data.get("period").strip().split("-")
             where_conditions.append("dp.year = %s AND dp.month = %s")
             params.extend([int(year), int(month)])
-        except (ValueError, AttributeError):
-            pass
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Invalid period value '{data.get('period')}': {e}")
 
     # Amount range filters
     if data.get("amount_min", "").strip():
@@ -1596,16 +1596,16 @@ def transactions_totals_v2(request):
             min_val = float(data.get("amount_min").strip())
             where_conditions.append("tx.amount >= %s")
             params.append(min_val)
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid amount_min value '{data.get('amount_min')}': {e}")
 
     if data.get("amount_max", "").strip():
         try:
             max_val = float(data.get("amount_max").strip())
             where_conditions.append("tx.amount <= %s")
             params.append(max_val)
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid amount_max value '{data.get('amount_max')}': {e}")
 
     # Search filter
     if data.get("search", "").strip():
