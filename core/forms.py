@@ -428,6 +428,8 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, user=user, **kwargs)
+        for name in ALLOWED_ACCOUNT_TYPE_NAMES:
+            AccountType.objects.get_or_create(name=name)
 
         self.fields["account_type"].queryset = AccountType.objects.filter(name__in=ALLOWED_ACCOUNT_TYPE_NAMES).order_by("name")
         self.fields["currency"].queryset = Currency.objects.order_by("code")
