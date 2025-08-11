@@ -85,6 +85,7 @@ def clear_tx_cache(user_id: int) -> None:
     # Patterns de cache a limpar
     cache_patterns = [
         f"tx_cache_user_{user_id}_*",
+        f"tx_v2_{user_id}_*",
         f"ourfinance:account_balance_user_{user_id}_*:{secret_hash}",
         f"ourfinance:category_cache_user_{user_id}_*:{secret_hash}",
     ]
@@ -133,6 +134,14 @@ def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
         digest = hashlib.sha256(raw).hexdigest()
         tx_key = f"tx_cache_user_{user_id}_{start_date}_{end_date}_{digest}"
         cache_keys_to_clear.append(tx_key)
+
+        # Chaves da API v2 (sem hash, com ordenação)
+        for sort_field in ["date", "amount", "type"]:
+            for sort_dir in ["asc", "desc"]:
+                tx_v2_key = (
+                    f"tx_v2_{user_id}_{start_date}_{end_date}_{sort_field}_{sort_dir}"
+                )
+                cache_keys_to_clear.append(tx_v2_key)
 
         # Chaves de saldos
         balance_key = f"ourfinance:account_balance_user_{user_id}_{start_date}:{secret_hash}"
