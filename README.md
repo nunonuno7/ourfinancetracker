@@ -23,7 +23,7 @@ Este repositório contém o código‑fonte do **ourfinancetracker**, uma aplica
 | Base de dados | PostgreSQL (via Supabase)                   |
 | Frontend      | Django Templates (fase inicial)             |
 | Deploy        | Render.com (config via `render.yaml`)       |
-| Dev Tools     | Poetry · pre‑commit · GitHub Actions        |
+| Dev Tools     | pip · pre‑commit · GitHub Actions           |
 
 ## 📐 Modelo de Dados
 
@@ -69,17 +69,17 @@ git clone https://github.com/nunonuno7/ourfinancetracker.git
 cd ourfinancetracker
 
 # Instalar dependências
-poetry install
+pip install -r requirements.txt
 
 # Copiar e configurar variáveis de ambiente
 cp .env.example .env
 # editar valores conforme necessário
 
 # Criar base de dados e aplicar migrações
-poetry run python manage.py migrate
+python manage.py migrate
 
 # Iniciar servidor local
-poetry run python manage.py runserver
+python manage.py runserver
 ```
 
 ## 🌐 Domínios adicionais
