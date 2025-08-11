@@ -9,6 +9,7 @@ from datetime import date
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 
 import logging
@@ -38,6 +39,8 @@ def get_default_account_type():
     AccountType = apps.get_model("core", "AccountType")
     obj, _ = AccountType.objects.get_or_create(name="Savings")
     return obj
+
+ALLOWED_ACCOUNT_TYPE_NAMES = ("Investments", "Savings")
 
 
 # --------------------------------------------------------------------------------
@@ -113,6 +116,11 @@ class Account(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        if self.account_type and self.account_type.name not in ALLOWED_ACCOUNT_TYPE_NAMES:
+            raise ValidationError({'account_type': _('Only Investments and Savings account types are allowed.')})
 
     # CORRIGIDO: Account.save() com tratamento de exceções
     def save(self, *args, **kwargs):
