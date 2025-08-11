@@ -185,16 +185,29 @@ def profile(request):
     return render(request, "accounts/profile.html")
 
 
-class DeleteAccountView(LoginRequiredMixin, View):
+class DeleteAccountView(View):
+    """Handle account deletion and show a success page."""
+
+    def get(self, request):
+        """Render a confirmation/success page even on direct access."""
+        return render(request, "accounts/account_deleted.html")
+
     def post(self, request):
+        if not request.user.is_authenticated:
+            login_url = f"{reverse('accounts:login')}?next={reverse('accounts:delete_account')}"
+            return redirect(login_url)
+
         password = request.POST.get("password", "")
         confirmation = request.POST.get("confirmation", "")
         user = request.user
+
         if confirmation != "DELETE" or not authenticate(username=user.username, password=password):
             referer = request.META.get("HTTP_REFERER") or reverse("home")
             separator = "&" if "?" in referer else "?"
             return redirect(f"{referer}{separator}delete_error=1")
+
         with transaction.atomic():
             user.delete()
             logout(request)
-        return redirect(reverse("accounts:account_deleted"))
+
+        return render(request, "accounts/account_deleted.html")
