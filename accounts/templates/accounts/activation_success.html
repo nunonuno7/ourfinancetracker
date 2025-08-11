@@ -1,11 +1,15 @@
-
-<!-- accounts/templates/accounts/activation_success.html -->
-<!doctype html>
-<html lang="en">
-  <head><meta charset="utf-8"><title>Account Activated</title></head>
-  <body>
-    <h1>Account activated ✅</h1>
-    <p>Your account is now active and you are signed in.</p>
-    <p><a href="/">Go to dashboard</a></p>
-  </body>
-</html>
+{% extends "base.html" %}
+{% block title %}Account Activated{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="card-title mb-3">Account Activated ✅</h3>
+                <p class="card-text">Your account is now active and you are signed in.</p>
+                <a href="{% url 'dashboard' %}" class="btn btn-primary mt-3">Go to dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
