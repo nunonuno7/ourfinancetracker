@@ -246,7 +246,10 @@ class DeleteAccountView(View):
         confirmation = request.POST.get("confirmation", "")
         user = request.user
 
-        if confirmation != "DELETE" or not authenticate(username=user.username, password=password):
+        # AxesStandaloneBackend requires the request parameter; without it
+        # Django raises a 500 error when this view attempts to authenticate
+        # the user before deletion.
+        if confirmation != "DELETE" or not authenticate(request, username=user.username, password=password):
             referer = request.META.get("HTTP_REFERER") or reverse("home")
             separator = "&" if "?" in referer else "?"
             return redirect(f"{referer}{separator}delete_error=1")
