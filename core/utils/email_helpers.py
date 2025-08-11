@@ -4,8 +4,9 @@ Email helper utilities for ourfinancetracker
 """
 
 import logging
+import smtplib
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import BadHeaderError, send_mail
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.encoding import force_bytes
@@ -55,7 +56,7 @@ def send_template_email(subject, template_name, context, recipient_list,
             logger.error(f"Failed to send email to {recipient_list}")
             return False
             
-    except Exception as e:
+    except (smtplib.SMTPException, BadHeaderError) as e:
         logger.error(f"Error sending email to {recipient_list}: {e}")
         if not fail_silently:
             raise
@@ -96,7 +97,7 @@ def send_account_activation_email(user, request):
         )
         logger.info("Activation email sent to %s", user.email)
         return True
-    except Exception as exc:
+    except (smtplib.SMTPException, BadHeaderError) as exc:
         logger.error("Failed to send activation email to %s: %s", user.email, exc)
         return False
 
@@ -114,6 +115,6 @@ def test_email_configuration():
             fail_silently=False
         )
         return True
-    except Exception as e:
+    except (smtplib.SMTPException, BadHeaderError) as e:
         logger.error(f"Email configuration test failed: {e}")
         return False

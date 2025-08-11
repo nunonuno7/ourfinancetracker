@@ -6,7 +6,8 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 from django.shortcuts import render, redirect
 from django.urls import reverse, reverse_lazy
-from django.core.mail import send_mail
+import smtplib
+from django.core.mail import BadHeaderError, send_mail
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.views import PasswordResetView, LoginView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -73,13 +74,15 @@ def signup(request):
                     [existing_inactive.email],
                     html_message=html_message,
                 )
-            except Exception as e:
-                # Em desenvolvimento, apenas mostra o link de ativação no console
+            except (smtplib.SMTPException, BadHeaderError) as e:
+                logger.exception("Email sending failed: %s", e)
+                messages.error(
+                    request,
+                    "There was an error sending the activation email. Please try again later.",
+                )
                 if settings.DEBUG:
-                    logger.exception("📧 Email sending failed in development: %s", e)
                     logger.warning("🔗 Activation link: %s", activation_link)
-                else:
-                    raise
+                return render(request, "accounts/signup.html")
 
             messages.info(request, "We have resent the activation link to your email.")
             return render(request, "accounts/check_email.html")
@@ -124,13 +127,15 @@ def signup(request):
                 [user.email],
                 html_message=html_message,
             )
-        except Exception as e:
-            # Em desenvolvimento, apenas mostra o link de ativação no console
+        except (smtplib.SMTPException, BadHeaderError) as e:
+            logger.exception("Email sending failed: %s", e)
+            messages.error(
+                request,
+                "There was an error sending the activation email. Please try again later.",
+            )
             if settings.DEBUG:
-                logger.exception("📧 Email sending failed in development: %s", e)
                 logger.warning("🔗 Activation link: %s", activation_link)
-            else:
-                raise
+            return render(request, "accounts/signup.html")
 
         return render(request, "accounts/check_email.html")
 
