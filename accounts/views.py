@@ -108,7 +108,7 @@ def activate(request, uidb64, token):
     """
     Activate an account from the emailed link.
 
-    Behaviour:
+    Behavior:
     - Decodes uidb64 -> user id
     - Verifies the token
     - Marks user as active if needed
