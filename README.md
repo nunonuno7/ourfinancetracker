@@ -82,6 +82,17 @@ poetry run python manage.py migrate
 poetry run python manage.py runserver
 ```
 
+## 🌐 Domínios adicionais
+
+Para autorizar novos domínios no `ALLOWED_HOSTS` ou na lista de origens confiáveis do CSRF, defina variáveis de ambiente adicionais:
+
+```bash
+EXTRA_ALLOWED_HOSTS=exemplo.com,sub.dominio.com
+EXTRA_CSRF_TRUSTED_ORIGINS=https://exemplo.com,https://sub.dominio.com
+```
+
+Use valores separados por vírgulas. No caso de `EXTRA_CSRF_TRUSTED_ORIGINS`, cada origem deve incluir o esquema (`http://` ou `https://`).
+
 ## 📄 Licença
 
 Distribuído sob a licença MIT. Ver ficheiro `LICENSE` para mais detalhes.

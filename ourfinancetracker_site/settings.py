@@ -73,10 +73,6 @@ ALLOWED_HOSTS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://ourfinancetracker.com",
     "https://www.ourfinancetracker.com",
-    "https://*.onrender.com",
-    "https://*.replit.dev",
-    "https://*.replit.dev:3000",
-    "https://*.replit.dev:5000",
     "http://localhost:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8000",
