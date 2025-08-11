@@ -4,7 +4,8 @@ from django.contrib.auth.models import User
 
 
 @pytest.mark.django_db
-def test_delete_account_view(client):
+def test_delete_account_view(client, settings):
+    settings.SECURE_SSL_REDIRECT = False
     user = User.objects.create_user(username="tester", password="secret")
     client.force_login(user)
     response = client.post(reverse("accounts:delete_account"), {

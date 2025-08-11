@@ -23,6 +23,7 @@ from .models import (
     AccountType,
     Currency,
     Tag,
+    ALLOWED_ACCOUNT_TYPE_NAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -428,7 +429,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, user=user, **kwargs)
 
-        self.fields["account_type"].queryset = AccountType.objects.order_by("name")
+        self.fields["account_type"].queryset = AccountType.objects.filter(name__in=ALLOWED_ACCOUNT_TYPE_NAMES).order_by("name")
         self.fields["currency"].queryset = Currency.objects.order_by("code")
 
         if (
