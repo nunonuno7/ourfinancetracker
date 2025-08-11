@@ -26,7 +26,6 @@ from io import BytesIO
 import pandas as pd
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
@@ -58,7 +57,6 @@ from .forms import (
     AccountBalanceFormSet,
     AccountForm,
     CategoryForm,
-    CustomUserCreationForm,
     TransactionForm,
     UserInFormKwargsMixin,
 )
@@ -78,22 +76,6 @@ from .utils.cache_helpers import clear_tx_cache
 logger = logging.getLogger(__name__)
 
 
-
-
-# Authentication views
-def signup(request):
-    """User registration view."""
-    if request.method == 'POST':
-        form = CustomUserCreationForm(request.POST)
-        if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, 'Account created successfully!')
-            return redirect('dashboard')
-    else:
-        form = CustomUserCreationForm()
-
-    return render(request, 'registration/signup.html', {'form': form})
 
 
 # LogoutView removida - usando Django's built-in LogoutView via accounts app
