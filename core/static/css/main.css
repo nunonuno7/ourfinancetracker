@@ -1158,10 +1158,5 @@ button:hover,
   cursor: wait;
 }
 
-.kpi-card.compact { border-radius: 1rem; }
-.kpi-card.compact .card-body { padding: .75rem 1rem; }
-.kpi-title { font-size: .85rem; font-weight: 600; }
-.kpi-value { font-size: 1.8rem; font-weight: 800; line-height: 1; margin: .15rem 0; }
-.kpi-info { font-size: .9rem; opacity: .6; }
 .kpi-card .progress { height: 4px; }
 .kpi-card .badge { font-size: .7rem; }
