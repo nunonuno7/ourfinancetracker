@@ -395,6 +395,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  document
+    .querySelectorAll('[data-bs-toggle="tooltip"]')
+    .forEach(el => new bootstrap.Tooltip(el));
+
   const params = new URLSearchParams(window.location.search);
   if (params.get('delete_error') === '1') {
     const step2Modal = new bootstrap.Modal(document.getElementById('deleteAccountStep2'));

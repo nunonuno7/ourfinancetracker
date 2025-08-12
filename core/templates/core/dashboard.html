@@ -195,28 +195,23 @@ Dashboard{% endblock %} {% block extra_head %}
       </div>
     </div>
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
-      <div class="card border-success h-100 kpi-card">
-        <div class="card-body text-center p-3">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <h6 class="card-title text-success mb-1">
-                ✅ Non-Estimated Expenses
-              </h6>
-              <h4 class="card-text mb-0" id="despesas-justificadas">0%</h4>
-              <small class="text-muted">Share of total expenses that are not estimated</small>
-            </div>
-            <i class="fas fa-check-circle fa-2x text-success opacity-25"></i>
+      <div class="card kpi-card compact shadow-sm">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="kpi-title">Verified Expenses</div>
+            <button class="btn btn-link p-0 kpi-info" data-bs-toggle="tooltip"
+                    title="Share of total expenses that are verified (not estimated)." aria-label="Info">ℹ️</button>
           </div>
-          <div class="progress mt-2" style="height: 4px">
-            <div
-              class="progress-bar bg-success"
-              id="justificadas-progress"
-              style="width: 0%"
-            ></div>
+
+          <div class="kpi-value">{{ kpis.verified_expenses_pct }}%</div>
+
+          <div class="progress my-1">
+            <div class="progress-bar" style="width: {{ kpis.verified_expenses_pct }}%"></div>
           </div>
-          <small class="text-muted mt-1 d-block" id="justificadas-change"
-            >-</small
-          >
+
+          <div class="d-flex justify-content-end">
+            <span class="badge bg-warning-subtle text-warning-emphasis">Verification: {{ kpis.verification_level|default:"Moderate" }}</span>
+          </div>
         </div>
       </div>
     </div>

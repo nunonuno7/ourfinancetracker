@@ -32,6 +32,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection, models, transaction as db_transaction
+from django.db.models import Q, Sum
 from django.db.models.query import QuerySet
 from django.http import (
     Http404,
@@ -182,6 +183,22 @@ def dashboard(request):
         )
         kpis = build_kpis_for_period(tx)
         charts = build_charts_for_period(tx)
+        expense_stats = tx.filter(type="EX").aggregate(
+            total=Sum("amount"),
+            estimated=Sum("amount", filter=Q(is_estimated=True)),
+        )
+        total_expenses = abs(expense_stats["total"] or 0)
+        estimated_expenses = abs(expense_stats["estimated"] or 0)
+        non_estimated_pct = (
+            100.0 - (estimated_expenses / total_expenses * 100.0)
+            if total_expenses
+            else 0.0
+        )
+        kpis["non_estimated_expenses_pct"] = round(non_estimated_pct)
+        kpis["verified_expenses_pct"] = kpis.get("verified_expenses_pct") or kpis.get(
+            "non_estimated_expenses_pct"
+        )
+        kpis["verification_level"] = kpis.get("verification_level", "Moderate")
         context.update({"kpis": kpis, "charts": charts})
         return render(request, "core/dashboard.html", context)
 
@@ -326,6 +343,25 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "aumento_riqueza": f"{aumento_medio:,.0f} €",
             "poupanca_media": f"{poupanca_media:,.0f} €",
         }
+        expense_stats = Transaction.objects.filter(user=user, type="EX").aggregate(
+            total=Sum("amount"),
+            estimated=Sum("amount", filter=Q(is_estimated=True)),
+        )
+        total_expenses = abs(expense_stats["total"] or 0)
+        estimated_expenses = abs(expense_stats["estimated"] or 0)
+        non_estimated_pct = (
+            100.0 - (estimated_expenses / total_expenses * 100.0)
+            if total_expenses
+            else 0.0
+        )
+        ctx["kpis"]["non_estimated_expenses_pct"] = round(non_estimated_pct)
+        ctx["kpis"]["verified_expenses_pct"] = ctx["kpis"].get(
+            "verified_expenses_pct"
+        ) or ctx["kpis"].get("non_estimated_expenses_pct")
+        ctx["kpis"]["verification_level"] = ctx["kpis"].get(
+            "verification_level",
+            "Moderate",
+        )
         return ctx
 
 
