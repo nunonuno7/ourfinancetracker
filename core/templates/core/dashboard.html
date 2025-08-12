@@ -8,22 +8,15 @@ Dashboard{% endblock %} {% block extra_head %}
 {% endblock %} {% block content %}
 <div class="container-fluid">
   <div class="d-flex align-items-center gap-2 mb-3">
-    <select id="mode" class="form-select form-select-sm">
-      <option value="history" {% if mode != 'period' %}selected{% endif %}>History</option>
-      <option value="period" {% if mode == 'period' %}selected{% endif %}>Period</option>
-    </select>
-    {% if mode == 'period' %}
-    <a href="?mode=period&period={{ prev_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Previous period">&laquo;</a>
-    <input id="periodPicker" type="month" class="form-control form-control-sm" value="{{ period }}">
-    <a href="?mode=period&period={{ next_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Next period">&raquo;</a>
-    {% else %}
-    <form method="get" class="d-flex align-items-center gap-2">
-      <input type="hidden" name="mode" value="history">
-      <input type="date" name="from" value="{{ request.GET.from }}" class="form-control form-control-sm">
-      <input type="date" name="to" value="{{ request.GET.to }}" class="form-control form-control-sm">
-      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-    </form>
-    {% endif %}
+    <div class="btn-group btn-group-sm" role="group">
+      <button id="historyBtn" type="button" class="btn {% if mode != 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">History</button>
+      <button id="periodBtn" type="button" class="btn {% if mode == 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">Period</button>
+    </div>
+    <div id="periodControls" class="d-flex align-items-center gap-2 {% if mode != 'period' %}d-none{% endif %}">
+      <a href="?mode=period&period={{ prev_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Previous period">&laquo;</a>
+      <input id="periodPicker" type="month" class="form-control form-control-sm" value="{{ period }}">
+      <a href="?mode=period&period={{ next_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Next period">&raquo;</a>
+    </div>
   </div>
   {% if mode == 'period' %}
   <h5>Period Analysis {{ period }}</h5>
@@ -723,24 +716,31 @@ Dashboard{% endblock %} {% block extra_head %}
   }
 </style>
 <script>
-  document.getElementById('mode').addEventListener('change', function () {
-    const mode = this.value;
+  document.getElementById('historyBtn').addEventListener('click', function () {
     const params = new URLSearchParams(window.location.search);
-    params.set('mode', mode);
-    if (mode === 'period') {
-      const p = document.getElementById('periodPicker')?.value || '{{ period }}';
-      params.set('period', p);
-      params.delete('from');
-      params.delete('to');
-    } else {
-      params.delete('period');
-    }
+    params.set('mode', 'history');
+    params.delete('period');
+    params.delete('from');
+    params.delete('to');
     window.location.search = params.toString();
   });
+
+  document.getElementById('periodBtn').addEventListener('click', function () {
+    const params = new URLSearchParams(window.location.search);
+    const p = document.getElementById('periodPicker')?.value || '{{ period }}';
+    params.set('mode', 'period');
+    params.set('period', p);
+    params.delete('from');
+    params.delete('to');
+    window.location.search = params.toString();
+  });
+
   document.getElementById('periodPicker')?.addEventListener('change', function () {
     const params = new URLSearchParams(window.location.search);
     params.set('mode', 'period');
     params.set('period', this.value);
+    params.delete('from');
+    params.delete('to');
     window.location.search = params.toString();
   });
 </script>
