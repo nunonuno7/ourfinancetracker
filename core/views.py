@@ -1250,14 +1250,14 @@ def transaction_clear_cache(request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
             return JsonResponse({
                 'success': True,
-                'message': 'Cache cleared successfully!'
+                'message': 'Data refreshed successfully!'
             })
 
-        messages.success(request, 'Cache cleared successfully!')
+        messages.success(request, 'Data refreshed successfully!')
         return redirect('transaction_list_v2')
 
     except Exception as e:
-        logger.error(f"Error clearing cache for user {request.user.id}: {e}")
+        logger.error(f"Error refreshing data for user {request.user.id}: {e}")
 
         # Handle AJAX requests
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
@@ -1266,7 +1266,7 @@ def transaction_clear_cache(request):
                 'error': str(e)
             }, status=500)
 
-        messages.error(request, f'Failed to clear cache: {str(e)}')
+        messages.error(request, f'Failed to refresh data: {str(e)}')
         return redirect('transaction_list_v2')
 
 
