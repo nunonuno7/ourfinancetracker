@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const showKPILoadingState = () => {
-    const kpiElements = ['receita-media', 'despesa-estimada', 'valor-investido', 'patrimonio-total'];
+    const kpiElements = ['receita-media', 'despesa-estimada', 'verified-expenses', 'valor-investido', 'patrimonio-total'];
     kpiElements.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
@@ -990,15 +990,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const elements = {
       'receita-media': data.receita_media || data.patrimonio_total || '0 €',
       'despesa-estimada': data.despesa_estimada_media || data.receita_media || '0 €',
-      'despesas-justificadas': data.despesas_justificadas_pct || '0%',
+      'verified-expenses': data.despesas_justificadas_pct_str || '0%',
       'valor-investido': data.valor_investido_total || '0 €',
       'patrimonio-total': data.patrimonio_total || '0 €'
     };
 
     // Calculate savings rate with safe parsing
-    const receita = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const despesa = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const savingsRate = receita > 0 ? ((receita - despesa) / receita * 100) : 0;
+    const income = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
+    const expense = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
+    const savingsRate = income > 0 ? ((income - expense) / income * 100) : 0;
     elements['taxa-poupanca'] = `${savingsRate.toFixed(1)}%`;
 
     Object.entries(elements).forEach(([id, value]) => {
@@ -1110,22 +1110,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateProgressBarsAndTrends = (data) => {
     // Extract numeric values for progress calculation
-    const receita = parseFloat(data.receita_media?.replace(/[^\d.-]/g, '') || 0);
-    const despesa = parseFloat(data.despesa_estimada_media?.replace(/[^\d.-]/g, '') || 0);
-    const investido = parseFloat(data.valor_investido_total?.replace(/[^\d.-]/g, '') || 0);
-    const patrimonio = parseFloat(data.patrimonio_total?.replace(/[^\d.-]/g, '') || 0);
-    const taxaPoupanca = receita > 0 ? ((receita - despesa) / receita * 100) : 0;
+    const income = parseFloat(data.receita_media?.replace(/[^\d.-]/g, '') || 0);
+    const expense = parseFloat(data.despesa_estimada_media?.replace(/[^\d.-]/g, '') || 0);
+    const invested = parseFloat(data.valor_investido_total?.replace(/[^\d.-]/g, '') || 0);
+    const netWorth = parseFloat(data.patrimonio_total?.replace(/[^\d.-]/g, '') || 0);
+    const savingsRate = income > 0 ? ((income - expense) / income * 100) : 0;
 
     // Calculate progress percentages (normalized to reasonable ranges)
-    const justificadas = parseFloat(data.despesas_justificadas_pct?.replace(/[^\d.-]/g, '') || 0);
+    const verifiedPct = parseFloat(data.despesas_justificadas_pct) || 0;
 
     const progressBars = {
-      'receita-progress': Math.min(100, (receita / 3000) * 100),
-      'despesa-progress': Math.min(100, (despesa / 2500) * 100),
-      'justificadas-progress': Math.min(100, justificadas),
-      'investido-progress': Math.min(100, (investido / 20000) * 100),
-      'patrimonio-progress': Math.min(100, (patrimonio / 25000) * 100),
-      'poupanca-progress': Math.min(100, taxaPoupanca * 2)
+      'receita-progress': Math.min(100, (income / 3000) * 100),
+      'despesa-progress': Math.min(100, (expense / 2500) * 100),
+      'verified-progress': Math.min(100, verifiedPct),
+      'investido-progress': Math.min(100, (invested / 20000) * 100),
+      'patrimonio-progress': Math.min(100, (netWorth / 25000) * 100),
+      'poupanca-progress': Math.min(100, savingsRate * 2)
     };
 
     Object.entries(progressBars).forEach(([id, width]) => {
@@ -1140,17 +1140,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const trends = {
       'receita-change': '+5.2% vs previous month',
       'despesa-change': '-2.1% vs previous month',
-      'justificadas-change':
-        justificadas >= 90
+      'verified-change':
+        verifiedPct >= 90
           ? '✅ Mostly verified'
-          : justificadas >= 75
+          : verifiedPct >= 75
             ? '👍 Low estimation'
-            : justificadas >= 50
+            : verifiedPct >= 50
               ? 'ℹ️ Moderate verification'
               : '⚠️ Many estimated expenses',
       'investido-change': '+12.5% this year',
       'patrimonio-change': '+8.7% vs previous month',
-      'poupanca-change': taxaPoupanca >= 20 ? '🎯 Excellent' : '⚠️ Can improve'
+      'poupanca-change': savingsRate >= 20 ? '🎯 Excellent' : '⚠️ Can improve'
     };
 
     Object.entries(trends).forEach(([id, text]) => {
