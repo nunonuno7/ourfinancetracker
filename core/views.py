@@ -183,26 +183,13 @@ def dashboard(request):
         kpis = build_kpis_for_period(tx)
         charts = build_charts_for_period(tx)
         context.update({"kpis": kpis, "charts": charts})
-    else:
-        qs = Transaction.objects.filter(user=request.user)
-        date_from = request.GET.get("from")
-        date_to = request.GET.get("to")
-        if date_from:
-            qs = qs.filter(date__gte=date_from)
-        if date_to:
-            qs = qs.filter(date__lte=date_to)
-        kpis = build_kpis_history(qs)
-        charts = build_charts_history(qs)
-        context.update(
-            {
-                "kpis": kpis,
-                "charts": charts,
-                "date_from": date_from,
-                "date_to": date_to,
-            }
-        )
+        return render(request, "core/dashboard.html", context)
 
-    return render(request, "core/dashboard.html", context)
+    view = DashboardView.as_view()
+    response = view(request)
+    if hasattr(response, "context_data"):
+        response.context_data.update(context)
+    return response
 
 
 # ==============================================================================
