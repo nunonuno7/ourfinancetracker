@@ -25,3 +25,13 @@ def get_item(dictionary, key):
 def field_type(field):
     """Retorna o tipo de widget do campo (ex: 'TextInput', 'CheckboxInput')."""
     return field.field.widget.__class__.__name__
+
+
+@register.filter
+def clamp_pct(value):
+    """Clamps a numeric value to the 0-100 range for percentage displays."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, value))

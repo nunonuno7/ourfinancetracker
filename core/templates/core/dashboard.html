@@ -1,4 +1,4 @@
-{% extends "base.html" %} {% load static %} {% block title %}Advanced Financial
+{% extends "base.html" %} {% load static filtros %} {% block title %}Advanced Financial
 Dashboard{% endblock %} {% block extra_head %}
 <!-- Mobile-specific optimizations -->
 <meta name="format-detection" content="telephone=no">
@@ -195,25 +195,21 @@ Dashboard{% endblock %} {% block extra_head %}
       </div>
     </div>
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
-      <div class="card kpi-card compact shadow-sm">
-        <div class="card-body">
-          <div class="d-flex align-items-center justify-content-between">
-            <div class="kpi-title">Verified Expenses</div>
-            <button class="btn btn-link p-0 kpi-info" data-bs-toggle="tooltip"
-                    title="Share of total expenses that are verified (not estimated)." aria-label="Info">ℹ️</button>
-          </div>
-
-          <div class="kpi-value">{{ kpis.verified_expenses_pct }}%</div>
-
-          <div class="progress my-1">
-            <div class="progress-bar" style="width: {{ kpis.verified_expenses_pct }}%"></div>
-          </div>
-
-          <div class="d-flex justify-content-end">
-            <span class="badge bg-warning-subtle text-warning-emphasis">Verification: {{ kpis.verification_level|default:"Moderate" }}</span>
-          </div>
-        </div>
-      </div>
+      {% with verified=kpis.verified_expenses_pct|clamp_pct verification=kpis.verification_level|default:"Moderate" verified_str=verified|floatformat:2 %}
+        {% include "core/partials/kpi_card.html" with
+           border_class="border-info"
+           title_class="text-info"
+           title="Verified Expenses"
+           icon='<i class="fas fa-receipt fa-2x text-info opacity-25"></i>'
+           value=verified_str|add:"%"
+           subtitle="Share of total expenses"
+           meter=verified
+           progress_bar_class="bg-info"
+           footer="Verification: "|add:verification
+           footer_badge_class="badge bg-warning-subtle text-warning-emphasis"
+           info_tooltip="Share of total expenses that are verified (not estimated)."
+           aria_label="Verified Expenses, "|add:verified_str|add:" percent. Verification: "|add:verification %}
+      {% endwith %}
     </div>
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-info h-100 kpi-card">
