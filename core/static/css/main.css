@@ -765,6 +765,8 @@ button:hover,
   /* KPI Cards mobile layout */
   .kpi-card {
     margin-bottom: 0.75rem;
+    min-height: 160px;
+    font-family: 'Segoe UI', system-ui, -apple-system, 'Arial', sans-serif;
   }
 
   .kpi-card .card-body {
@@ -1156,6 +1158,17 @@ button:hover,
 
 .reordering .handle {
   cursor: wait;
+}
+
+.kpi-card {
+  min-height: 160px;
+  font-family: 'Segoe UI', system-ui, -apple-system, 'Arial', sans-serif;
+}
+
+.kpi-card h6,
+.kpi-card h4,
+.kpi-card small {
+  font-family: inherit;
 }
 
 .kpi-card .progress { height: 4px; }
