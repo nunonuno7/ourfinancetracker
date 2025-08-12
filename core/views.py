@@ -1250,14 +1250,14 @@ def transaction_clear_cache(request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
             return JsonResponse({
                 'success': True,
-                'message': 'Cache cleared successfully!'
+                'message': 'Data refreshed successfully!'
             })
 
-        messages.success(request, 'Cache cleared successfully!')
+        messages.success(request, 'Data refreshed successfully!')
         return redirect('transaction_list_v2')
 
     except Exception as e:
-        logger.error(f"Error clearing cache for user {request.user.id}: {e}")
+        logger.error(f"Error refreshing data for user {request.user.id}: {e}")
 
         # Handle AJAX requests
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
@@ -1266,7 +1266,7 @@ def transaction_clear_cache(request):
                 'error': str(e)
             }, status=500)
 
-        messages.error(request, f'Failed to clear cache: {str(e)}')
+        messages.error(request, f'Failed to refresh data: {str(e)}')
         return redirect('transaction_list_v2')
 
 
@@ -1329,13 +1329,17 @@ def transactions_json_v2(request):
         return JsonResponse({"error": "Invalid date format"}, status=400)
 
     cache_key = f"tx_v2_{user_id}_{start_date}_{end_date}_{sort_field}_{sort_direction}"
-    cached_df = cache.get(cache_key)
+    force_refresh = str(data.get('force', '')).lower() in ['1', 'true', 'yes']
+    cached_df = None if force_refresh else cache.get(cache_key)
 
     if cached_df is not None:
         logger.debug(f"✅ [transactions_json_v2] Using cached data, {len(cached_df)} rows")
         df = cached_df.copy()
     else:
-        logger.debug(f"🔄 [transactions_json_v2] Querying database...")
+        if force_refresh:
+            logger.debug("🔄 [transactions_json_v2] Force refresh requested, bypassing cache")
+        else:
+            logger.debug(f"🔄 [transactions_json_v2] Querying database...")
 
         # SQL query with sorting
         order_clause = f"tx.date {'DESC' if sort_direction == 'desc' else 'ASC'}"
@@ -1376,7 +1380,7 @@ def transactions_json_v2(request):
 
         df = pd.DataFrame(rows, columns=[
             "id", "date", "year", "month", "type", "amount",
-            "category", "account", "currency", "tags", 
+            "category", "account", "currency", "tags",
             "is_system", "editable", "is_estimated", "period"
         ])
         logger.debug(f"📋 [transactions_json_v2] DataFrame created with {len(df)} rows")

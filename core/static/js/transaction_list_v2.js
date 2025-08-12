@@ -106,7 +106,7 @@ class TransactionManager {
     // Buttons
     $("#apply-filters-btn").on("click", () => this.loadTransactions());
     $("#clear-filters-btn").on("click", () => this.clearFilters());
-    $("#clear-cache-btn").on("click", () => this.clearCache());
+    $("#refresh-btn").on("click", () => this.refreshData());
 
     $("#export-btn").on("click", () => this.exportData());
     $("#import-btn").on("click", () => this.importData());
@@ -481,7 +481,7 @@ class TransactionManager {
     return cacheKey;
   }
 
-  async loadTransactions() {
+  async loadTransactions(force = false) {
     console.log("🔄 [loadTransactions] LOADING START");
 
     try {
@@ -501,6 +501,9 @@ class TransactionManager {
         }
       });
 
+      if (force) {
+        params.append("force", "true");
+      }
       const url = `/transactions/json-v2/?${params.toString()}`;
       console.log("🌐 [loadTransactions] Request URL:", url);
 
@@ -564,7 +567,7 @@ class TransactionManager {
     }
   }
 
-  async loadTotals() {
+  async loadTotals(force = false) {
     console.log("💰 [loadTotals] Starting totals load...");
     try {
       const filters = this.getFilters();
@@ -578,6 +581,9 @@ class TransactionManager {
       
       console.log("🔍 [loadTotals] Filters for totals (cleaned):", totalsFilters);
 
+      if (force) {
+        totalsFilters.force = true;
+      }
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
         headers: {
@@ -1443,9 +1449,9 @@ class TransactionManager {
     }
   }
 
-  async clearCache() {
+  async refreshData() {
     try {
-      console.log("🧹 [clearCache] Starting cache clear operation...");
+      console.log("🔄 [refreshData] Refreshing data...");
 
       const response = await fetch("/transactions/clear-cache/", {
         method: "GET",
@@ -1456,35 +1462,38 @@ class TransactionManager {
         },
       });
 
-      console.log("📡 [clearCache] Response status:", response.status);
+      console.log("📡 [refreshData] Response status:", response.status);
 
       if (response.ok) {
         const result = await response.json();
-        console.log("📋 [clearCache] Server response:", result);
+        console.log("📋 [refreshData] Server response:", result);
 
         if (result.success) {
           // Clear local cache
           this.cache.clear();
-          console.log("🗑️ [clearCache] Local cache cleared");
+          console.log("🗑️ [refreshData] Local cache cleared");
 
-          // Reload both transactions and totals to reflect updated estimates
-          await Promise.all([this.loadTransactions(), this.loadTotals()]);
+          // Reload both transactions and totals, forcing fresh queries
+          await Promise.all([
+            this.loadTransactions(true),
+            this.loadTotals(true),
+          ]);
 
-          this.showSuccess("✅ Cache cleared successfully!");
-          console.log("✅ [clearCache] Operation completed successfully");
+          this.showSuccess("✅ Data refreshed successfully!");
+          console.log("✅ [refreshData] Operation completed successfully");
         } else {
           throw new Error(result.error || "Unknown error occurred");
         }
       } else {
         const errorData = await response.json();
-        console.error("❌ [clearCache] Server response error:", errorData);
+        console.error("❌ [refreshData] Server response error:", errorData);
         throw new Error(
           errorData.error || `HTTP ${response.status}: ${response.statusText}`,
         );
       }
     } catch (error) {
-      console.error("❌ [clearCache] Error:", error);
-      this.showError(`Failed to clear cache: ${error.message}`);
+      console.error("❌ [refreshData] Error:", error);
+      this.showError(`Failed to refresh data: ${error.message}`);
     }
   }
 
