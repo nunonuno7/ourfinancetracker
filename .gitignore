@@ -47,8 +47,8 @@ Thumbs.db
 # Conteúdos opcionais do projeto
 # (notebooks, docs, roadmaps, etc.)
 # ──────────────────────────────
+*.ipynb
 notebook.py
-roadmap_detalhado.ipynb
 roadmap_notebook.py
 notas.txt
 
@@ -65,4 +65,3 @@ h git switch --detach *
 # ──────────────────────────────
 /staticfiles/
 /media/
-testes.ipynb
