@@ -33,3 +33,9 @@ services:
 databases:
   - name: ourfinancetracker-db
     plan: free
+
+
+tira:
+  databases:
+    - name: ourfinancetracker-db
+      plan: free
