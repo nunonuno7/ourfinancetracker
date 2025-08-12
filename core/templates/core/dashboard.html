@@ -194,24 +194,12 @@ Dashboard{% endblock %} {% block extra_head %}
         </div>
       </div>
     </div>
+    <!-- VERIFIED EXPENSES KPI -->
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
-      {% with verified=kpis.verified_expenses_pct|clamp_pct verification=kpis.verification_level|default:"Moderate" verified_str=verified|floatformat:2 %}
-        {% include "core/partials/kpi_card.html" with
-           border_class="border-info"
-           title_class="text-info"
-           title="Verified Expenses"
-           icon='<i class="fas fa-receipt fa-2x text-info opacity-25"></i>'
-           value_id="verified-expenses"
-           value=verified_str|add:"%"
-           subtitle="Share of total expenses"
-           meter=verified
-           progress_id="verified-progress"
-           progress_bar_class="bg-info"
-           footer_id="verified-change"
-           footer="Verification: "|add:verification
-           footer_badge_class="badge bg-warning-subtle text-warning-emphasis"
-           info_tooltip="Share of total expenses that are verified (not estimated)."
-           aria_label="Verified Expenses, "|add:verified_str|add:" percent. Verification: "|add:verification %}
+      {% with verified=kpis.verified_expenses_pct|clamp_pct verification=kpis.verification_level|default:"Moderate" verified_str=kpis.verified_expenses_pct|clamp_pct|floatformat:2 %}
+        {% with aria="Verified Expenses, "|add:verified_str|add:" percent. Verification: "|add:verification %}
+          {% include "core/partials/kpi_card.html" with border_class="border-info" title_class="text-info" title="Verified Expenses" icon='<i class="fas fa-receipt fa-2x text-info opacity-25"></i>' value_id="verified-expenses" value=verified_str|add:"%" subtitle="Share of total expenses" meter=verified progress_id="verified-progress" progress_bar_class="bg-info" footer_id="verified-change" footer="Verification: "|add:verification footer_badge_class="badge bg-warning-subtle text-warning-emphasis" info_tooltip="Share of total expenses that are verified (not estimated)." aria_label=aria %}
+        {% endwith %}
       {% endwith %}
     </div>
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
