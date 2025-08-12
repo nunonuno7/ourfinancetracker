@@ -21,7 +21,7 @@ import hashlib
 import re
 from calendar import monthrange
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 
 import pandas as pd
@@ -76,6 +76,19 @@ from .models import (
 from .utils.cache_helpers import clear_tx_cache
 
 logger = logging.getLogger(__name__)
+
+
+# Helper for consistent percentage math with Decimals
+def pct(part, whole) -> Decimal:
+    try:
+        if not whole or Decimal(whole) == 0:
+            return Decimal('0.00')
+        return (
+            Decimal(part) / Decimal(whole) * Decimal('100')
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except Exception:
+        # Defensive fallback
+        return Decimal('0.00')
 
 
 
@@ -187,17 +200,14 @@ def dashboard(request):
             total=Sum("amount"),
             estimated=Sum("amount", filter=Q(is_estimated=True)),
         )
-        total_expenses = abs(expense_stats["total"] or 0)
-        estimated_expenses = abs(expense_stats["estimated"] or 0)
-        non_estimated_pct = (
-            100.0 - (estimated_expenses / total_expenses * 100.0)
-            if total_expenses
-            else 0.0
+        total_expenses = abs(expense_stats["total"] or Decimal("0"))
+        estimated_expenses = abs(expense_stats["estimated"] or Decimal("0"))
+        verified_expenses_pct_dec = pct(
+            total_expenses - estimated_expenses, total_expenses
         )
-        kpis["non_estimated_expenses_pct"] = round(non_estimated_pct)
-        kpis["verified_expenses_pct"] = kpis.get("verified_expenses_pct") or kpis.get(
-            "non_estimated_expenses_pct"
-        )
+        kpis["non_estimated_expenses_pct"] = round(float(verified_expenses_pct_dec))
+        kpis["verified_expenses_pct"] = float(verified_expenses_pct_dec)
+        kpis["verified_expenses_pct_str"] = f"{verified_expenses_pct_dec}%"
         kpis["verification_level"] = kpis.get("verification_level", "Moderate")
         context.update({"kpis": kpis, "charts": charts})
         return render(request, "core/dashboard.html", context)
@@ -347,17 +357,18 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             total=Sum("amount"),
             estimated=Sum("amount", filter=Q(is_estimated=True)),
         )
-        total_expenses = abs(expense_stats["total"] or 0)
-        estimated_expenses = abs(expense_stats["estimated"] or 0)
-        non_estimated_pct = (
-            100.0 - (estimated_expenses / total_expenses * 100.0)
-            if total_expenses
-            else 0.0
+        total_expenses = abs(expense_stats["total"] or Decimal("0"))
+        estimated_expenses = abs(expense_stats["estimated"] or Decimal("0"))
+        verified_expenses_pct_dec = pct(
+            total_expenses - estimated_expenses, total_expenses
         )
-        ctx["kpis"]["non_estimated_expenses_pct"] = round(non_estimated_pct)
-        ctx["kpis"]["verified_expenses_pct"] = ctx["kpis"].get(
-            "verified_expenses_pct"
-        ) or ctx["kpis"].get("non_estimated_expenses_pct")
+        ctx["kpis"]["non_estimated_expenses_pct"] = round(
+            float(verified_expenses_pct_dec)
+        )
+        ctx["kpis"]["verified_expenses_pct"] = float(
+            verified_expenses_pct_dec
+        )
+        ctx["kpis"]["verified_expenses_pct_str"] = f"{verified_expenses_pct_dec}%"
         ctx["kpis"]["verification_level"] = ctx["kpis"].get(
             "verification_level",
             "Moderate",
@@ -3450,12 +3461,14 @@ def dashboard_kpis_json(request):
 
         estimated_expenses_sum = tx_query.aggregate(
             est_sum=Sum('amount', filter=Q(type='EX') & Q(is_estimated=True))
-        )['est_sum'] or 0.0
+        )['est_sum'] or 0
         estimated_expenses_sum = float(abs(estimated_expenses_sum))
 
-        non_estimated_expense_pct = (
-            100.0 - (estimated_expenses_sum / total_expenses * 100.0)
-        ) if total_expenses > 0 else 0.0
+        non_estimated_expense_pct_dec = pct(
+            Decimal(total_expenses) - Decimal(estimated_expenses_sum),
+            Decimal(total_expenses)
+        )
+        non_estimated_expense_pct = float(non_estimated_expense_pct_dec)
 
         logger.debug(f"💰 [dashboard_kpis_json] Transaction stats: income={total_income}, expenses={total_expenses}, investments={total_investments}, total={total_transactions}")
 
@@ -3545,7 +3558,8 @@ def dashboard_kpis_json(request):
             'receita_media': f"{receita_media:,.0f} €",
             'despesa_estimada_media': f"{despesa_media:,.0f} €",
             'valor_investido_total': f"{total_investments:,.0f} €",
-            'despesas_justificadas_pct': f"{non_estimated_expense_pct:.0f}%",
+            'despesas_justificadas_pct': non_estimated_expense_pct,
+            'despesas_justificadas_pct_str': f"{non_estimated_expense_pct_dec}%",
             'taxa_poupanca': f"{savings_rate:.1f}%",
             'rentabilidade_mensal_media': "+0.0%",  # Placeholder for now
             'investment_rate': f"{investment_rate:.1f}%",
@@ -3590,7 +3604,8 @@ def dashboard_kpis_json(request):
             'receita_media': "0 €",
             'despesa_estimada_media': "0 €",
             'valor_investido_total': "0 €",
-            'despesas_justificadas_pct': "0%",
+            'despesas_justificadas_pct': 0.0,
+            'despesas_justificadas_pct_str': "0%",
             'taxa_poupanca': "0.0%",
             'rentabilidade_mensal_media': "+0.0%",
             'investment_rate': "0.0%",
