@@ -27,7 +27,7 @@ from .views import (
     copy_previous_balances_view, account_balance_export_xlsx,
     account_balance_import_xlsx, account_balance_template_xlsx,
     # Dashboard & APIs
-    DashboardView, period_autocomplete, menu_config,
+    dashboard, period_autocomplete, menu_config,
     api_jwt_my_transactions, dashboard_data,
     account_balances_pivot_json, dashboard_kpis_json,
     financial_analysis_json, sync_system_adjustments,
@@ -53,7 +53,7 @@ urlpatterns = [
     
 
     # Dashboard
-    path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    path("dashboard/", dashboard, name="dashboard"),
 
     # Transactions
     path("transactions/", transaction_list_v2, name="transaction_list"),  # Alias for backward compatibility

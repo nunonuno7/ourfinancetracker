@@ -18,6 +18,7 @@ PRINCIPAIS CORREÇÕES IMPLEMENTADAS:
 import json
 import logging
 import hashlib
+import re
 from calendar import monthrange
 from datetime import date, datetime
 from decimal import Decimal
@@ -124,6 +125,71 @@ def parse_safe_date(value: str | None, fallback: date) -> date:
         except (ValueError, TypeError):
             continue
     return fallback
+
+
+def _shift_period(period_yyyy_mm: str, delta_months: int) -> str:
+    """Return period shifted by ``delta_months`` in YYYY-MM format."""
+    year, month = map(int, period_yyyy_mm.split("-"))
+    month += delta_months
+    year += (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    return f"{year:04d}-{month:02d}"
+
+
+def build_kpis_for_period(tx):
+    """Minimal stub returning count of transactions for the period."""
+    return {"count": tx.count()}
+
+
+def build_charts_for_period(tx):
+    """Minimal stub placeholder for charts."""
+    return []
+
+
+def build_kpis_history(qs):
+    """Minimal stub returning count for history queries."""
+    return {"count": qs.count()}
+
+
+def build_charts_history(qs):
+    """Minimal stub placeholder for history charts."""
+    return []
+
+
+@login_required
+def dashboard(request):
+    """Dashboard supporting history and period modes."""
+    mode = request.GET.get("mode", "history")
+    current_period = now().strftime("%Y-%m")
+    period = request.GET.get("period", current_period)
+    if not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", period or ""):
+        period = current_period
+
+    prev_period = _shift_period(period, -1)
+    next_period = _shift_period(period, 1)
+
+    context = {
+        "mode": mode,
+        "period": period,
+        "prev_period": prev_period,
+        "next_period": next_period,
+    }
+
+    if mode == "period":
+        year, month = map(int, period.split("-"))
+        tx = Transaction.objects.filter(
+            user=request.user, period__year=year, period__month=month
+        )
+        kpis = build_kpis_for_period(tx)
+        charts = build_charts_for_period(tx)
+        context.update({"kpis": kpis, "charts": charts})
+        return render(request, "core/dashboard.html", context)
+
+    view = DashboardView.as_view()
+    response = view(request)
+    if hasattr(response, "context_data"):
+        response.context_data.update(context)
+    return response
 
 
 # ==============================================================================
