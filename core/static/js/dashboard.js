@@ -1140,7 +1140,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const trends = {
       'receita-change': '+5.2% vs previous month',
       'despesa-change': '-2.1% vs previous month',
-      'justificadas-change': justificadas >= 80 ? '✅ Excellent control' : justificadas >= 60 ? '👍 Good control' : '⚠️ Needs improvement',
+      'justificadas-change':
+        justificadas >= 90
+          ? '✅ Mostly verified'
+          : justificadas >= 75
+            ? '👍 Low estimation'
+            : justificadas >= 50
+              ? 'ℹ️ Moderate verification'
+              : '⚠️ Many estimated expenses',
       'investido-change': '+12.5% this year',
       'patrimonio-change': '+8.7% vs previous month',
       'poupanca-change': taxaPoupanca >= 20 ? '🎯 Excellent' : '⚠️ Can improve'

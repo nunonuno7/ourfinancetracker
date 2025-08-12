@@ -3340,9 +3340,20 @@ def dashboard_kpis_json(request):
 
         total_income = float(stats['total_income'] or 0)
         total_expenses = float(abs(stats['total_expenses'] or 0))  # Make positive
-        total_investments = float(abs(stats['total_investments'] or 0))  # Make positive  
+        total_investments = float(abs(stats['total_investments'] or 0))  # Make positive
         total_transactions = stats['total_count']
         categorized_transactions = stats['categorized_count']
+
+        from django.db.models import Q, Sum
+
+        estimated_expenses_sum = tx_query.aggregate(
+            est_sum=Sum('amount', filter=Q(type='EX') & Q(is_estimated=True))
+        )['est_sum'] or 0.0
+        estimated_expenses_sum = float(abs(estimated_expenses_sum))
+
+        non_estimated_expense_pct = (
+            100.0 - (estimated_expenses_sum / total_expenses * 100.0)
+        ) if total_expenses > 0 else 0.0
 
         logger.debug(f"💰 [dashboard_kpis_json] Transaction stats: income={total_income}, expenses={total_expenses}, investments={total_investments}, total={total_transactions}")
 
@@ -3432,7 +3443,7 @@ def dashboard_kpis_json(request):
             'receita_media': f"{receita_media:,.0f} €",
             'despesa_estimada_media': f"{despesa_media:,.0f} €",
             'valor_investido_total': f"{total_investments:,.0f} €",
-            'despesas_justificadas_pct': f"{categorized_percentage:.0f}%",
+            'despesas_justificadas_pct': f"{non_estimated_expense_pct:.0f}%",
             'taxa_poupanca': f"{savings_rate:.1f}%",
             'rentabilidade_mensal_media': "+0.0%",  # Placeholder for now
             'investment_rate': f"{investment_rate:.1f}%",
@@ -3462,7 +3473,9 @@ def dashboard_kpis_json(request):
                 'patrimonio_total': patrimonio_total,
                 'previous_patrimonio': 0,  # Placeholder
                 'savings_rate': savings_rate,
-                'categorized_percentage': categorized_percentage
+                'categorized_percentage': categorized_percentage,
+                'estimated_expenses_sum': estimated_expenses_sum,
+                'non_estimated_expense_pct': non_estimated_expense_pct
             }
         })
 
