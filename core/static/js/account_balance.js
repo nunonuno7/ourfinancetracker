@@ -1,5 +1,80 @@
+let availableAccounts = [];
+
+function populateAccountSelect(select) {
+  select.innerHTML = '<option value="">Select account</option>';
+  availableAccounts.forEach(acc => {
+    const opt = document.createElement('option');
+    opt.value = acc.id;
+    opt.textContent = acc.name;
+    select.appendChild(opt);
+  });
+}
+
+function removeAccountFromAvailable(accountId, excludeSelect) {
+  availableAccounts = availableAccounts.filter(acc => acc.id !== accountId);
+  document.querySelectorAll('.account-select').forEach(sel => {
+    if (sel !== excludeSelect) {
+      const opt = sel.querySelector(`option[value="${accountId}"]`);
+      if (opt) opt.remove();
+    }
+  });
+}
+
+function addAccountToAvailable(account) {
+  if (!account) return;
+  availableAccounts.push(account);
+  availableAccounts.sort((a, b) => a.name.localeCompare(b.name));
+  document.querySelectorAll('.account-select').forEach(sel => {
+    const exists = sel.querySelector(`option[value="${account.id}"]`);
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = account.id;
+      opt.textContent = account.name;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function handleAccountSelect(event) {
+  const select = event.target;
+  const row = select.closest('tr');
+  const hidden = row.querySelector('input[name$="-account"]');
+  const selectedId = parseInt(select.value);
+
+  // Return previous selection to available list
+  const previousId = parseInt(select.dataset.previousId);
+  if (previousId && previousId !== selectedId) {
+    const previousName = select.dataset.previousName;
+    addAccountToAvailable({ id: previousId, name: previousName });
+  }
+
+  if (!selectedId) {
+    if (hidden) hidden.value = '';
+    row.dataset.accountId = '';
+    row.dataset.accountName = '';
+    select.dataset.previousId = '';
+    select.dataset.previousName = '';
+    return;
+  }
+
+  const selectedAccount = availableAccounts.find(acc => acc.id === selectedId);
+  if (selectedAccount) {
+    if (hidden) hidden.value = selectedAccount.name;
+    row.dataset.accountId = selectedAccount.id;
+    row.dataset.accountName = selectedAccount.name;
+    select.dataset.previousId = selectedAccount.id;
+    select.dataset.previousName = selectedAccount.name;
+    removeAccountFromAvailable(selectedAccount.id, select);
+  }
+}
+
 function addRow() {
   console.log("🔄 [addRow] Adding new account row");
+
+  if (availableAccounts.length === 0) {
+    showNotification("No available accounts", "info");
+    return;
+  }
   
   const totalForms = document.getElementById("id_form-TOTAL_FORMS");
   if (!totalForms) {
@@ -87,13 +162,19 @@ function addRow() {
   if (targetTable) {
     targetTable.appendChild(newRow);
     totalForms.value = newIndex + 1;
-    
+
+    const select = newRow.querySelector('.account-select');
+    if (select) {
+      populateAccountSelect(select);
+      select.addEventListener('change', handleAccountSelect);
+    }
+
     // Make the new row draggable by reinitializing sortable
     setTimeout(() => {
       const event = new CustomEvent('reinitializeSortable');
       document.dispatchEvent(event);
     }, 100);
-    
+
     console.log("✅ [addRow] Row added successfully, new total forms:", newIndex + 1);
     updateTotalBalance();
   } else {
@@ -116,11 +197,16 @@ function deleteAccount(balanceId, button) {
   })
   .then(response => {
     if (response.ok || response.redirected) {
-      // Remove row from DOM
+      // Remove row from DOM and return account to available list
       const row = button.closest("tr");
+      const accountId = parseInt(row.dataset.accountId || row.dataset.id);
+      const accountName = row.dataset.accountName;
       row.remove();
       updateTotalBalance();
-      
+      if (accountId && accountName) {
+        addAccountToAvailable({ id: accountId, name: accountName });
+      }
+
       // Show success notification
       showNotification("✅ Balance deleted successfully", "success");
     } else {
@@ -494,6 +580,15 @@ function toggleZeroBalances() {
 // Initialize everything when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🚀 [account_balance.js] Initializing");
+
+  const dataEl = document.getElementById('available-accounts');
+  if (dataEl) {
+    try {
+      availableAccounts = JSON.parse(dataEl.textContent);
+    } catch (e) {
+      availableAccounts = [];
+    }
+  }
   
   // Add row button
   const addBtn = document.getElementById("add-row-btn");
@@ -569,9 +664,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (target.classList.contains("remove-row-btn")) {
       event.preventDefault();
       if (!target.disabled) {
+        const row = target.closest("tr");
+        const accountId = parseInt(row.dataset.accountId);
+        const accountName = row.dataset.accountName;
         target.disabled = true;
-        target.closest("tr").remove();
+        row.remove();
         updateTotalBalance();
+        if (accountId && accountName) {
+          addAccountToAvailable({ id: accountId, name: accountName });
+        }
       }
     }
   });

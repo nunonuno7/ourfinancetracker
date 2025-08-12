@@ -329,32 +329,11 @@ class AccountBalanceForm(forms.ModelForm):
         if len(name) > 100:
             raise ValidationError("Account name cannot exceed 100 characters.")
 
-        # Use select_related to reduce queries
-        account_qs = Account.objects.select_related('account_type', 'currency').filter(
-            user=self.user, name__iexact=name
-        )
-        
+        # Only allow selection of existing accounts for this user
+        account_qs = Account.objects.filter(user=self.user, name__iexact=name)
         if account_qs.exists():
             return account_qs.first()
-        else:
-            # Cache default objects to avoid repeated queries
-            if not hasattr(self, '_default_account_type'):
-                self._default_account_type = (
-                    AccountType.objects.filter(name__iexact="Savings").first() or 
-                    AccountType.objects.first()
-                )
-            if not hasattr(self, '_default_currency'):
-                self._default_currency = (
-                    Currency.objects.filter(code__iexact="EUR").first() or 
-                    Currency.objects.first()
-                )
-            
-            return Account.objects.create(
-                user=self.user,
-                name=name,
-                account_type=self._default_account_type,
-                currency=self._default_currency,
-            )
+        raise ValidationError("Selected account does not exist.")
 
     def clean(self):
         cleaned = super().clean()

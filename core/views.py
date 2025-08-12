@@ -2417,6 +2417,7 @@ def account_balance_view(request):
     # Ultra-fast data processing with pre-allocated dictionaries
     totals_by_group = {}
     grand_total = 0
+    available_accounts = []
 
     # Single pass processing for maximum efficiency
     for row in rows:
@@ -2424,10 +2425,13 @@ def account_balance_view(request):
         
         balance_value = float(balance)
         grand_total += balance_value
-        
+
         # Group totals calculation
         key = (account_type_name, currency_code)
         totals_by_group[key] = totals_by_group.get(key, 0) + balance_value
+
+        if not has_balance:
+            available_accounts.append({"id": account_id, "name": account_name})
 
     # Minimized formset creation for template
     queryset = AccountBalance.objects.filter(
@@ -2457,6 +2461,7 @@ def account_balance_view(request):
         "year": year,
         "month": month,
         "selected_month": date(year, month, 1),
+        "available_accounts": available_accounts,
     }
 
     # Cache only serializable data for performance
