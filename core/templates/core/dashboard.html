@@ -9,24 +9,24 @@ Dashboard{% endblock %} {% block extra_head %}
 <div class="container-fluid">
   <div class="d-flex align-items-center gap-2 mb-3">
     <select id="mode" class="form-select form-select-sm">
-      <option value="history" {% if mode != 'period' %}selected{% endif %}>Histórico</option>
-      <option value="period" {% if mode == 'period' %}selected{% endif %}>Período</option>
+      <option value="history" {% if mode != 'period' %}selected{% endif %}>History</option>
+      <option value="period" {% if mode == 'period' %}selected{% endif %}>Period</option>
     </select>
     {% if mode == 'period' %}
-    <a href="?mode=period&period={{ prev_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Período anterior">&laquo;</a>
+    <a href="?mode=period&period={{ prev_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Previous period">&laquo;</a>
     <input id="periodPicker" type="month" class="form-control form-control-sm" value="{{ period }}">
-    <a href="?mode=period&period={{ next_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Período seguinte">&raquo;</a>
+    <a href="?mode=period&period={{ next_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Next period">&raquo;</a>
     {% else %}
     <form method="get" class="d-flex align-items-center gap-2">
       <input type="hidden" name="mode" value="history">
       <input type="date" name="from" value="{{ request.GET.from }}" class="form-control form-control-sm">
       <input type="date" name="to" value="{{ request.GET.to }}" class="form-control form-control-sm">
-      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
     </form>
     {% endif %}
   </div>
   {% if mode == 'period' %}
-  <h5>Análise do Período {{ period }}</h5>
+  <h5>Period Analysis {{ period }}</h5>
   <div id="period-kpis">
     {% for key, value in kpis.items %}<div>{{ key }}: {{ value }}</div>{% endfor %}
   </div>
@@ -82,7 +82,7 @@ Dashboard{% endblock %} {% block extra_head %}
           <strong>Active Filters:</strong>
           <div class="mt-1" id="filter-summary-items"></div>
         </div>
-        <!-- Primeira linha: Controles de navegação de anos -->
+        <!-- First row: year navigation controls -->
         <div class="row g-3 mb-4">
           <div class="col-lg-6 col-md-12">
             <label class="form-label fw-bold">📅 Years Range</label>

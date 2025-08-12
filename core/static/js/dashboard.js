@@ -752,7 +752,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       let url = '/dashboard/kpis/';
       if (startPeriod && endPeriod) {
-        // Converter formato de período de "Jul/24" para "2024-07"
+        // Convert period format from "Jul/24" to "2024-07"
         const convertPeriod = (period) => {
           const [month, year] = period.split('/');
           const monthMap = {
@@ -879,7 +879,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch('/financial-analysis/json/');
       if (!response.ok) {
-        console.warn('⚠️ Endpoint de análise financeira não disponível, usando dados simulados');
+        console.warn('⚠️ Financial analysis endpoint unavailable, using simulated data');
         const simulatedData = generateSimulatedAnalysis();
         analysisData = simulatedData;
         generateInsights(simulatedData);
@@ -888,13 +888,13 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const data = await response.json();
-      console.log('📈 Análise financeira recebida:', data);
+      console.log('📈 Financial analysis received:', data);
       analysisData = data;
       generateInsights(data);
       updateFlowsChart(data);
       return data;
     } catch (error) {
-      console.warn('⚠️ Erro ao carregar análise financeira, usando dados simulados:', error);
+      console.warn('⚠️ Error loading financial analysis, using simulated data:', error);
       const simulatedData = generateSimulatedAnalysis();
       analysisData = simulatedData;
       generateInsights(simulatedData);
@@ -932,8 +932,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return simulatedData;
   };
 
-  // Esta função foi removida para evitar valores incorretos temporários
-  // Os KPIs são agora calculados apenas no backend de forma consistente
+  // This function was removed to avoid temporary incorrect values
+  // KPIs are now consistently calculated only on the backend
 
   // Generate analysis data based on filtered periods
   const generateFilteredAnalysis = (visiblePeriods, includeSavings, includeInvestments, includeCurrent) => {
@@ -1282,7 +1282,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           resolve();
         } catch (error) {
-          console.error('❌ Erro ao atualizar gráficos:', error);
+          console.error('❌ Error updating charts:', error);
           resolve();
         }
       });
@@ -2622,46 +2622,46 @@ document.addEventListener("DOMContentLoaded", () => {
   // Start the enhanced dashboard
   const init = async () => {
     if (isInitialized) {
-      console.log('⚠️ Dashboard já inicializado, ignorando');
+      console.log('⚠️ Dashboard already initialized, ignoring');
       return;
     }
 
-    console.log('🚀 Inicializando dashboard...');
+    console.log('🚀 Initializing dashboard...');
     isInitialized = true;
 
     // Initialize charts first with error handling
     try {
       initCharts();
     } catch (error) {
-      console.error('❌ Erro ao inicializar gráficos:', error);
+      console.error('❌ Error initializing charts:', error);
     }
 
     // Load data with better error handling and fallbacks
     try {
-      console.log('📊 Carregando dados...');
+      console.log('📊 Loading data...');
 
       // Load account balances first (most important)
       const balanceData = await loadAccountBalances(false).catch(err => {
-        console.warn('⚠️ Falha ao carregar saldos, usando dados mock');
+        console.warn('⚠️ Failed to load balances, using mock data');
         return generateMockBalanceData();
       });
 
       // Load KPIs after balances are ready
       const kpiData = await loadFinancialKPIs().catch(err => {
-        console.warn('⚠️ Falha ao carregar KPIs, usando dados mock');
+        console.warn('⚠️ Failed to load KPIs, using mock data');
         return generateMockKPIs();
       });
 
       // Load analysis data (less critical, can be async)
       loadFinancialAnalysis().catch(err => {
-        console.warn('⚠️ Falha ao carregar análise, usando dados simulados');
+        console.warn('⚠️ Failed to load analysis, using simulated data');
         return generateSimulatedAnalysis();
       });
 
-      console.log('✅ Dados carregados');
+      console.log('✅ Data loaded');
 
     } catch (error) {
-      console.error('❌ Erro durante inicialização:', error);
+      console.error('❌ Error during initialization:', error);
       // Initialize with minimal mock data
       columns = ['type', 'currency'];
       rows = [];
