@@ -4,6 +4,7 @@
 
 {% block content %}
 <div class="container-fluid">
+  {{ available_accounts|json_script:"available-accounts" }}
   <div class="row">
     <div class="col-12">
       <!-- Header Section -->
@@ -94,8 +95,9 @@
                         <span style="font-size: 14px; color: #6c757d; user-select: none;">⋮⋮</span>
                       </td>
                       <td>
-                        {{ form.account }}
+                        {{ form.account.as_hidden }}
                         {{ form.id }}
+                        <span>{{ form.instance.account.name }}</span>
                       </td>
                       <td class="text-end">
                         {{ form.reported_balance }}
@@ -103,7 +105,7 @@
                       <td class="text-center">
                         {% if form.instance.pk %}
                           {{ form.DELETE.as_hidden }}
-                          <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
+                          <button type="button" class="btn btn-sm btn-outline-danger delete-btn"
                                   data-id="{{ form.instance.pk }}" title="Delete">🗑️</button>
                         {% else %}
                           <button type="button" class="btn btn-sm btn-outline-secondary remove-row-btn" title="Remove">❌</button>
@@ -151,11 +153,12 @@
     <tr class="form-row">
       <td class="text-center handle" style="cursor: grab;">⋮⋮</td>
       <td>
-        <input type="text" name="form-__prefix__-account" class="form-control" placeholder="Account name" />
+        <select class="form-select account-select"></select>
+        <input type="hidden" name="form-__prefix__-account" />
         <input type="hidden" name="form-__prefix__-id" />
       </td>
       <td class="text-end">
-        <input type="number" step="0.01" name="form-__prefix__-reported_balance" 
+        <input type="number" step="0.01" name="form-__prefix__-reported_balance"
                class="form-control text-end" placeholder="0.00" />
       </td>
       <td class="text-center">
