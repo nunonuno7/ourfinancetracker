@@ -122,7 +122,7 @@ Dashboard{% endblock %} {% block extra_head %}
   </div>
 
   <!-- Enhanced KPI Cards Row -->
-  <div class="row mb-4">
+  <div class="row mb-4 kpi-scroll">
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       <div class="card border-success h-100 kpi-card">
         <div class="card-body text-center p-3">
@@ -291,7 +291,7 @@ Dashboard{% endblock %} {% block extra_head %}
             </button>
           </div>
         </div>
-        <div class="card-body" style="height: 400px; position: relative">
+        <div class="card-body chart-container">
           <canvas id="evolution-chart"></canvas>
         </div>
       </div>
@@ -303,7 +303,7 @@ Dashboard{% endblock %} {% block extra_head %}
             <i class="fas fa-chart-pie"></i> Current Allocation
           </h5>
         </div>
-        <div class="card-body" style="height: 400px; position: relative">
+        <div class="card-body chart-container">
           <canvas id="allocation-chart"></canvas>
           <div class="mt-3" id="allocation-legend"></div>
           <div class="mt-3">
@@ -665,26 +665,10 @@ Dashboard{% endblock %} {% block extra_head %}
     }
   }
 
-  /* Fix canvas sizing issues */
-  canvas {
-    max-height: 400px !important;
-    height: auto !important;
-  }
-
-  .card-body canvas {
-    width: 100% !important;
-    height: auto !important;
-    max-height: 350px !important;
-  }
-
   @media (max-width: 768px) {
     .btn-group-sm .btn {
       font-size: 0.7rem;
       padding: 0.25rem 0.5rem;
-    }
-
-    canvas {
-      max-height: 250px !important;
     }
   }
     /* Floating Action Button Style */

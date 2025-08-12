@@ -34,6 +34,15 @@ body {
     color: var(--charcoal-trust);
 }
 
+@media (max-width: 576px) {
+    body {
+        margin: 1rem;
+    }
+    .display-4 {
+        font-size: 2.5rem;
+    }
+}
+
 main {
     max-width: 720px;
     margin: auto;
@@ -777,6 +786,22 @@ button:hover,
     margin-top: 0.5rem;
   }
 
+  /* KPI row horizontal scroll */
+  .kpi-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kpi-scroll > div {
+    flex: 0 0 80%;
+    max-width: 80%;
+  }
+
+  .kpi-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Filter panels */
   .filter-panel {
     position: sticky;
@@ -852,6 +877,18 @@ button:hover,
   }
 }
 
+/* Dashboard chart container */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 400px;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 @media (max-width: 768px) {
   body {
     margin: 0.75rem;
@@ -882,9 +919,7 @@ button:hover,
 
   /* Dashboard chart improvements */
   .chart-container {
-    position: relative;
-    height: 300px;
-    width: 100%;
+    height: 250px;
   }
 
   /* Filter controls */

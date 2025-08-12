@@ -110,8 +110,8 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
-        aspectRatio: 2,
+        maintainAspectRatio: false,
+        
         resizeDelay: 0,
         plugins: {
           legend: {
@@ -198,8 +198,8 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
-        aspectRatio: 1,
+        maintainAspectRatio: false,
+        
         resizeDelay: 0,
         plugins: {
           legend: {
@@ -274,8 +274,8 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
-        aspectRatio: 2,
+        maintainAspectRatio: false,
+        
         resizeDelay: 0,
         plugins: {
           title: {
@@ -358,8 +358,8 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
-        aspectRatio: 2,
+        maintainAspectRatio: false,
+        
         resizeDelay: 0,
         plugins: {
           title: {
@@ -445,8 +445,8 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
-        aspectRatio: 1,
+        maintainAspectRatio: false,
+        
         resizeDelay: 0,
         plugins: {
           title: {
