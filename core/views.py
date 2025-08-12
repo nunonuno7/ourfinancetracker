@@ -337,7 +337,7 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
         logger.debug(f'📝 Criado: {self.object}')  # ✅ DEBUG no terminal
 
         # Limpar cache imediatamente
-        clear_tx_cache(self.request.user.id)
+        clear_tx_cache(self.request.user.id, force=True)
 
         # Adicionar flag para JavaScript saber que deve recarregar
         self.request.session['transaction_changed'] = True
@@ -395,7 +395,7 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
 
     def form_valid(self, form):
         # Limpar cache imediatamente
-        clear_tx_cache(self.request.user.id)
+        clear_tx_cache(self.request.user.id, force=True)
 
         # Adicionar flag para JavaScript saber que deve recarregar
         self.request.session['transaction_changed'] = True
@@ -430,7 +430,7 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
         response = super().delete(request, *args, **kwargs)
 
         # Clear cache after deletion
-        clear_tx_cache(user_id)
+        clear_tx_cache(user_id, force=True)
 
         # Handle AJAX requests
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
@@ -705,7 +705,7 @@ def transaction_bulk_update(request):
                 return JsonResponse({'success': False, 'error': 'Invalid action'})
 
         # Clear cache only AFTER all database operations are complete
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
         logger.info(f"✅ Bulk update completed: {updated} transactions updated, cache cleared for user {request.user.id}")
 
         return JsonResponse({
@@ -772,7 +772,7 @@ def transaction_bulk_duplicate(request):
                     new_tx.tags.add(tag)
 
         # Clear cache only AFTER all database operations are complete
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
         logger.info(f"✅ Bulk duplicate completed: {created} transactions created, cache cleared for user {request.user.id}")
 
         return JsonResponse({
@@ -834,7 +834,7 @@ def transaction_bulk_delete(request):
             logger.info(f"🗑️ [transaction_bulk_delete] Bulk deleted {deleted_count} objects from database")
 
         # Clear cache only AFTER all database operations are complete
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
         logger.info(f"✅ Bulk delete completed: {valid_count} transactions deleted, cache cleared for user {request.user.id}")
 
         return JsonResponse({
@@ -1040,7 +1040,7 @@ def import_transactions_xlsx(request):
             errors = result['errors']
 
             # Clear cache after import
-            clear_tx_cache(request.user.id)
+            clear_tx_cache(request.user.id, force=True)
             logger.info(f"🗄️ [import_transactions_xlsx] Cache cleared for user {request.user.id}")
 
             logger.info(f"📊 [import_transactions_xlsx] Import completed: {imported_count} imported, {len(errors)} errors")
@@ -1244,7 +1244,7 @@ def export_data_xlsx(request):
 def transaction_clear_cache(request):
     """Clear transaction cache for current user."""
     try:
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
 
         # Handle AJAX requests
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Content-Type') == 'application/json':
@@ -2360,7 +2360,7 @@ def account_balance_view(request):
                 cache.delete_many(cache_keys_pattern)
                 
                 # Clear transaction cache to ensure consistency
-                clear_tx_cache(request.user.id)
+                clear_tx_cache(request.user.id, force=True)
             else:
                 logger.info(f"⚡ [account_balance_view] No changes detected - skipping database operations")
 
@@ -3017,7 +3017,7 @@ def estimate_transaction_for_period(request):
         summary = estimation_service.get_estimation_summary(period)
 
         # Clear transaction cache
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
 
         message = f'Estimation completed for {period.label}'
         if estimated_tx:
@@ -3142,7 +3142,7 @@ def delete_estimated_transaction(request, transaction_id):
         tx.delete()
 
         # Clear cache
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
 
         return JsonResponse({
             'success': True,
@@ -3181,7 +3181,7 @@ def delete_estimated_transaction_by_period(request, period_id):
         logger.info(f"Deleted {deleted_count} estimated transaction(s) for period {period.label}")
 
         # Clear cache
-        clear_tx_cache(request.user.id)
+        clear_tx_cache(request.user.id, force=True)
 
         return JsonResponse({
             'success': True,
@@ -3886,7 +3886,7 @@ def clear_transaction_cache_view(request):
     View to clear the transaction cache for the current user.
     """
     user_id = request.user.id
-    clear_tx_cache(user_id)
+    clear_tx_cache(user_id, force=True)
     return JsonResponse({"status": "success", "message": "Transaction cache cleared successfully."})
 
 

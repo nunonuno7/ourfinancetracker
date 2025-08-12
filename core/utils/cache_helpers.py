@@ -62,17 +62,19 @@ def make_key(key: str, key_prefix: str = "", version: Optional[int] = None) -> s
     return full_key
 
 
-def clear_tx_cache(user_id: int) -> None:
+def clear_tx_cache(user_id: int, force: bool = False) -> None:
     """
     Limpa todas as chaves de cache relacionadas com transações do utilizador.
     Optimizado para evitar limpezas excessivas.
 
     Args:
         user_id: ID do utilizador
+        force: Quando ``True``, ignora o mecanismo de *throttling* e limpa
+            sempre o cache.
     """
-    # Throttle: só limpar cache uma vez por minuto por utilizador
+    # Throttle: só limpar cache uma vez por minuto por utilizador, a menos que forçado
     throttle_key = f"cache_clear_throttle_{user_id}"
-    if cache.get(throttle_key):
+    if not force and cache.get(throttle_key):
         logger.debug(f"Cache clearing throttled for user {user_id}")
         return
 
