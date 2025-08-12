@@ -1,11 +1,35 @@
-envVars:
-  - key: DB_NAME
-    value: postgres
-  - key: DB_USER
-    value: ${DB_USER}
-  - key: DB_PASSWORD
-    value: ${DB_PASSWORD}
-  - key: DB_HOST
-    value: ${DB_HOST}
-  - key: DB_PORT
-    value: 6543
+services:
+  - type: web
+    name: ourfinancetracker
+    env: python
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
+    startCommand: gunicorn ourfinancetracker_site.wsgi
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: DB_NAME
+        fromDatabase:
+          name: ourfinancetracker-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: ourfinancetracker-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: ourfinancetracker-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: ourfinancetracker-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: ourfinancetracker-db
+          property: port
+
+databases:
+  - name: ourfinancetracker-db
+    plan: free
