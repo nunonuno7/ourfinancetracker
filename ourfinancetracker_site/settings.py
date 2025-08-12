@@ -130,6 +130,7 @@ if DEBUG and SHOW_DEBUG_TOOLBAR:
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -151,6 +152,36 @@ MIDDLEWARE = [m for m in MIDDLEWARE if m is not None]
 if DEBUG and SHOW_DEBUG_TOOLBAR:
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
     INTERNAL_IPS = ["127.0.0.1"]
+
+# ────────────────────────────────────────────────────
+# Content Security Policy
+# ────────────────────────────────────────────────────
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://code.jquery.com",
+    "https://cdn.datatables.net",
+    "https://cdnjs.cloudflare.com",
+    "'unsafe-inline'",
+)
+CSP_STYLE_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdn.datatables.net",
+    "https://cdnjs.cloudflare.com",
+    "'unsafe-inline'",
+)
+CSP_FONT_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+)
+CSP_IMG_SRC = (
+    "'self'",
+    "data:",
+)
+CSP_CONNECT_SRC = ("'self'",)
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
 WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
