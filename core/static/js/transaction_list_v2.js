@@ -481,7 +481,7 @@ class TransactionManager {
     return cacheKey;
   }
 
-  async loadTransactions() {
+  async loadTransactions(force = false) {
     console.log("🔄 [loadTransactions] LOADING START");
 
     try {
@@ -501,6 +501,9 @@ class TransactionManager {
         }
       });
 
+      if (force) {
+        params.append("force", "true");
+      }
       const url = `/transactions/json-v2/?${params.toString()}`;
       console.log("🌐 [loadTransactions] Request URL:", url);
 
@@ -564,7 +567,7 @@ class TransactionManager {
     }
   }
 
-  async loadTotals() {
+  async loadTotals(force = false) {
     console.log("💰 [loadTotals] Starting totals load...");
     try {
       const filters = this.getFilters();
@@ -578,6 +581,9 @@ class TransactionManager {
       
       console.log("🔍 [loadTotals] Filters for totals (cleaned):", totalsFilters);
 
+      if (force) {
+        totalsFilters.force = true;
+      }
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
         headers: {
@@ -1467,8 +1473,11 @@ class TransactionManager {
           this.cache.clear();
           console.log("🗑️ [refreshData] Local cache cleared");
 
-          // Reload both transactions and totals to reflect updated estimates
-          await Promise.all([this.loadTransactions(), this.loadTotals()]);
+          // Reload both transactions and totals, forcing fresh queries
+          await Promise.all([
+            this.loadTransactions(true),
+            this.loadTotals(true),
+          ]);
 
           this.showSuccess("✅ Data refreshed successfully!");
           console.log("✅ [refreshData] Operation completed successfully");
