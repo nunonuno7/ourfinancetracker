@@ -91,13 +91,15 @@ def _extend_from_env_list(env_key, target_list, require_scheme=False):
 _extend_from_env_list("EXTRA_ALLOWED_HOSTS", ALLOWED_HOSTS, require_scheme=False)
 _extend_from_env_list("EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True)
 
-# Adicionar configuração específica para CSRF em desenvolvimento
+# Adicionar configuração específica para CSRF
 if DEBUG:
     CSRF_COOKIE_SAMESITE = 'Lax'
     CSRF_USE_SESSIONS = False
     CSRF_COOKIE_HTTPONLY = False
     # Para debug CSRF em desenvolvimento
     CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
+else:
+    CSRF_COOKIE_HTTPONLY = True
 
 # ────────────────────────────────────────────────────
 # Apps & middleware
