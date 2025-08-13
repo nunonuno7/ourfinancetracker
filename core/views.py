@@ -151,13 +151,48 @@ def _shift_period(period_yyyy_mm: str, delta_months: int) -> str:
 
 
 def build_kpis_for_period(tx):
-    """Minimal stub returning count of transactions for the period."""
-    return {"count": tx.count()}
+    """Build basic KPI metrics for a single period.
+
+    Calculates total income, expenses, investments and the resulting net
+    amount for the provided queryset of transactions.
+    """
+    stats = tx.aggregate(
+        income=Sum("amount", filter=Q(type=Transaction.Type.INCOME)),
+        expenses=Sum("amount", filter=Q(type=Transaction.Type.EXPENSE)),
+        investments=Sum("amount", filter=Q(type=Transaction.Type.INVESTMENT)),
+    )
+
+    income = stats["income"] or Decimal("0")
+    expenses = abs(stats["expenses"] or Decimal("0"))
+    investments = stats["investments"] or Decimal("0")
+    net = income - expenses - investments
+
+    return {
+        "income": float(income),
+        "expenses": float(expenses),
+        "investments": float(investments),
+        "net": float(net),
+    }
 
 
 def build_charts_for_period(tx):
-    """Minimal stub placeholder for charts."""
-    return []
+    """Return expense totals grouped by category for charting."""
+    expense_rows = (
+        tx.filter(type=Transaction.Type.EXPENSE)
+        .values("category__name")
+        .annotate(total=Sum("amount"))
+        .order_by("-total")
+    )
+
+    charts = []
+    for row in expense_rows:
+        charts.append(
+            {
+                "category": row["category__name"] or "Uncategorised",
+                "total": float(abs(row["total"] or Decimal("0"))),
+            }
+        )
+    return charts
 
 
 def build_kpis_history(qs):

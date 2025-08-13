@@ -20,11 +20,54 @@ Dashboard{% endblock %} {% block extra_head %}
   </div>
   {% if mode == 'period' %}
   <h5>Period Analysis {{ period }}</h5>
-  <div id="period-kpis">
-    {% for key, value in kpis.items %}<div>{{ key }}: {{ value }}</div>{% endfor %}
+  <div class="row mb-4" id="period-kpis">
+    <div class="col-sm-3 mb-3">
+      <div class="card text-center h-100">
+        <div class="card-body">
+          <h6 class="card-title">Income</h6>
+          <p class="card-text h4 mb-0">€ {{ kpis.income|floatformat:2 }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3 mb-3">
+      <div class="card text-center h-100">
+        <div class="card-body">
+          <h6 class="card-title">Expenses</h6>
+          <p class="card-text h4 mb-0">€ {{ kpis.expenses|floatformat:2 }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3 mb-3">
+      <div class="card text-center h-100">
+        <div class="card-body">
+          <h6 class="card-title">Investments</h6>
+          <p class="card-text h4 mb-0">€ {{ kpis.investments|floatformat:2 }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-3 mb-3">
+      <div class="card text-center h-100">
+        <div class="card-body">
+          <h6 class="card-title">Net</h6>
+          <p class="card-text h4 mb-0">€ {{ kpis.net|floatformat:2 }}</p>
+        </div>
+      </div>
+    </div>
   </div>
+  <h5>Expenses by Category</h5>
   <div id="period-charts">
-    {% for chart in charts %}<div>{{ chart }}</div>{% endfor %}
+    {% if charts %}
+    <ul class="list-group">
+      {% for item in charts %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        {{ item.category }}
+        <span class="badge bg-primary rounded-pill">€ {{ item.total|floatformat:2 }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted">No expense data for this period.</p>
+    {% endif %}
   </div>
   {% else %}
   <!-- Header with Advanced Controls -->
