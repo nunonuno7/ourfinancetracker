@@ -562,34 +562,35 @@ button:hover,
   border-bottom: 1px solid var(--cloud-panel);
 }
 
-.navbar-brand {
-    color: #24282C !important;
-    font-weight: 600 !important;
-}
+.navbar-brand, .navbar-nav .nav-link {
+            color: #24282C !important;
+        }
 
-.navbar-brand:hover {
-    color: #3AB49E !important;
-}
+        .navbar-brand:hover, .navbar-nav .nav-link:hover {
+            color: #3AB49E !important;
+        }
 
-.nav-link {
-    color: #24282C !important;
-}
+        .navbar-nav .nav-link.active {
+            color: #3AB49E !important;
+            font-weight: 600;
+        }
 
-.nav-link:hover {
-    color: #3AB49E !important;
-}
+        /* Fix navbar dark text visibility */
+        .navbar-dark .navbar-brand {
+            color: #ffffff !important;
+        }
 
-.navbar-dark .navbar-brand {
-    color: #ffffff !important;
-}
+        .navbar-dark .navbar-nav .nav-link {
+            color: #ffffff !important;
+        }
 
-.navbar-dark .nav-link {
-    color: #ffffff !important;
-}
+        .navbar-dark .navbar-nav .nav-link:hover {
+            color: #3AB49E !important;
+        }
 
-.navbar-dark .nav-link:hover {
-    color: #3AB49E !important;
-}
+        .navbar-dark .navbar-nav .nav-link.active {
+            color: #3AB49E !important;
+        }
 
 .navbar-toggler {
   border-color: var(--cloud-panel);
@@ -1168,7 +1169,7 @@ button:hover,
 .kpi-card h6,
 .kpi-card h4,
 .kpi-card small {
-  font-family: inherit;
+  color: inherit !important;
 }
 
 .kpi-card .progress { height: 4px; }

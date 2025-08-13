@@ -165,7 +165,7 @@ def build_kpis_for_period(tx):
     income = stats["income"] or Decimal("0")
     expenses = abs(stats["expenses"] or Decimal("0"))
     investments = stats["investments"] or Decimal("0")
-    net = income - expenses - investments
+    net = income - expenses  # Net Balance = Income - Expenses (investments don't count)
 
     return {
         "income": float(income),
@@ -209,8 +209,13 @@ def build_charts_history(qs):
 def dashboard(request):
     """Dashboard supporting history and period modes."""
     mode = request.GET.get("mode", "history")
-    current_period = now().strftime("%Y-%m")
-    period = request.GET.get("period", current_period)
+    # Default to previous month instead of current month
+    current_date = now()
+    if current_date.month == 1:
+        default_period = f"{current_date.year - 1}-12"
+    else:
+        default_period = f"{current_date.year}-{current_date.month - 1:02d}"
+    period = request.GET.get("period", default_period)
     if not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", period or ""):
         period = current_period
 
@@ -231,19 +236,53 @@ def dashboard(request):
         )
         kpis = build_kpis_for_period(tx)
         charts = build_charts_for_period(tx)
+        
+        # Enhanced expense statistics
         expense_stats = tx.filter(type="EX").aggregate(
             total=Sum("amount"),
             estimated=Sum("amount", filter=Q(is_estimated=True)),
+            count=models.Count("id"),
+            estimated_count=models.Count("id", filter=Q(is_estimated=True)),
         )
         total_expenses = abs(expense_stats["total"] or Decimal("0"))
         estimated_expenses = abs(expense_stats["estimated"] or Decimal("0"))
         verified_expenses_pct_dec = pct(
             total_expenses - estimated_expenses, total_expenses
         )
+        
+        # Additional KPI calculations
         kpis["non_estimated_expenses_pct"] = round(float(verified_expenses_pct_dec))
         kpis["verified_expenses_pct"] = float(verified_expenses_pct_dec)
         kpis["verified_expenses_pct_str"] = f"{verified_expenses_pct_dec}%"
         kpis["verification_level"] = kpis.get("verification_level", "Moderate")
+        
+        # Calculate daily and weekly averages
+        days_in_month = monthrange(year, month)[1]
+        kpis["daily_net"] = float(kpis["net"] / days_in_month) if days_in_month > 0 else 0
+        kpis["weekly_net"] = float(kpis["net"] / 4.33) if kpis["net"] else 0  # Average weeks per month
+        
+        # Calculate rates if income exists
+        if kpis["income"] > 0:
+            kpis["savings_rate"] = round(float((kpis["net"] / kpis["income"]) * 100), 1)
+            kpis["investment_rate"] = round(float((kpis["investments"] / kpis["income"]) * 100), 1)
+            kpis["expense_ratio"] = round(float((kpis["expenses"] / kpis["income"]) * 100), 1)
+        else:
+            kpis["savings_rate"] = 0
+            kpis["investment_rate"] = 0
+            kpis["expense_ratio"] = 0
+        
+        # Transaction counts for insights
+        kpis["transaction_count"] = tx.count()
+        kpis["expense_count"] = expense_stats["count"]
+        kpis["estimated_count"] = expense_stats["estimated_count"]
+        
+        # Format period for display
+        try:
+            period_date = date(year, month, 1)
+            context["period_formatted"] = period_date.strftime("%B %Y")
+        except:
+            context["period_formatted"] = period
+        
         context.update({"kpis": kpis, "charts": charts})
         return render(request, "core/dashboard.html", context)
 
@@ -429,44 +468,108 @@ def menu_config(request):
 def account_balances_pivot_json(request):
     """Saldos agregados por tipo/moeda em formato pivot para gráficos."""
     user_id = request.user.id
+    
+    # Check if specific period is requested
+    requested_period = request.GET.get('period')
+    
     with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT at.name, cur.code, dp.year, dp.month, SUM(ab.reported_balance)
-            FROM core_accountbalance ab
-            JOIN core_account acc ON acc.id = ab.account_id
-            JOIN core_accounttype at ON at.id = acc.account_type_id
-            JOIN core_currency cur ON cur.id = acc.currency_id
-            JOIN core_dateperiod dp ON dp.id = ab.period_id
-            WHERE acc.user_id = %s
-            GROUP BY at.name, cur.code, dp.year, dp.month
-            ORDER BY dp.year, dp.month
-        """, [user_id])
+        if requested_period:
+            # Parse period (format: YYYY-MM)
+            try:
+                year, month = map(int, requested_period.split('-'))
+                cursor.execute("""
+                    SELECT at.name, cur.code, dp.year, dp.month, SUM(ab.reported_balance)
+                    FROM core_accountbalance ab
+                    JOIN core_account acc ON acc.id = ab.account_id
+                    JOIN core_accounttype at ON at.id = acc.account_type_id
+                    JOIN core_currency cur ON cur.id = acc.currency_id
+                    JOIN core_dateperiod dp ON dp.id = ab.period_id
+                    WHERE acc.user_id = %s AND dp.year = %s AND dp.month = %s
+                    GROUP BY at.name, cur.code, dp.year, dp.month
+                    ORDER BY at.name, cur.code
+                """, [user_id, year, month])
+            except (ValueError, TypeError):
+                # Fallback to latest period
+                cursor.execute("""
+                    SELECT at.name, cur.code, dp.year, dp.month, SUM(ab.reported_balance)
+                    FROM core_accountbalance ab
+                    JOIN core_account acc ON acc.id = ab.account_id
+                    JOIN core_accounttype at ON at.id = acc.account_type_id
+                    JOIN core_currency cur ON cur.id = acc.currency_id
+                    JOIN core_dateperiod dp ON dp.id = ab.period_id
+                    WHERE acc.user_id = %s
+                    AND dp.id = (SELECT id FROM core_dateperiod ORDER BY year DESC, month DESC LIMIT 1)
+                    GROUP BY at.name, cur.code, dp.year, dp.month
+                    ORDER BY at.name, cur.code
+                """, [user_id])
+        else:
+            # All periods
+            cursor.execute("""
+                SELECT at.name, cur.code, dp.year, dp.month, SUM(ab.reported_balance)
+                FROM core_accountbalance ab
+                JOIN core_account acc ON acc.id = ab.account_id
+                JOIN core_accounttype at ON at.id = acc.account_type_id
+                JOIN core_currency cur ON cur.id = acc.currency_id
+                JOIN core_dateperiod dp ON dp.id = ab.period_id
+                WHERE acc.user_id = %s
+                GROUP BY at.name, cur.code, dp.year, dp.month
+                ORDER BY dp.year, dp.month
+            """, [user_id])
+            
         rows = cursor.fetchall()
 
     if not rows:
         return JsonResponse({"columns": [], "rows": []})
 
-    # Criar DataFrame
-    df = pd.DataFrame(rows, columns=["type", "currency", "year", "month", "balance"])
-    df["period"] = pd.to_datetime(dict(year=df.year, month=df.month, day=1)).dt.strftime("%b/%y")
+    if requested_period:
+        # Return individual accounts for single period
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT a.name, at.name, cur.code, ab.reported_balance
+                FROM core_accountbalance ab
+                JOIN core_account a ON a.id = ab.account_id
+                JOIN core_accounttype at ON at.id = a.account_type_id
+                JOIN core_currency cur ON cur.id = a.currency_id
+                JOIN core_dateperiod dp ON dp.id = ab.period_id
+                WHERE a.user_id = %s AND dp.year = %s AND dp.month = %s
+                AND ab.reported_balance > 0
+                ORDER BY a.name
+            """, [user_id, year, month])
+            individual_rows = cursor.fetchall()
+        
+        account_data = []
+        for row in individual_rows:
+            account_name, account_type, currency, balance = row
+            account_data.append({
+                "name": account_name,
+                "type": account_type,
+                "currency": currency,
+                "balance": float(balance),
+                "label": f"{account_name}"
+            })
+        return JsonResponse({"accounts": account_data})
+    else:
+        # Create DataFrame for pivot
+        df = pd.DataFrame(rows, columns=["type", "currency", "year", "month", "balance"])
+        df["period"] = pd.to_datetime(dict(year=df.year, month=df.month, day=1)).dt.strftime("%b/%y")
 
-    # Pivot com fill_value=0 para garantir que todos os períodos aparecem
-    pivot = (
-        df.pivot_table(
-            index=["type", "currency"],
-            columns="period",
-            values="balance",
-            aggfunc="sum",
-            fill_value=0,
+        # Pivot com fill_value=0 para garantir que todos os períodos aparecem
+        pivot = (
+            df.pivot_table(
+                index=["type", "currency"],
+                columns="period",
+                values="balance",
+                aggfunc="sum",
+                fill_value=0,
+            )
+            .sort_index(axis=1)
+            .reset_index()
         )
-        .sort_index(axis=1)
-        .reset_index()
-    )
 
-    return JsonResponse({
-        "columns": list(pivot.columns),
-        "rows": pivot.to_dict("records")
-    })
+        return JsonResponse({
+            "columns": list(pivot.columns),
+            "rows": pivot.to_dict("records")
+        })
 
 # ==============================================================================
 # VIEWS DE TRANSAÇÕES

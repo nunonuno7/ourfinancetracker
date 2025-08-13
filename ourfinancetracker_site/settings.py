@@ -80,6 +80,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8001",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:8001",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 def _extend_from_env_list(env_key, target_list, require_scheme=False):
@@ -91,6 +93,15 @@ def _extend_from_env_list(env_key, target_list, require_scheme=False):
             # Skip invalid origin if scheme is missing
             continue
         target_list.append(item)
+
+# Add dynamic Replit domain support
+replit_dev_domain = os.getenv("REPLIT_DEV_DOMAIN")
+if replit_dev_domain:
+    ALLOWED_HOSTS.append(replit_dev_domain)
+    CSRF_TRUSTED_ORIGINS.extend([
+        f"https://{replit_dev_domain}",
+        f"http://{replit_dev_domain}",
+    ])
 
 _extend_from_env_list("EXTRA_ALLOWED_HOSTS", ALLOWED_HOSTS, require_scheme=False)
 _extend_from_env_list("EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True)

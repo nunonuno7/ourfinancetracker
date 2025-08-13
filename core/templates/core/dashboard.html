@@ -7,68 +7,737 @@ Dashboard{% endblock %} {% block extra_head %}
 <meta name="format-detection" content="email=no">
 {% endblock %} {% block content %}
 <div class="container-fluid">
-  <div class="d-flex align-items-center gap-2 mb-3">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
     <div class="btn-group btn-group-sm" role="group">
-      <button id="historyBtn" type="button" class="btn {% if mode != 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">History</button>
-      <button id="periodBtn" type="button" class="btn {% if mode == 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">Period</button>
+      <button id="historyBtn" type="button" class="btn {% if mode != 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        <i class="fas fa-chart-line me-1"></i>History
+      </button>
+      <button id="periodBtn" type="button" class="btn {% if mode == 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        <i class="fas fa-calendar me-1"></i>Period
+      </button>
     </div>
+
     <div id="periodControls" class="d-flex align-items-center gap-2 {% if mode != 'period' %}d-none{% endif %}">
-      <a href="?mode=period&period={{ prev_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Previous period">&laquo;</a>
-      <input id="periodPicker" type="month" class="form-control form-control-sm" value="{{ period }}">
-      <a href="?mode=period&period={{ next_period }}" class="btn btn-outline-secondary btn-sm" aria-label="Next period">&raquo;</a>
+      <a href="/dashboard/?mode=period&period={{ prev_period }}" 
+         class="btn btn-outline-secondary btn-sm" 
+         aria-label="Previous period"
+         title="Previous period">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+      <input id="periodPicker" 
+             type="month" 
+             class="form-control form-control-sm" 
+             value="{{ period }}" 
+             style="min-width: 150px;">
+      <a href="/dashboard/?mode=period&period={{ next_period }}" 
+         class="btn btn-outline-secondary btn-sm" 
+         aria-label="Next period"
+         title="Next period">
+        <i class="fas fa-chevron-right"></i>
+      </a>
+      <button type="button" 
+              class="btn btn-outline-info btn-sm" 
+              onclick="window.location.href='/dashboard/?mode=period'"
+              title="Go to default period">
+        <i class="fas fa-home"></i>
+      </button>
     </div>
   </div>
   {% if mode == 'period' %}
-  <h5>Period Analysis {{ period }}</h5>
+  <!-- Period Header with Navigation -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h2 class="mb-0 text-dark">📊 Period Analysis</h2>
+              <h4 class="text-primary mb-1">{{ period|date:"F Y"|default:period }}</h4>
+              <small class="text-muted">Detailed financial breakdown</small>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+              <!-- Quick Actions -->
+              <div class="btn-group" role="group">
+                <a href="{% url 'transaction_create' %}" class="btn btn-light btn-sm">
+                  <i class="fas fa-plus"></i> Add Transaction
+                </a>
+                <a href="{% url 'account_balance' %}?year={{ period|slice:':4' }}&month={{ period|slice:'5:7' }}" class="btn btn-outline-light btn-sm">
+                  <i class="fas fa-balance-scale"></i> Balances
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enhanced KPI Cards with Icons and Trends -->
   <div class="row mb-4" id="period-kpis">
-    <div class="col-sm-3 mb-3">
-      <div class="card text-center h-100">
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="card h-100 border-0 shadow-sm">
         <div class="card-body">
-          <h6 class="card-title">Income</h6>
-          <p class="card-text h4 mb-0">€ {{ kpis.income|floatformat:2 }}</p>
+          <div class="d-flex align-items-center">
+            <div class="flex-grow-1">
+              <h6 class="card-title text-muted mb-1">⬆️ Income</h6>
+              <h4 class="mb-0 fw-bold text-success">€ {{ kpis.income|floatformat:2 }}</h4>
+              <small class="text-muted">
+                {% if kpis.income > 0 %}
+                <span class="text-success">
+                  <i class="fas fa-arrow-up"></i> Active
+                </span>
+                {% else %}
+                <span class="text-warning">No income recorded</span>
+                {% endif %}
+              </small>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="col-sm-3 mb-3">
-      <div class="card text-center h-100">
+
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="card h-100 border-0 shadow-sm">
         <div class="card-body">
-          <h6 class="card-title">Expenses</h6>
-          <p class="card-text h4 mb-0">€ {{ kpis.expenses|floatformat:2 }}</p>
+          <div class="d-flex align-items-center">
+            <div class="flex-grow-1">
+              <h6 class="card-title text-muted mb-1">⬇️ Expenses</h6>
+              <h4 class="mb-0 fw-bold text-danger">€ {{ kpis.expenses|floatformat:2 }}</h4>
+              <small class="text-muted">
+                {% if kpis.income > 0 %}
+                {% widthratio kpis.expenses kpis.income 100 as expense_ratio %}
+                <span class="{% if expense_ratio < 70 %}text-success{% elif expense_ratio < 90 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ expense_ratio }}% of income
+                </span>
+                {% else %}
+                Total spending
+                {% endif %}
+              </small>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="col-sm-3 mb-3">
-      <div class="card text-center h-100">
+
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="card h-100 border-0 shadow-sm">
         <div class="card-body">
-          <h6 class="card-title">Investments</h6>
-          <p class="card-text h4 mb-0">€ {{ kpis.investments|floatformat:2 }}</p>
+          <div class="d-flex align-items-center">
+            <div class="flex-grow-1">
+              <h6 class="card-title text-muted mb-1">📈 Investments</h6>
+              <h4 class="mb-0 fw-bold text-primary">€ {{ kpis.investments|floatformat:2 }}</h4>
+              <small class="text-muted">
+                {% if kpis.income > 0 %}
+                {% widthratio kpis.investments kpis.income 100 as investment_ratio %}
+                <span class="{% if investment_ratio > 20 %}text-success{% elif investment_ratio > 10 %}text-warning{% else %}text-muted{% endif %}">
+                  {{ investment_ratio }}% invested
+                </span>
+                {% else %}
+                Portfolio allocation
+                {% endif %}
+              </small>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="col-sm-3 mb-3">
-      <div class="card text-center h-100">
+
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="card h-100 border-0 shadow-sm">
         <div class="card-body">
-          <h6 class="card-title">Net</h6>
-          <p class="card-text h4 mb-0">€ {{ kpis.net|floatformat:2 }}</p>
+          <div class="d-flex align-items-center">
+            <div class="flex-grow-1">
+              <h6 class="card-title text-muted mb-1">⚖️ Net Balance</h6>
+              <h4 class="mb-0 fw-bold text-{% if kpis.net >= 0 %}success{% else %}danger{% endif %}">€ {{ kpis.net|floatformat:2 }}</h4>
+              <small class="text-muted">
+                {% if kpis.net >= 0 %}
+                <span class="text-success">
+                  <i class="fas fa-check-circle"></i> Positive flow
+                </span>
+                {% else %}
+                <span class="text-danger">
+                  <i class="fas fa-exclamation-triangle"></i> Negative flow
+                </span>
+                {% endif %}
+              </small>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
-  <h5>Expenses by Category</h5>
-  <div id="period-charts">
-    {% if charts %}
-    <ul class="list-group">
-      {% for item in charts %}
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        {{ item.category }}
-        <span class="badge bg-primary rounded-pill">€ {{ item.total|floatformat:2 }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-muted">No expense data for this period.</p>
-    {% endif %}
+
+  <!-- Enhanced Summary Stats Row -->
+  <div class="row mb-4">
+    <div class="col-lg-4 mb-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-transparent border-0">
+          <h6 class="mb-0"><i class="fas fa-chart-pie"></i> Financial Flow</h6>
+        </div>
+        <div class="card-body">
+          <canvas id="period-flow-chart" height="250"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4 mb-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-transparent border-0">
+          <h6 class="mb-0"><i class="fas fa-wallet"></i> Account Distribution</h6>
+        </div>
+        <div class="card-body">
+          <canvas id="period-account-chart" height="250"></canvas>
+          <div class="mt-2" id="account-legend"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4 mb-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-transparent border-0">
+          <h6 class="mb-0"><i class="fas fa-lightbulb"></i> Insights & Metrics</h6>
+        </div>
+        <div class="card-body">
+          <div class="period-insights">
+            {% if kpis.income > 0 %}
+              {% widthratio kpis.net kpis.income 100 as savings_rate %}
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <small class="text-muted">Savings Rate</small>
+                  <small class="fw-bold text-{% if savings_rate > 20 %}success{% elif savings_rate > 10 %}warning{% else %}danger{% endif %}">
+                    {{ savings_rate }}%
+                  </small>
+                </div>
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar bg-{% if savings_rate > 20 %}success{% elif savings_rate > 10 %}warning{% else %}danger{% endif %}" 
+                       style="width: {% if savings_rate > 0 %}{{ savings_rate }}{% else %}0{% endif %}%"></div>
+                </div>
+              </div>
+
+              {% widthratio kpis.investments kpis.income 100 as investment_rate %}
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <small class="text-muted">Investment Rate</small>
+                  <small class="fw-bold text-primary">{{ investment_rate }}%</small>
+                </div>
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar bg-primary" style="width: {{ investment_rate }}%"></div>
+                </div>
+              </div>
+
+              {% if savings_rate > 20 %}
+              <div class="alert alert-success py-2 px-3 mb-2">
+                <small><i class="fas fa-star"></i> <strong>Excellent!</strong> Great savings</small>
+              </div>
+              {% elif savings_rate > 10 %}
+              <div class="alert alert-warning py-2 px-3 mb-2">
+                <small><i class="fas fa-thumbs-up"></i> Good savings, aim for 20%+</small>
+              </div>
+              {% else %}
+              <div class="alert alert-info py-2 px-3 mb-2">
+                <small><i class="fas fa-info-circle"></i> Try to save at least 10%</small>
+              </div>
+              {% endif %}
+            {% endif %}
+
+            <div class="row text-center mt-3">
+              <div class="col-6">
+                <div class="border-end">
+                  <h6 class="text-muted mb-1 small">Daily Avg</h6>
+                  <strong class="text-primary small">€ {% widthratio kpis.net 30 1 %}</strong>
+                </div>
+              </div>
+              <div class="col-6">
+                <h6 class="text-muted mb-1 small">Weekly Avg</h6>
+                <strong class="text-info small">€ {% widthratio kpis.net 4 1 %}</strong>
+              </div>
+            </div>
+
+            <div class="alert alert-light py-2 px-3 mb-0 mt-2">
+              <small><i class="fas fa-calendar"></i> Period: <strong>{{ period_formatted|default:period }}</strong></small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <!-- Expenses Breakdown -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="fas fa-tags"></i> Expenses by Category</h5>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" onclick="toggleChartView('list')">
+              <i class="fas fa-list"></i> List
+            </button>
+            <button class="btn btn-outline-secondary active" onclick="toggleChartView('chart')">
+              <i class="fas fa-chart-bar"></i> Chart
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="period-charts">
+            {% if charts %}
+            <!-- Chart View (Default) -->
+            <div id="chart-view">
+              <div class="row">
+                <div class="col-md-8">
+                  <canvas id="period-expense-chart" height="300"></canvas>
+                </div>
+                <div class="col-md-4">
+                  <div id="expense-legend" class="mt-3"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- List View (Hidden by default) -->
+            <div id="list-view" style="display: none;">
+              <div class="row">
+                {% for item in charts %}
+                <div class="col-lg-6 mb-3">
+                  <div class="card border-0 bg-light">
+                    <div class="card-body p-3">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                          <h6 class="mb-1">{{ item.category }}</h6>
+                          <small class="text-muted">
+                            {% if kpis.expenses > 0 %}
+                            {% widthratio item.total kpis.expenses 100 as category_pct %}
+                            {{ category_pct }}% of total expenses
+                            {% endif %}
+                          </small>
+                        </div>
+                        <div class="text-end">
+                          <span class="h5 mb-0 fw-bold text-danger">€ {{ item.total|floatformat:2 }}</span>
+                        </div>
+                      </div>
+                      <div class="progress mt-2" style="height: 6px;">
+                        {% if kpis.expenses > 0 %}
+                        {% widthratio item.total kpis.expenses 100 as progress_pct %}
+                        <div class="progress-bar bg-danger" style="width: {{ progress_pct }}%"></div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+              <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+              <h5 class="text-muted">No expense data for this period</h5>
+              <p class="text-muted mb-3">Start tracking your expenses to see detailed breakdowns</p>
+              <a href="{% url 'transaction_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add First Expense
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Period Mode Specific Scripts -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('🎯 Period mode dashboard loading...');
+
+      // Wait for Chart.js to be available
+      if (typeof Chart === 'undefined') {
+        console.error('❌ Chart.js not loaded');
+        return;
+      }
+
+      // Financial Flow Chart - Two horizontal bars
+      const flowCtx = document.getElementById('period-flow-chart');
+      if (flowCtx) {
+        const income = {{ kpis.income|default:0 }};
+        const expenses = {{ kpis.expenses|default:0 }};
+        const investments = {{ kpis.investments|default:0 }};
+
+        // Calculate percentages based on income (can exceed 100%)
+        const expensesPercent = income > 0 ? (expenses / income) * 100 : 0;
+        const investmentsPercent = income > 0 ? (investments / income) * 100 : 0;
+        const savingsPercent = Math.max(0, 100 - expensesPercent - investmentsPercent);
+
+        // Calculate maximum scale to accommodate values over 100%
+        const maxPercent = Math.max(100, expensesPercent + investmentsPercent + Math.max(0, savingsPercent));
+        const scaleMax = Math.ceil(maxPercent / 50) * 50; // Round up to nearest 50
+
+        new Chart(flowCtx, {
+          type: 'bar',
+          data: {
+            labels: ['Distribution', 'Salary'],
+            datasets: [
+              {
+                label: '⬇️ Expenses',
+                data: [expensesPercent, 0],
+                backgroundColor: '#dc3545',
+                borderWidth: 0,
+                barThickness: 40
+              },
+              {
+                label: '📈 Investments', 
+                data: [investmentsPercent, 0],
+                backgroundColor: '#007bff',
+                borderWidth: 0,
+                barThickness: 40
+              },
+              {
+                label: '⚖️ Balance',
+                data: [Math.max(0, savingsPercent), 0],
+                backgroundColor: '#ffc107',
+                borderWidth: 0,
+                barThickness: 40
+              },
+              {
+                label: '⬆️ Income',
+                data: [0, 100],
+                backgroundColor: '#28a745',
+                borderWidth: 0,
+                barThickness: 40
+              }
+            ]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                stacked: true,
+                max: scaleMax,
+                ticks: {
+                  callback: function(value) {
+                    return value + '%';
+                  }
+                },
+                title: {
+                  display: true,
+                  text: 'Percentage of Income'
+                }
+              },
+              y: {
+                stacked: true,
+                ticks: {
+                  callback: function(value, index) {
+                    return index === 0 ? 'How Income is Used' : 'Total Income (100%)';
+                  }
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  padding: 15,
+                  usePointStyle: false,
+                  generateLabels: function(chart) {
+                    const original = Chart.defaults.plugins.legend.labels.generateLabels;
+                    const labels = original.call(this, chart);
+                    
+                    // Customize labels to show only colored arrows for expenses and income
+                    labels.forEach((label, index) => {
+                      if (label.text.includes('Expenses')) {
+                        label.text = '⬇️ Expenses';
+                        label.fillStyle = 'transparent';
+                        label.strokeStyle = 'transparent';
+                      } else if (label.text.includes('Income')) {
+                        label.text = '⬆️ Income';
+                        label.fillStyle = 'transparent';
+                        label.strokeStyle = 'transparent';
+                      } else if (label.text.includes('Investments')) {
+                        label.text = '📈 Investments';
+                        label.fillStyle = 'transparent';
+                        label.strokeStyle = 'transparent';
+                      } else if (label.text.includes('Savings')) {
+                        label.text = '⚖️ Balance';
+                        label.fillStyle = 'transparent';
+                        label.strokeStyle = 'transparent';
+                      }
+                    });
+                    
+                    return labels;
+                  },
+                  filter: function(legendItem, chartData) {
+                    // Show all labels
+                    return true;
+                  }
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const percentage = context.parsed.x.toFixed(1);
+                    const actualValue = income > 0 ? (context.parsed.x / 100 * income) : 0;
+
+                    if (context.datasetIndex === 3) { // Income bar
+                      return context.dataset.label + ': €' + income.toLocaleString('pt-PT', {minimumFractionDigits: 2});
+                    } else {
+                      return context.dataset.label + ': ' + percentage + '% (€' + actualValue.toLocaleString('pt-PT', {minimumFractionDigits: 2}) + ')';
+                    }
+                  },
+                  footer: function(tooltipItems) {
+                    if (tooltipItems[0].dataIndex === 0) {
+                      const total = expensesPercent + investmentsPercent;
+                      if (total > 100) {
+                        return ['', 'Warning: Spending ' + (total - 100).toFixed(1) + '% more than income!'];
+                      } else if (savingsPercent > 0) {
+                        return ['', 'Net Balance: ' + savingsPercent.toFixed(1) + '% of income'];
+                      }
+                    }
+                    return [];
+                  }
+                }
+              }
+            }
+          }
+        });
+        console.log('✅ Financial flow chart created with two bars');
+      }
+
+      // Account Distribution Chart
+      const accountCtx = document.getElementById('period-account-chart');
+      if (accountCtx) {
+        const currentPeriod = '{{ period }}';
+
+        // Get account balances for current period via AJAX
+        fetch(`/account-balances/json/?period=${currentPeriod}`, {
+          method: 'GET',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('📊 Account data received:', data);
+
+          // Handle new format with accounts array
+          if (data.accounts && data.accounts.length > 0) {
+            const accountData = [];
+            const accountLabels = [];
+            const colors = ['#28a745', '#007bff', '#ffc107', '#dc3545', '#6f42c1', '#20c997', '#fd7e14', '#e83e8c'];
+
+            data.accounts.forEach((account, index) => {
+              if (account.balance > 0) {
+                // Use account name only (remove type from label)
+                const accountName = (account.label || account.type).replace(/\s*\([^)]*\)$/, '');
+                accountLabels.push(accountName);
+                accountData.push(account.balance);
+              }
+            });
+
+            if (accountData.length > 0) {
+              new Chart(accountCtx, {
+                type: 'doughnut',
+                data: {
+                  labels: accountLabels,
+                  datasets: [{
+                    data: accountData,
+                    backgroundColor: colors.slice(0, accountData.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom',
+                      labels: {
+                        padding: 15,
+                        usePointStyle: true,
+                        font: {
+                          size: 11
+                        }
+                      }
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: function(context) {
+                          const value = context.parsed;
+                          const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                          const percentage = ((value / total) * 100).toFixed(1);
+                          return context.label + ': €' + value.toLocaleString('pt-PT') + ` (${percentage}%)`;
+                        }
+                      }
+                    }
+                  }
+                }
+              });
+              console.log('✅ Account distribution chart created with', accountData.length, 'individual accounts');
+            } else {
+              // Show "no data" message
+              const ctx = accountCtx.getContext('2d');
+              ctx.font = '14px Arial';
+              ctx.fillStyle = '#6c757d';
+              ctx.textAlign = 'center';
+              ctx.fillText('No account balances for this period', accountCtx.width/2, accountCtx.height/2);
+            }
+          }
+          // Fallback for old format
+          else if (data.rows && data.rows.length > 0) {
+            const accountData = [];
+            const accountLabels = [];
+            const colors = ['#28a745', '#007bff', '#ffc107', '#dc3545', '#6f42c1', '#20c997', '#fd7e14', '#e83e8c'];
+
+            // Find the current period column in the data
+            const periodColumn = data.columns.find(col => col.includes(currentPeriod.replace('-', '/')));
+
+            if (periodColumn) {
+              data.rows.forEach((row, index) => {
+                const balance = parseFloat(row[periodColumn]) || 0;
+                if (balance > 0) {
+                  accountLabels.push(row.type || `Account ${index + 1}`);
+                  accountData.push(balance);
+                }
+              });
+            }
+
+            if (accountData.length > 0) {
+              new Chart(accountCtx, {
+                type: 'doughnut',
+                data: {
+                  labels: accountLabels,
+                  datasets: [{
+                    data: accountData,
+                    backgroundColor: colors.slice(0, accountData.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom',
+                      labels: {
+                        padding: 15,
+                        usePointStyle: true,
+                        font: {
+                          size: 11
+                        }
+                      }
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: function(context) {
+                          const value = context.parsed;
+                          const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                          const percentage = ((value / total) * 100).toFixed(1);
+                          return context.label + ': €' + value.toLocaleString('pt-PT') + ` (${percentage}%)`;
+                        }
+                      }
+                    }
+                  }
+                }
+              });
+              console.log('✅ Account distribution chart created with', accountData.length, 'accounts');
+            } else {
+              // Show "no data" message
+              const ctx = accountCtx.getContext('2d');
+              ctx.font = '14px Arial';
+              ctx.fillStyle = '#6c757d';
+              ctx.textAlign = 'center';
+              ctx.fillText('No account balances for this period', accountCtx.width/2, accountCtx.height/2);
+            }
+          } else {
+            // Show placeholder when no data
+            const ctx = accountCtx.getContext('2d');
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#6c757d';
+            ctx.textAlign = 'center';
+            ctx.fillText('No account data available', accountCtx.width/2, accountCtx.height/2);
+          }
+        })
+        .catch(error => {
+          console.error('❌ Error loading account data:', error);
+          // Show error message
+          const ctx = accountCtx.getContext('2d');
+          ctx.font = '14px Arial';
+          ctx.fillStyle = '#6c757d';
+          ctx.textAlign = 'center';
+          ctx.fillText('Unable to load account data', accountCtx.width/2, accountCtx.height/2);
+        });
+      }
+
+      // Expense Chart
+      {% if charts %}
+      const expenseCtx = document.getElementById('period-expense-chart');
+      if (expenseCtx) {
+        new Chart(expenseCtx, {
+          type: 'bar',
+          data: {
+            labels: [{% for item in charts %}'{{ item.category }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+            datasets: [{
+              label: 'Expenses',
+              data: [{% for item in charts %}{{ item.total }}{% if not forloop.last %},{% endif %}{% endfor %}],
+              backgroundColor: [
+                '#dc3545', '#fd7e14', '#ffc107', '#28a745',
+                '#20c997', '#17a2b8', '#6f42c1', '#e83e8c'
+              ],
+              borderWidth: 0,
+              borderRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return context.label + ': €' + context.parsed.y.toLocaleString('pt-PT', {minimumFractionDigits: 2});
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  callback: function(value) {
+                    return '€' + value.toLocaleString('pt-PT');
+                  }
+                }
+              }
+            }
+          }
+        });
+        console.log('✅ Expense chart created');
+      }
+      {% endif %}
+
+      console.log('✅ Period mode dashboard loaded successfully');
+    });
+
+    function toggleChartView(view) {
+      const chartView = document.getElementById('chart-view');
+      const listView = document.getElementById('list-view');
+      const buttons = document.querySelectorAll('.btn-group button');
+
+      buttons.forEach(btn => btn.classList.remove('active'));
+
+      if (view === 'chart') {
+        if (chartView) chartView.style.display = 'block';
+        if (listView) listView.style.display = 'none';
+        event.target.classList.add('active');
+      } else {
+        if (chartView) chartView.style.display = 'none';
+        if (listView) listView.style.display = 'block';
+        event.target.classList.add('active');
+      }
+    }
+  </script>
   {% else %}
   <!-- Header with Advanced Controls -->
   <div class="d-flex justify-content-between align-items-center mb-4">
@@ -191,7 +860,7 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-success mb-1">💰 Average Income</h6>
+              <h6 class="card-title text-success mb-1">⬆️ Average Income</h6>
               <h4 class="card-text mb-0" id="receita-media">€ 0</h4>
               <small class="text-muted">Monthly</small>
             </div>
@@ -213,7 +882,7 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-danger mb-1">💸 Expenses</h6>
+              <h6 class="card-title text-danger mb-1">⬇️ Expenses</h6>
               <h4 class="card-text mb-0" id="despesa-estimada">€ 0</h4>
               <small class="text-muted">Calculated</small>
             </div>
@@ -243,7 +912,7 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-info mb-1">🏦 Invested Amount</h6>
+              <h6 class="card-title text-info mb-1">📈 Invested Amount</h6>
               <h4 class="card-text mb-0" id="valor-investido">€ 0</h4>
               <small class="text-muted">Total</small>
             </div>
@@ -265,7 +934,7 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-purple mb-1">💎 Total Net Worth</h6>
+              <h6 class="card-title text-purple mb-1">⚖️ Total Net Worth</h6>
               <h4 class="card-text mb-0" id="patrimonio-total">€ 0</h4>
               <small class="text-muted">Current</small>
             </div>
@@ -289,7 +958,7 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-dark mb-1">💰 Savings Rate</h6>
+              <h6 class="card-title text-dark mb-1">⚖️ Savings Rate</h6>
               <h4 class="card-text mb-0" id="taxa-poupanca">0%</h4>
               <small class="text-muted">of income</small>
             </div>
@@ -414,7 +1083,7 @@ Dashboard{% endblock %} {% block extra_head %}
 
 {% endblock %} {% block extra_js %}
 <!-- Chart.js with advanced plugins -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <!-- noUiSlider for range filters -->
 <link
@@ -595,6 +1264,18 @@ Dashboard{% endblock %} {% block extra_head %}
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
+  /* Fix chart container sizes to prevent infinite resize loops */
+  #period-account-chart {
+    max-height: 250px !important;
+    height: 250px !important;
+  }
+
+  .chart-container {
+    position: relative;
+    height: 300px;
+    overflow: hidden;
+  }
+
   .btn-outline-info.active {
     background-color: #17a2b8;
     border-color: #17a2b8;
@@ -686,6 +1367,15 @@ Dashboard{% endblock %} {% block extra_head %}
       margin-top: 0.75rem;
       padding-top: 0.75rem;
     }
+
+    /* Period mode responsive adjustments */
+    #periodControls {
+      flex-wrap: wrap;
+    }
+
+    #periodPicker {
+      min-width: 120px !important;
+    }
   }
 
   @media (max-width: 768px) {
@@ -710,12 +1400,51 @@ Dashboard{% endblock %} {% block extra_head %}
     .col-lg-3 {
       margin-bottom: 1rem;
     }
+
+    /* Period mode mobile improvements */
+    .d-flex.align-items-center.justify-content-between {
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: 1rem;
+    }
+
+    #periodControls {
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    #periodPicker {
+      min-width: 140px !important;
+      max-width: 200px;
+    }
+
+    /* Make KPI cards more mobile friendly */
+    .col-lg-3.col-md-6.mb-3 {
+      margin-bottom: 0.75rem !important;
+    }
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 576px) {
     .btn-group-sm .btn {
       font-size: 0.7rem;
       padding: 0.25rem 0.5rem;
+    }
+
+    /* Period navigation on very small screens */
+    #periodControls {
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    #periodControls .btn {
+      flex-shrink: 0;
+    }
+
+    #periodPicker {
+      flex: 1;
+      max-width: none;
+      margin: 0 0.5rem;
     }
   }
     /* Floating Action Button Style */
@@ -761,32 +1490,17 @@ Dashboard{% endblock %} {% block extra_head %}
 </style>
 <script>
   document.getElementById('historyBtn').addEventListener('click', function () {
-    const params = new URLSearchParams(window.location.search);
-    params.set('mode', 'history');
-    params.delete('period');
-    params.delete('from');
-    params.delete('to');
-    window.location.search = params.toString();
+    window.location.href = '/dashboard/?mode=history';
   });
 
   document.getElementById('periodBtn').addEventListener('click', function () {
-    const params = new URLSearchParams(window.location.search);
     const p = document.getElementById('periodPicker')?.value || '{{ period }}';
-    params.set('mode', 'period');
-    params.set('period', p);
-    params.delete('from');
-    params.delete('to');
-    window.location.search = params.toString();
+    window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(p)}`;
   });
 
   document.getElementById('periodPicker')?.addEventListener('change', function () {
-    const params = new URLSearchParams(window.location.search);
-    params.set('mode', 'period');
-    params.set('period', this.value);
-    params.delete('from');
-    params.delete('to');
-    window.location.search = params.toString();
+    window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(this.value)}`;
   });
 </script>
-<script type="module" src="{% static 'js/dashboard.js' %}"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}
