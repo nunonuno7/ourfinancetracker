@@ -3861,7 +3861,7 @@ def dashboard_returns_json(request):
             JOIN core_account acc ON acc.id = ab.account_id
             JOIN core_accounttype at ON at.id = acc.account_type_id
             JOIN core_dateperiod dp ON dp.id = ab.period_id
-            WHERE acc.user_id = %s AND LOWER(at.name) = 'investment'
+            WHERE acc.user_id = %s AND LOWER(at.name) LIKE 'invest%'
             GROUP BY dp.year, dp.month
             ORDER BY dp.year, dp.month
             """,

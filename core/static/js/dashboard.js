@@ -1506,6 +1506,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await response.json();
 
+      if (!data.labels || data.labels.length === 0) {
+        charts.returns.data.labels = ['No data'];
+        charts.returns.data.datasets[0].data = [0];
+        charts.returns.data.datasets[1].data = [0];
+        charts.returns.update('none');
+        return;
+      }
+
       charts.returns.data.labels = data.labels || [];
       charts.returns.data.datasets[0].data = data.series?.portfolio_return || [];
       charts.returns.data.datasets[1].data = data.series?.avg_portfolio_return || [];
