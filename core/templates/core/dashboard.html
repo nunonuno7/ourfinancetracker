@@ -1502,5 +1502,5 @@ Dashboard{% endblock %} {% block extra_head %}
     window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(this.value)}`;
   });
 </script>
-<script src="{% static 'js/dashboard.js' %}"></script>
+<script type="module" src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}

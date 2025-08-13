@@ -1,4 +1,5 @@
 // Enhanced Dashboard JavaScript with Advanced Charts and Analysis
+import { api } from '../core/js/http.js';
 document.addEventListener("DOMContentLoaded", () => {
   // Global variables
   let columns = [];
@@ -1301,25 +1302,14 @@ document.addEventListener("DOMContentLoaded", () => {
           const monthInt = getMonthNumberInt(month);
           const lastDay = new Date(fullYear, monthInt, 0).getDate();
 
-          const response = await fetch('/transactions/totals-v2/', {
+          const data = await api('/transactions/totals-v2/', {
             method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCookie('csrftoken'),
-            },
-            body: JSON.stringify({
+            body: {
               date_start: `${fullYear}-${monthNum}-01`,
               date_end: `${fullYear}-${monthNum}-${lastDay}`,
               include_system: false  // Exclude system transactions for real user spending
-            })
+            }
           });
-
-          if (!response.ok) {
-            throw new Error(`API failed for period ${period}`);
-          }
-
-          const data = await response.json();
           console.log(`📊 [updateFlowsChart] ${period} data:`, data);
 
           return {
@@ -1556,26 +1546,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const endDate = convertPeriodToDate(endPeriod);
 
       // Fetch real spending data by category
-      const response = await fetch('/dashboard/spending-by-category/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken'),
-        },
-        body: JSON.stringify({
-          start_period: startDate,
-          end_period: endDate
-        })
-      });
-
-      if (!response.ok) {
+      let data;
+      try {
+        data = await api('/dashboard/spending-by-category/', {
+          method: 'POST',
+          body: {
+            start_period: startDate,
+            end_period: endDate
+          }
+        });
+        console.log('📊 [updateExpensesChart] Real spending data received:', data);
+      } catch (error) {
         console.warn('⚠️ [updateExpensesChart] API failed, using fallback data');
         updateExpensesChartFallback();
         return;
       }
-
-      const data = await response.json();
-      console.log('📊 [updateExpensesChart] Real spending data received:', data);
 
       if (data.status === 'success' && data.categories && data.categories.length > 0) {
         const labels = data.categories.map(cat => cat.name);
@@ -2535,45 +2520,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to synchronize system adjustments
   const syncSystemAdjustments = async () => {
     try {
-      const response = await fetch('/sync-system-adjustments/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken'),
-        },
-      });
-
-      if (response.ok) {
-        console.log('✅ System adjustments synchronized successfully.');
-        // Optionally, refresh the dashboard data after synchronization
-        await loadAccountBalances();
-        await loadFinancialKPIs();
-        await loadFinancialAnalysis();
-        updateDashboard();
-      } else {
-        console.error('❌ Failed to synchronize system adjustments:', response.statusText);
-      }
+      await api('/sync-system-adjustments/', { method: 'POST' });
+      console.log('✅ System adjustments synchronized successfully.');
+      // Optionally, refresh the dashboard data after synchronization
+      await loadAccountBalances();
+      await loadFinancialKPIs();
+      await loadFinancialAnalysis();
+      updateDashboard();
     } catch (error) {
-      console.error('❌ Error synchronizing system adjustments:', error);
+      console.error('❌ Failed to synchronize system adjustments:', error);
     }
   };
-
-  // Function to get CSRF token from cookie
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        let cookie = cookies[i].trim();
-        // Does this cookie string begin with the name we want?
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  }
 
   // Start the enhanced dashboard
   init();
