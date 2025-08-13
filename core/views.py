@@ -1899,10 +1899,10 @@ def transactions_totals_v2(request):
     logger.debug(f"📊 [transactions_totals_v2] Raw results: {rows}")
 
     totals = {
-        'income': 0,
-        'expenses': 0,
-        'investments': 0,
-        'transfers': 0
+        'income': Decimal('0'),
+        'expenses': Decimal('0'),
+        'investments': Decimal('0'),
+        'transfers': Decimal('0')
     }
 
     # Debug individual transactions
@@ -1917,32 +1917,38 @@ def transactions_totals_v2(request):
     }
 
     for tx_type, amount in rows:
-        amount_float = float(amount)
-        logger.debug(f"💰 [transactions_totals_v2] Processing {tx_type}: {amount_float}")
+        amount_dec = Decimal(amount)
+        logger.debug(f"💰 [transactions_totals_v2] Processing {tx_type}: {amount_dec}")
 
         if tx_type == 'IN':
-            # Income: sum positive values
-            totals['income'] += abs(amount_float)
-            logger.debug(f"📈 [transactions_totals_v2] Income += {abs(amount_float)}, total now: {totals['income']}")
+            # Income: preserve sign (refunds reduce total income)
+            totals['income'] += amount_dec
+            logger.debug(f"📈 [transactions_totals_v2] Income += {amount_dec}, total now: {totals['income']}")
         elif tx_type == 'EX':
-            # Expenses: sum absolute values (database stores as negative, display as positive)
-            totals['expenses'] += abs(amount_float)
-            logger.debug(f"📉 [transactions_totals_v2] Expenses += {abs(amount_float)}, total now: {totals['expenses']}")
+            # Expenses: preserve sign to allow refunds to decrease total
+            totals['expenses'] += amount_dec
+            logger.debug(f"📉 [transactions_totals_v2] Expenses += {amount_dec}, total now: {totals['expenses']}")
         elif tx_type == 'IV':
             # Investments: keep original amount (positive = reinforcement, negative = withdrawal)
-            totals['investments'] += amount_float
-            logger.debug(f"📊 [transactions_totals_v2] Investments += {amount_float}, total now: {totals['investments']}")
+            totals['investments'] += amount_dec
+            logger.debug(f"📊 [transactions_totals_v2] Investments += {amount_dec}, total now: {totals['investments']}")
         elif tx_type == 'TR':
             # Transfers: keep original sign
-            totals['transfers'] += amount_float
-            logger.debug(f"🔄 [transactions_totals_v2] Transfers += {amount_float}, total now: {totals['transfers']}")
+            totals['transfers'] += amount_dec
+            logger.debug(f"🔄 [transactions_totals_v2] Transfers += {amount_dec}, total now: {totals['transfers']}")
 
     # Balance = Income - Expenses (not including investments or transfers)
     totals['balance'] = totals['income'] - totals['expenses']
 
-    logger.debug(f"🧮 [transactions_totals_v2] Final calculation: Balance = {totals['income']} - {totals['expenses']} = {totals['balance']}")
+    logger.debug(
+        f"🧮 [transactions_totals_v2] Final calculation: Balance = {totals['income']} - {totals['expenses']} = {totals['balance']}"
+    )
 
     logger.debug(f"📊 [transactions_totals_v2] Final totals: {totals}")
+
+    # Convert Decimals to floats rounded to 2 decimal places for JSON serialization
+    totals = {k: float(v.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) for k, v in totals.items()}
+
     return JsonResponse(totals)
 
 
