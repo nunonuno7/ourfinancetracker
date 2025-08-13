@@ -1492,8 +1492,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const formatPeriodForApi = (period) => {
       const [month, year] = period.split('/');
       const fullYear = 2000 + parseInt(year);
-      const monthNum = getMonthNumber(month);
-      return `${fullYear}-${monthNum}`;
+      const monthNum = getMonthNumberInt(month);
+      const monthString = monthNum.toString().padStart(2, '0');
+      return `${fullYear}-${monthString}`;
     };
 
     const startParam = formatPeriodForApi(start);
