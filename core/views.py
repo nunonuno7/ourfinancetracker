@@ -3846,7 +3846,108 @@ def dashboard_spending_by_category_json(request):
         }, status=500)
 
 
-@login_required  
+@login_required
+def dashboard_returns_json(request):
+    """Return portfolio and average returns for the selected period range."""
+    user_id = request.user.id
+    start_period = request.GET.get('start_period')
+    end_period = request.GET.get('end_period')
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT dp.year, dp.month, SUM(ab.reported_balance)
+            FROM core_accountbalance ab
+            JOIN core_account acc ON acc.id = ab.account_id
+            JOIN core_accounttype at ON at.id = acc.account_type_id
+            JOIN core_dateperiod dp ON dp.id = ab.period_id
+            WHERE acc.user_id = %s AND LOWER(at.name) = 'investment'
+            GROUP BY dp.year, dp.month
+            ORDER BY dp.year, dp.month
+            """,
+            [user_id],
+        )
+        balance_rows = cursor.fetchall()
+
+    if not balance_rows:
+        return JsonResponse({
+            'labels': [],
+            'series': {
+                'portfolio_return': [],
+                'avg_portfolio_return': []
+            },
+            'cagr': 0
+        })
+
+    # Convert and optionally filter by period
+    all_data = []
+    for year, month, balance in balance_rows:
+        period_date = datetime(year, month, 1)
+        all_data.append((period_date, float(balance)))
+
+    if start_period and end_period:
+        start_dt = datetime.strptime(start_period, "%Y-%m")
+        end_dt = datetime.strptime(end_period, "%Y-%m")
+        all_data = [row for row in all_data if start_dt <= row[0] <= end_dt]
+
+    all_data.sort(key=lambda x: x[0])
+    labels = [d.strftime('%b/%y') for d, _ in all_data]
+    balances = [b for _, b in all_data]
+
+    # Get investment flows
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT dp.year, dp.month, SUM(t.amount)
+            FROM core_transaction t
+            JOIN core_dateperiod dp ON dp.id = t.period_id
+            WHERE t.user_id = %s AND t.type = 'IV'
+            GROUP BY dp.year, dp.month
+            """,
+            [user_id],
+        )
+        flow_rows = cursor.fetchall()
+
+    flows = {datetime(y, m, 1): float(a or 0) for y, m, a in flow_rows}
+
+    monthly_returns = []
+    avg_returns = []
+    compound_factor = 1.0
+    prev_balance = balances[0]
+
+    for i, (period_date, balance) in enumerate(all_data):
+        if i == 0:
+            monthly_returns.append(0)
+            avg_returns.append(0)
+            continue
+
+        flow = flows.get(period_date, 0.0)
+        denom = prev_balance + flow
+        ret = ((balance - denom) / denom * 100) if denom > 0 else 0.0
+        monthly_returns.append(ret)
+        compound_factor *= (1 + ret / 100)
+
+        window = monthly_returns[max(0, i - 11): i + 1]
+        avg = (sum(window) / len(window)) * 12
+        avg_returns.append(avg)
+
+        prev_balance = balance
+
+    total_months = len(all_data) - 1
+    total_years = total_months / 12
+    cagr = (compound_factor ** (1 / total_years) - 1) * 100 if total_years > 0 else 0.0
+
+    return JsonResponse({
+        'labels': labels,
+        'series': {
+            'portfolio_return': [round(v, 2) for v in monthly_returns],
+            'avg_portfolio_return': [round(v, 2) for v in avg_returns]
+        },
+        'cagr': round(cagr, 2)
+    })
+
+
+@login_required
 def dashboard_insights_json(request):
     """Dashboard Insights JSON API."""
     try:

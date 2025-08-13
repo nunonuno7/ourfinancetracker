@@ -322,39 +322,33 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Create returns chart (initially hidden)
-    const returnsCanvas = document.createElement('canvas');
-    returnsCanvas.id = 'returns-chart';
+    const returnsCanvas = document.getElementById('returns-chart');
     returnsCanvas.style.display = 'none';
-    document.getElementById('evolution-chart').parentNode.appendChild(returnsCanvas);
 
     charts.returns = new Chart(returnsCanvas.getContext('2d'), {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Portfolio Return (%)',
-          data: [],
-          borderColor: '#6f42c1',
-          backgroundColor: 'rgba(111, 66, 193, 0.1)',
-          tension: 0.4,
-          fill: true
-        }, {
-          label: 'Cumulative Return (%)',
-          data: [],
-          borderColor: '#17a2b8',
-          backgroundColor: 'rgba(23, 162, 184, 0.1)',
-          tension: 0.4,
-          fill: false
-        }, {
-          label: 'Annual Average Return (%)',
-          data: [],
-          borderColor: '#28a745',
-          backgroundColor: 'rgba(40, 167, 69, 0.1)',
-          tension: 0.4,
-          fill: false,
-          borderDash: [5, 5],
-          borderWidth: 2
-        }]
+        datasets: [
+          {
+            label: 'Portfolio Return (%)',
+            data: [],
+            borderColor: '#6f42c1',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: false
+          },
+          {
+            label: 'Average Portfolio Return (%)',
+            data: [],
+            borderColor: '#28a745',
+            borderWidth: 2,
+            borderDash: [6, 6],
+            pointRadius: 2,
+            tension: 0.3,
+            fill: false
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -381,19 +375,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 return tooltipItems[0]?.label ? `📅 ${tooltipItems[0].label}` : '';
               },
               label: function(context) {
-                // Show Portfolio Return, Cumulative Return, Annual Average Return, and Compound Annual Return
-                if (!context.dataset.label.includes('Portfolio Return') && 
-                    !context.dataset.label.includes('Cumulative Return') &&
-                    !context.dataset.label.includes('Annual Average Return') &&
-                    !context.dataset.label.includes('Compound Annual Return')) {
-                  return null; // Hide other datasets if any
-                }
-                
                 const value = context.parsed.y;
                 if (value === null || value === undefined || isNaN(value)) {
                   return `${context.dataset.label}: N/A`;
                 }
-                
+
                 // Format as percentage with 2 decimal places
                 const percentageValue = `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
                 return `${context.dataset.label}: ${percentageValue}`;
@@ -1502,171 +1488,37 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!charts.returns || !periodSlider || !periodSlider.noUiSlider) return;
 
     const [start, end] = periodSlider.noUiSlider.get();
-    const iStart = allPeriods.indexOf(start);
-    const iEnd = allPeriods.indexOf(end);
-    const visiblePeriods = allPeriods.slice(iStart, iEnd + 1);
 
-    const monthlyReturns = [];
-    const cumulativeReturns = [];
-    const annualAverageReturns = [];
-    const compoundAnnualReturns = [];
-    let cumulativeReturn = 0;
+    const formatPeriodForApi = (period) => {
+      const [month, year] = period.split('/');
+      const fullYear = 2000 + parseInt(year);
+      const monthNum = getMonthNumber(month);
+      return `${fullYear}-${monthNum}`;
+    };
 
-    // Get investment flows for each period to calculate correct returns
-    const investmentFlows = {};
+    const startParam = formatPeriodForApi(start);
+    const endParam = formatPeriodForApi(end);
 
     try {
-      // Fetch investment flows for all periods
-      const flowPromises = visiblePeriods.map(async (period) => {
-        const [month, year] = period.split('/');
-        const fullYear = 2000 + parseInt(year);
-        const monthNum = getMonthNumber(month);
-        const monthInt = getMonthNumberInt(month);
-        const lastDay = new Date(fullYear, monthInt, 0).getDate();
+      const response = await fetch(`/dashboard/returns/?start_period=${startParam}&end_period=${endParam}`);
+      if (!response.ok) throw new Error('Network response was not ok');
 
-        try {
-          const response = await fetch('/transactions/totals-v2/', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCookie('csrftoken'),
-            },
-            body: JSON.stringify({
-              date_start: `${fullYear}-${monthNum}-01`,
-              date_end: `${fullYear}-${monthNum}-${lastDay}`,
-              include_system: false
-            })
-          });
+      const data = await response.json();
 
-          if (response.ok) {
-            const data = await response.json();
-            investmentFlows[period] = data.investments || 0;
-          } else {
-            investmentFlows[period] = 0;
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to get investment flow for ${period}:`, error);
-          investmentFlows[period] = 0;
-        }
-      });
+      charts.returns.data.labels = data.labels || [];
+      charts.returns.data.datasets[0].data = data.series?.portfolio_return || [];
+      charts.returns.data.datasets[1].data = data.series?.avg_portfolio_return || [];
 
-      await Promise.all(flowPromises);
-    } catch (error) {
-      console.warn('⚠️ Failed to load investment flows, using fallback calculation');
-    }
-
-    // Calculate compound returns
-    let compoundFactor = 1.0; // Start with 1 for compound calculation
-
-    visiblePeriods.forEach((period, index) => {
-      let currentValue = 0;
-      let previousValue = 0;
-
-      // Get current period investment value
-      rows.forEach(row => {
-        const value = parseFloat(row[period]) || 0;
-        const rowType = (row.type || '').toLowerCase();
-        if (rowType.includes('investment')) {
-          currentValue += value;
-        }
-      });
-
-      if (index > 0) {
-        const prevPeriod = visiblePeriods[index - 1];
-
-        // Get previous period investment value
-        rows.forEach(row => {
-          const value = parseFloat(row[prevPeriod]) || 0;
-          const rowType = (row.type || '').toLowerCase();
-          if (rowType.includes('investment')) {
-            previousValue += value;
-          }
-        });
-
-        // Get investment flow for current period
-        const periodInvestmentFlow = investmentFlows[period] || 0;
-
-        // Correct formula: ((valor_atual - (valor_anterior + investimentos_do_periodo)) / (valor_anterior + investimentos_do_periodo)) * 100
-        const adjustedPreviousValue = previousValue + periodInvestmentFlow;
-        const monthlyReturn = adjustedPreviousValue > 0 ? 
-          ((currentValue - adjustedPreviousValue) / adjustedPreviousValue) * 100 : 0;
-
-        monthlyReturns.push(monthlyReturn);
-        cumulativeReturn += monthlyReturn;
-        cumulativeReturns.push(cumulativeReturn);
-
-        // Calculate compound factor
-        const monthlyReturnDecimal = monthlyReturn / 100;
-        compoundFactor *= (1 + monthlyReturnDecimal);
-
-        // Calculate compound annual return for the filtered period
-        const monthsFromStart = index;
-        const yearsFromStart = monthsFromStart / 12;
-
-        if (yearsFromStart > 0 && compoundFactor > 0) {
-          // CAGR formula: (End Value / Start Value)^(1/years) - 1
-          const compoundAnnualReturn = (Math.pow(compoundFactor, 1/yearsFromStart) - 1) * 100;
-          compoundAnnualReturns.push(compoundAnnualReturn);
-        } else {
-          compoundAnnualReturns.push(0);
-        }
-
-        console.log(`📊 [updateReturnsChart] ${period}: Current=${currentValue.toFixed(2)}, Previous=${previousValue.toFixed(2)}, Flow=${periodInvestmentFlow.toFixed(2)}, Return=${monthlyReturn.toFixed(2)}%, Compound=${compoundAnnualReturns[compoundAnnualReturns.length-1]?.toFixed(2)}%`);
-
-        // Calculate rolling annual average (last 12 months)
-        const startIdx = Math.max(0, index - 11);
-        const recentReturns = monthlyReturns.slice(startIdx);
-        const avgMonthlyReturn = recentReturns.reduce((sum, ret) => sum + ret, 0) / recentReturns.length;
-        const annualAverage = avgMonthlyReturn * 12;
-        annualAverageReturns.push(annualAverage);
+      if (data.cagr !== undefined) {
+        charts.returns.options.plugins.title.text = `Investment Returns - CAGR: ${data.cagr.toFixed(2)}%`;
       } else {
-        monthlyReturns.push(0);
-        cumulativeReturns.push(0);
-        annualAverageReturns.push(0);
-        compoundAnnualReturns.push(0);
+        charts.returns.options.plugins.title.text = 'Investment Returns Over Time';
       }
-    });
 
-    // Update chart datasets
-    charts.returns.data.labels = visiblePeriods;
-    charts.returns.data.datasets[0].data = monthlyReturns;
-    charts.returns.data.datasets[1].data = cumulativeReturns;
-    charts.returns.data.datasets[2].data = annualAverageReturns;
-
-    // Add or update compound annual return dataset
-    if (charts.returns.data.datasets.length < 4) {
-      charts.returns.data.datasets.push({
-        label: 'Compound Annual Return (%)',
-        data: compoundAnnualReturns,
-        borderColor: '#ff6384',
-        backgroundColor: 'rgba(255, 99, 132, 0.1)',
-        tension: 0.4,
-        fill: false,
-        borderDash: [10, 5],
-        borderWidth: 3
-      });
-    } else {
-      charts.returns.data.datasets[3].data = compoundAnnualReturns;
+      charts.returns.update('none');
+    } catch (error) {
+      console.error('❌ [updateReturnsChart] Failed to load returns data:', error);
     }
-
-    charts.returns.update('none');
-
-    // Calculate and display overall compound annual return for the filtered period
-    const totalMonths = visiblePeriods.length - 1; // Exclude first period (no return)
-    const totalYears = totalMonths / 12;
-
-    if (totalYears > 0 && compoundFactor > 0) {
-      const overallCAGR = (Math.pow(compoundFactor, 1/totalYears) - 1) * 100;
-      console.log(`🎯 [updateReturnsChart] Overall Compound Annual Return for filtered period: ${overallCAGR.toFixed(2)}%`);
-
-      // Update chart title to include CAGR
-      charts.returns.options.plugins.title.text = `Investment Returns - CAGR: ${overallCAGR.toFixed(2)}%`;
-    } else {
-      charts.returns.options.plugins.title.text = 'Investment Returns Over Time';
-    }
-
-    console.log('✅ [updateReturnsChart] Returns calculated with compound annual return');
   };
 
   const updateExpensesChart = async () => {
