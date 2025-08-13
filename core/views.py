@@ -3137,6 +3137,7 @@ def estimate_transaction_for_period(request):
 
         # Get updated summary data
         summary = estimation_service.get_estimation_summary(period)
+
         # Clear transaction cache
         clear_tx_cache(request.user.id, force=True)
 
@@ -3200,8 +3201,7 @@ def get_estimation_summaries(request):
         for period in periods_with_data:
             try:
                 summary = estimation_service.get_estimation_summary(period)
-                if summary["status"] != "balanced" or summary["has_estimated_transaction"]:
-                    summaries.append(summary)
+                summaries.append(summary)
                 logger.debug(f"Generated summary for period {period.label}: {summary['status']}")
             except Exception as period_error:
                 logger.error(f"Error processing period {period.id}: {period_error}")

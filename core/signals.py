@@ -53,19 +53,6 @@ def clear_transaction_cache(sender, instance, **kwargs):
         delattr(clear_transaction_cache, '_processing')
 
 # 🚫 REMOVIDO: Armazenamento de dados para atualização automática de saldos
-@receiver(post_save, sender=Transaction)
-def remove_estimate_on_manual(sender, instance, created, **kwargs):
-    if instance.is_estimated:
-        return
-    if transaction.get_connection().in_atomic_block:
-        return
-    Transaction.objects.filter(
-        user=instance.user,
-        period=instance.period,
-        is_estimated=True,
-        type=instance.type,
-    ).delete()
-
 
 # 🚫 REMOVIDO: Signals que alteravam saldos automaticamente
 # Os saldos das contas devem ser controlados APENAS pelo utilizador
