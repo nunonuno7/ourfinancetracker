@@ -3848,103 +3848,111 @@ def dashboard_spending_by_category_json(request):
 
 @login_required
 def dashboard_returns_json(request):
-    """Return portfolio and average returns for the selected period range."""
-    user_id = request.user.id
-    start_period = request.GET.get('start_period')
-    end_period = request.GET.get('end_period')
+    """Return monthly portfolio returns and their average for the user."""
+    start_period = request.GET.get("start_period")
+    end_period = request.GET.get("end_period")
+    user = request.user
 
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT dp.year, dp.month, SUM(ab.reported_balance)
-            FROM core_accountbalance ab
-            JOIN core_account acc ON acc.id = ab.account_id
-            JOIN core_accounttype at ON at.id = acc.account_type_id
-            JOIN core_dateperiod dp ON dp.id = ab.period_id
-            WHERE acc.user_id = %s AND LOWER(at.name) LIKE 'invest%'
-            GROUP BY dp.year, dp.month
-            ORDER BY dp.year, dp.month
-            """,
-            [user_id],
+    # Fetch balances for investment accounts grouped by period
+    balances_qs = (
+        AccountBalance.objects.filter(
+            account__user=user,
+            account__account_type__name__istartswith="invest",
         )
-        balance_rows = cursor.fetchall()
+        .values("period__year", "period__month")
+        .annotate(balance=Sum("reported_balance"))
+        .order_by("period__year", "period__month")
+    )
 
-    if not balance_rows:
-        return JsonResponse({
-            'labels': [],
-            'series': {
-                'portfolio_return': [],
-                'avg_portfolio_return': []
-            },
-            'cagr': 0
-        })
+    if not balances_qs:
+        return JsonResponse({"series": []})
 
-    # Convert and optionally filter by period
-    all_data = []
-    for year, month, balance in balance_rows:
-        period_date = datetime(year, month, 1)
-        all_data.append((period_date, float(balance)))
+    periods = []
+    balance_map: dict[str, Decimal] = {}
+    for row in balances_qs:
+        period_str = f"{row['period__year']:04d}-{row['period__month']:02d}"
+        periods.append(period_str)
+        balance_map[period_str] = row["balance"]
 
+    # Apply optional period filtering
     if start_period and end_period:
-        start_dt = datetime.strptime(start_period, "%Y-%m")
-        end_dt = datetime.strptime(end_period, "%Y-%m")
-        all_data = [row for row in all_data if start_dt <= row[0] <= end_dt]
+        if re.match(r"^\d{4}-(0[1-9]|1[0-2])$", start_period) and re.match(
+            r"^\d{4}-(0[1-9]|1[0-2])$", end_period
+        ):
+            periods = [p for p in periods if start_period <= p <= end_period]
 
-    all_data.sort(key=lambda x: x[0])
-    labels = [d.strftime('%b/%y') for d, _ in all_data]
-    balances = [b for _, b in all_data]
+    # Fetch investment flows per period (net amount)
+    flows_qs = (
+        Transaction.objects.filter(user=user, type="IV")
+        .values("period__year", "period__month")
+        .annotate(flow=Sum("amount"))
+    )
+    flow_map = {
+        f"{row['period__year']:04d}-{row['period__month']:02d}": row["flow"]
+        for row in flows_qs
+    }
 
-    # Get investment flows
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT dp.year, dp.month, SUM(t.amount)
-            FROM core_transaction t
-            JOIN core_dateperiod dp ON dp.id = t.period_id
-            WHERE t.user_id = %s AND t.type = 'IV'
-            GROUP BY dp.year, dp.month
-            """,
-            [user_id],
-        )
-        flow_rows = cursor.fetchall()
+    def _to_float(value: Decimal | None) -> float | None:
+        if value is None:
+            return None
+        return float(value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
 
-    flows = {datetime(y, m, 1): float(a or 0) for y, m, a in flow_rows}
+    monthly_returns: list[tuple[str, Decimal | None]] = []
+    prev_balance: Decimal | None = None
 
-    monthly_returns = []
-    avg_returns = []
-    compound_factor = 1.0
-    prev_balance = balances[0]
+    for period in periods:
+        balance = Decimal(balance_map.get(period, Decimal("0")))
+        flow = Decimal(flow_map.get(period, Decimal("0")))
+        if prev_balance is None:
+            ret = None
+            if settings.DEBUG:
+                logger.debug(
+                    "Period %s has no previous balance; flow=%s -> return=None",
+                    period,
+                    flow,
+                )
+        else:
+            denom = prev_balance + flow
+            if denom <= 0:
+                ret = None
+                if settings.DEBUG:
+                    logger.debug(
+                        "Period %s invalid denom prev_balance=%s flow=%s denom=%s",
+                        period,
+                        prev_balance,
+                        flow,
+                        denom,
+                    )
+            else:
+                ret = (balance - denom) / denom * Decimal("100")
+                if settings.DEBUG:
+                    logger.debug(
+                        "Period %s prev_balance=%s flow=%s denom=%s return=%s",
+                        period,
+                        prev_balance,
+                        flow,
+                        denom,
+                        ret,
+                    )
 
-    for i, (period_date, balance) in enumerate(all_data):
-        if i == 0:
-            monthly_returns.append(0)
-            avg_returns.append(0)
-            continue
-
-        flow = flows.get(period_date, 0.0)
-        denom = prev_balance + flow
-        ret = ((balance - denom) / denom * 100) if denom > 0 else 0.0
-        monthly_returns.append(ret)
-        compound_factor *= (1 + ret / 100)
-
-        window = monthly_returns[max(0, i - 11): i + 1]
-        avg = (sum(window) / len(window)) * 12
-        avg_returns.append(avg)
-
+        monthly_returns.append((period, ret))
         prev_balance = balance
 
-    total_months = len(all_data) - 1
-    total_years = total_months / 12
-    cagr = (compound_factor ** (1 / total_years) - 1) * 100 if total_years > 0 else 0.0
+    valid_returns = [r for _, r in monthly_returns if r is not None]
+    avg_return = (
+        sum(valid_returns) / Decimal(len(valid_returns)) if valid_returns else None
+    )
 
-    return JsonResponse({
-        'labels': labels,
-        'series': {
-            'portfolio_return': [round(v, 2) for v in monthly_returns],
-            'avg_portfolio_return': [round(v, 2) for v in avg_returns]
-        },
-        'cagr': round(cagr, 2)
-    })
+    series = [
+        {
+            "period": period,
+            "portfolio_return": _to_float(ret),
+            "avg_portfolio_return": _to_float(avg_return),
+        }
+        for period, ret in monthly_returns
+    ]
+
+    return JsonResponse({"series": series})
 
 
 @login_required
