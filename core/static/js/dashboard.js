@@ -1505,8 +1505,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!response.ok) throw new Error('Network response was not ok');
 
       const data = await response.json();
+      const series = data.series || [];
 
-      if (!data.labels || data.labels.length === 0) {
+      if (series.length === 0) {
         charts.returns.data.labels = ['No data'];
         charts.returns.data.datasets[0].data = [0];
         charts.returns.data.datasets[1].data = [0];
@@ -1514,16 +1515,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      charts.returns.data.labels = data.labels || [];
-      charts.returns.data.datasets[0].data = data.series?.portfolio_return || [];
-      charts.returns.data.datasets[1].data = data.series?.avg_portfolio_return || [];
+      charts.returns.data.labels = series.map(item => item.period);
+      charts.returns.data.datasets[0].data = series.map(item => item.portfolio_return);
+      charts.returns.data.datasets[1].data = series.map(item => item.avg_portfolio_return);
 
-      if (data.cagr !== undefined) {
-        charts.returns.options.plugins.title.text = `Investment Returns - CAGR: ${data.cagr.toFixed(2)}%`;
-      } else {
-        charts.returns.options.plugins.title.text = 'Investment Returns Over Time';
-      }
-
+      charts.returns.options.plugins.title.text = 'Investment Returns Over Time';
       charts.returns.update('none');
     } catch (error) {
       console.error('❌ [updateReturnsChart] Failed to load returns data:', error);
