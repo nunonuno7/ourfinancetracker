@@ -182,18 +182,11 @@ def dashboard(request):
     prev_period = _shift_period(period, -1)
     next_period = _shift_period(period, 1)
 
-    current_year = int(period.split("-")[0])
-    valid_years = DatePeriod.objects.order_by("-year").values_list("year", flat=True).distinct()
-    valid_months = ["01","02","03","04","05","06","07","08","09","10","11","12"]
-
     context = {
         "mode": mode,
         "period": period,
         "prev_period": prev_period,
         "next_period": next_period,
-        "valid_years": valid_years,
-        "current_year": current_year,
-        "valid_months": valid_months,
     }
 
     if mode == "period":
@@ -3391,67 +3384,6 @@ def dashboard_data(request):
     })
 
 
-def _days_in_period(period_yyyy_mm: str) -> int:
-    y, m = map(int, period_yyyy_mm.split("-"))
-    return monthrange(y, m)[1]
-
-
-def _period_obj(period_yyyy_mm):
-    y, m = map(int, period_yyyy_mm.split("-"))
-    return DatePeriod.objects.filter(year=y, month=m).first()
-
-
-def _prev_month(period_yyyy_mm: str) -> str:
-    y, m = map(int, period_yyyy_mm.split("-"))
-    return f"{y-1}-12" if m == 1 else f"{y}-{m-1:02d}"
-
-
-def _net_worth(user_id: int, period_yyyy_mm: str) -> Decimal:
-    p = _period_obj(period_yyyy_mm)
-    if not p:
-        return Decimal("0")
-    agg = AccountBalance.objects.filter(account__user_id=user_id, period=p)\
-                                .aggregate(total=Sum("reported_balance"))["total"]
-    return Decimal(agg or 0)
-
-
-def _sum_balances_by_types(user_id: int, period_yyyy_mm: str, type_names):
-    p = _period_obj(period_yyyy_mm)
-    if not p:
-        return Decimal("0")
-    agg = AccountBalance.objects.filter(
-        account__user_id=user_id,
-        period=p,
-        account__account_type__name__in=type_names
-    ).aggregate(total=Sum("reported_balance"))["total"]
-    return Decimal(agg or 0)
-
-
-def _portfolio_return_pct(user_id: int, start_period: str, end_period: str) -> Decimal:
-    """
-    portfolio return = (Patrimonio_end - (Patrimonio_first + Investimentos_periodo)) / (Patrimonio_first + Investimentos_periodo) * 100
-    Património = sum of AccountBalance for investment-type accounts.
-    Investimentos_periodo = sum of Transaction.amount with type='IV' between periods (inclusive).
-    """
-    invest_types = ["Investments","Investment","Brokerage","Stocks","Crypto","PPR"]
-    patrimonio_first = _sum_balances_by_types(user_id, start_period, invest_types)
-    patrimonio_end   = _sum_balances_by_types(user_id, end_period,   invest_types)
-
-    sp, ep = _period_obj(start_period), _period_obj(end_period)
-    contrib_q = Transaction.objects.filter(user_id=user_id, type=Transaction.Type.INVESTMENT)
-    if sp and ep:
-        contrib_q = contrib_q.filter(
-            Q(period__year__gt=sp.year) | Q(period__year=sp.year, period__month__gte=sp.month),
-            Q(period__year__lt=ep.year) | Q(period__year=ep.year, period__month__lte=ep.month),
-        )
-    contrib = Decimal(contrib_q.aggregate(total=Sum("amount"))["total"] or 0)
-
-    base = patrimonio_first + contrib
-    if base == 0:
-        return Decimal("0.00")
-    return ((patrimonio_end - base) / base * Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
 @login_required
 def dashboard_kpis_json(request):
     """Dashboard KPIs JSON API with proper period filtering."""
@@ -3621,7 +3553,7 @@ def dashboard_kpis_json(request):
             (25 if patrimonio_total > 10000 else patrimonio_total / 10000 * 25)  # Max 25 points for net worth
         )
 
-        payload = {
+        return JsonResponse({
             'patrimonio_total': f"{patrimonio_total:,.0f} €",
             'receita_media': f"{receita_media:,.0f} €",
             'despesa_estimada_media': f"{despesa_media:,.0f} €",
@@ -3661,53 +3593,7 @@ def dashboard_kpis_json(request):
                 'estimated_expenses_sum': estimated_expenses_sum,
                 'non_estimated_expense_pct': non_estimated_expense_pct
             }
-        }
-
-        if start_period and end_period:
-            days = _days_in_period(end_period)
-
-            total_expenses_abs = abs(Decimal(stats.get('total_expenses') or 0))
-            daily_expenses = (total_expenses_abs / Decimal(days)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-            portfolio_return_pct = _portfolio_return_pct(request.user.id, start_period, end_period)
-            daily_return_pct = (portfolio_return_pct / Decimal(days)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if days else Decimal('0.00')
-
-            networth_end  = _net_worth(request.user.id, end_period)
-            networth_prev = _net_worth(request.user.id, _prev_month(end_period))
-            growth_pct = Decimal('0.00') if networth_prev == 0 else (
-                (networth_end - networth_prev) / networth_prev * Decimal('100')
-            ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-            # YTD Invest P&L (approximate, consistent with available data)
-            start_ytd = f"{end_period[:4]}-01"
-            invest_types = ["Investments","Investment","Brokerage","Stocks","Crypto","PPR"]
-            nw_inv_end   = _sum_balances_by_types(request.user.id, end_period, invest_types)
-            nw_inv_start = _sum_balances_by_types(request.user.id, start_ytd,  invest_types)
-            contrib_ytd  = Decimal(Transaction.objects.filter(
-                user_id=request.user.id, type=Transaction.Type.INVESTMENT,
-                period__year=int(end_period[:4])
-            ).aggregate(total=Sum('amount'))['total'] or 0)
-            invest_profit_ytd = (nw_inv_end - nw_inv_start - contrib_ytd).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-            # Available cash – typical liquid types used in fixtures
-            available_cash = _sum_balances_by_types(request.user.id, end_period, ["Savings","Cash","Current","Card"])
-
-            # Simple hint: 10% of (available - 3×monthly expenses)
-            emergency_target = total_expenses_abs * Decimal('3')
-            excess = available_cash - emergency_target
-            invest_next_hint = (excess * Decimal('0.10')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if excess > 0 else Decimal('0.00')
-
-            payload.update({
-                'daily_expenses': f"{daily_expenses} €",
-                'daily_return_pct': f"{daily_return_pct}%",
-                'growth_pct': f"{growth_pct}%",
-                'invest_profit_ytd': f"{invest_profit_ytd} €",
-                'net_worth_delta': f"{(networth_end - _net_worth(request.user.id, start_period)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)} €",
-                'available_cash': f"{available_cash.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)} €",
-                'invest_next_hint': f"{invest_next_hint} €",
-            })
-
-        return JsonResponse(payload)
+        })
 
     except Exception as e:
         logger.error(f"Error in dashboard_kpis_json for user {request.user.id}: {e}")

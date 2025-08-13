@@ -38,9 +38,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
   };
 
-  const kpiElements = ['receita-media','despesa-estimada','verified-expenses','valor-investido','patrimonio-total','kpi-daily-expenses','kpi-daily-return','kpi-growth','kpi-invest-pnl-ytd','kpi-wealth-delta','kpi-available','kpi-invest-next'];
-
   const showKPILoadingState = () => {
+    const kpiElements = ['receita-media', 'despesa-estimada', 'verified-expenses', 'valor-investido', 'patrimonio-total'];
     kpiElements.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
@@ -981,16 +980,6 @@ document.addEventListener("DOMContentLoaded", () => {
       'valor-investido': data.valor_investido_total || '0 €',
       'patrimonio-total': data.patrimonio_total || '0 €'
     };
-
-    Object.assign(elements, {
-      'kpi-daily-expenses' : data.daily_expenses      || '—',
-      'kpi-daily-return'   : data.daily_return_pct    || '—',
-      'kpi-growth'         : data.growth_pct          || '—',
-      'kpi-invest-pnl-ytd' : data.invest_profit_ytd   || '—',
-      'kpi-wealth-delta'   : data.net_worth_delta     || '—',
-      'kpi-available'      : data.available_cash      || '—',
-      'kpi-invest-next'    : data.invest_next_hint    || '—'
-    });
 
     // Calculate savings rate with safe parsing
     const income = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
