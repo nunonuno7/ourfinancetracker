@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import os
+import warnings
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -55,6 +56,9 @@ DEBUG: bool = ENV("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
 SECRET_KEY: str | None = ENV("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is required")
+
+if not DEBUG:
+    warnings.filterwarnings("ignore")  # Suppress warnings in production
 
 # ────────────────────────────────────────────────────
 # Hosts e CSRF
@@ -340,13 +344,13 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "class": "logging.StreamHandler",
+            "class": "logging.StreamHandler" if DEBUG else "logging.NullHandler",
             "formatter": "simple" if DEBUG else "verbose",
             "filters": ["suppress_noisy_endpoints"],
             "level": "DEBUG" if DEBUG else "INFO",
         },
         "console_noisy": {
-            "class": "logging.StreamHandler",
+            "class": "logging.StreamHandler" if DEBUG else "logging.NullHandler",
             "formatter": "simple",
             "level": "WARNING",  # Only warnings and errors for noisy endpoints
         },
