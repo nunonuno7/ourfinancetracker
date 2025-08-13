@@ -788,5 +788,5 @@ Dashboard{% endblock %} {% block extra_head %}
     window.location.search = params.toString();
   });
 </script>
-<script src="{% static 'js/dashboard.js' %}"></script>
+<script type="module" src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}
