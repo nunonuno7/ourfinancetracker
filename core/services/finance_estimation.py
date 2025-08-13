@@ -262,7 +262,13 @@ class FinanceEstimationService:
             # Calculate expected expenses
             estimated_expenses = income_inserted - savings_diff - investment_inserted
             missing_expenses = max(Decimal('0'), estimated_expenses - expense_inserted)
-            missing_income = max(Decimal('0'), -estimated_expenses) if estimated_expenses < 0 else Decimal('0')
+            # If the recorded expenses exceed the expected value we are actually
+            # missing income. Previously this branch only triggered when the
+            # estimated expenses were negative which caused periods with extra
+            # expenses (e.g. after adding a real transaction on top of an
+            # estimated one) to be reported as balanced.  Compare the inserted
+            # expenses against the expected amount to detect this situation.
+            missing_income = max(Decimal('0'), expense_inserted - estimated_expenses)
 
             # Check if there's an estimated transaction
             estimated_tx = Transaction.objects.filter(
