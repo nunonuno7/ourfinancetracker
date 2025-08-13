@@ -1317,6 +1317,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           const response = await fetch('/transactions/totals-v2/', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': getCookie('csrftoken'),
@@ -1526,6 +1527,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           const response = await fetch('/transactions/totals-v2/', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': getCookie('csrftoken'),

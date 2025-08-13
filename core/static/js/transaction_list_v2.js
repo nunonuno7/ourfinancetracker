@@ -586,12 +586,10 @@ class TransactionManager {
       }
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRFToken":
-            window.csrfToken ||
-            $("[name=csrfmiddlewaretoken]").val() ||
-            $("meta[name=csrf-token]").attr("content"),
+          "X-CSRFToken": getCookie("csrftoken"),
         },
         body: JSON.stringify(totalsFilters),
       });
@@ -1755,6 +1753,22 @@ function syncPeriodFields(tr) {
   console.log(
     `🔄 syncPeriodFields: Date ${dateInput.value} → Period ${yyyy}-${mm} (${monthName} ${yyyy})`,
   );
+}
+
+// Function to get CSRF token from cookies
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== "") {
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === name + "=") {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
 }
 
 // Type mapping
