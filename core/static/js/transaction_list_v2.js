@@ -584,12 +584,16 @@ class TransactionManager {
       if (force) {
         totalsFilters.force = true;
       }
+      const csrfToken =
+        document.querySelector("[name=csrfmiddlewaretoken]")?.value ||
+        getCookie("csrftoken");
+
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRFToken": getCookie("csrftoken"),
+          "X-CSRFToken": csrfToken,
         },
         body: JSON.stringify(totalsFilters),
       });
