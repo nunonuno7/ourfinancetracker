@@ -29,14 +29,14 @@
                         {% csrf_token %}
                         <div class="mb-3">
                             <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
-                            {{ form.username|add_class:"form-control" }}
+                            {{ form.username|add_class:"form-control"|attr:"autocomplete:username" }}
                             {% if form.username.errors %}
                                 <div class="text-danger">{{ form.username.errors }}</div>
                             {% endif %}
                         </div>
                         <div class="mb-3">
                             <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
-                            {{ form.password|add_class:"form-control" }}
+                            {{ form.password|add_class:"form-control"|attr:"autocomplete:current-password"|attr:"autocapitalize:off"|attr:"spellcheck:false" }}
                             {% if form.password.errors %}
                                 <div class="text-danger">{{ form.password.errors }}</div>
                             {% endif %}
