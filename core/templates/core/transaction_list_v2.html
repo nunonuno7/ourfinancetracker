@@ -433,7 +433,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ request.csp_nonce }}">
   // Ensure CSRF token is available for AJAX calls
   window.csrfToken = "{{ csrf_token }}";
 </script>
@@ -451,7 +451,7 @@
 />
 
 <!-- Custom Styles -->
-<style>
+<style nonce="{{ request.csp_nonce }}">
   .sticky-top {
     position: sticky !important;
     top: 0;

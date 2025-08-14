@@ -64,7 +64,7 @@
     </div>
   </form>
 
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
   document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('import-form');
     const fileInput = document.getElementById('file');

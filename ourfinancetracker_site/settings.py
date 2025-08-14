@@ -178,14 +178,12 @@ CSP_SCRIPT_SRC = (
     "https://code.jquery.com",
     "https://cdn.datatables.net",
     "https://cdnjs.cloudflare.com",
-    "'unsafe-inline'",
 )
 CSP_STYLE_SRC = (
     "'self'",
     "https://cdn.jsdelivr.net",
     "https://cdn.datatables.net",
     "https://cdnjs.cloudflare.com",
-    "'unsafe-inline'",
 )
 CSP_FONT_SRC = (
     "'self'",

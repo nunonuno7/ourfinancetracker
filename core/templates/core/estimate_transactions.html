@@ -13,7 +13,7 @@
                 <div class="d-flex gap-2 align-items-center">
                     <div class="d-flex align-items-center gap-2">
                         <label for="year-filter" class="form-label mb-0">Year:</label>
-                        <select id="year-filter" class="form-select form-select-sm" style="width: auto;">
+                        <select id="year-filter" class="form-select form-select-sm w-auto">
                             <!-- Options will be populated by JavaScript -->
                         </select>
                     </div>
@@ -359,7 +359,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ request.csp_nonce }}">
     // Ensure jQuery is loaded and pass CSRF token to the EstimationManager
     window.csrfToken = '{{ csrf_token }}';
 </script>
