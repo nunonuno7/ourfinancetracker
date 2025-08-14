@@ -309,6 +309,11 @@ LOGOUT_REDIRECT_URL = "/"
 # Password reset timeout (1 hour = 3600 seconds)
 PASSWORD_RESET_TIMEOUT = 3600
 
+# Account activation token expiration (default 15 minutes)
+ACCOUNT_ACTIVATION_TOKEN_EXPIRATION_SECONDS = int(
+    ENV("ACCOUNT_ACTIVATION_TOKEN_EXPIRATION_SECONDS", "900")
+)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Sites framework
