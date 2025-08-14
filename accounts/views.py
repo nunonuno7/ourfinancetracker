@@ -1,7 +1,11 @@
 import logging
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.http import (
+    urlsafe_base64_encode,
+    urlsafe_base64_decode,
+    url_has_allowed_host_and_scheme,
+)
 from django.utils.encoding import force_bytes
 from django.shortcuts import render, redirect
 from django.urls import reverse, reverse_lazy
@@ -257,7 +261,13 @@ class DeleteAccountView(View):
         # Django raises a 500 error when this view attempts to authenticate
         # the user before deletion.
         if confirmation != "DELETE" or not authenticate(request, username=user.username, password=password):
-            referer = request.META.get("HTTP_REFERER") or reverse("home")
+            referer = request.META.get("HTTP_REFERER")
+            if not url_has_allowed_host_and_scheme(
+                referer,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                referer = reverse("home")
             separator = "&" if "?" in referer else "?"
             return redirect(f"{referer}{separator}delete_error=1")
 
