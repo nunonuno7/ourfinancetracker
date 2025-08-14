@@ -48,12 +48,12 @@
   </div>
 
 <!-- CSRF token for JavaScript -->
-<div style="display: none;">
+<div class="d-none">
   {% csrf_token %}
 </div>
 
 <!-- Alternative CSRF token method -->
-<script>
+<script nonce="{{ request.csp_nonce }}">
   window.csrfToken = '{{ csrf_token }}';
 </script>
 

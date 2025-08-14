@@ -293,7 +293,7 @@ Dashboard{% endblock %} {% block extra_head %}
             </div>
 
             <!-- List View (Hidden by default) -->
-            <div id="list-view" style="display: none;">
+            <div id="list-view" class="d-none">
               <div class="row">
                 {% for item in charts %}
                 <div class="col-lg-6 mb-3">
@@ -342,7 +342,7 @@ Dashboard{% endblock %} {% block extra_head %}
   </div>
 
   <!-- Period Mode Specific Scripts -->
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
     document.addEventListener('DOMContentLoaded', function() {
       console.log('🎯 Period mode dashboard loading...');
 
@@ -1007,7 +1007,7 @@ Dashboard{% endblock %} {% block extra_head %}
         </div>
         <div class="card-body chart-container">
           <canvas id="evolution-chart"></canvas>
-          <canvas id="returns-chart" style="display: none;"></canvas>
+          <canvas id="returns-chart" class="d-none"></canvas>
         </div>
       </div>
     </div>
@@ -1092,7 +1092,7 @@ Dashboard{% endblock %} {% block extra_head %}
 />
 <script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.0/dist/nouislider.min.js"></script>
 
-<style>
+<style nonce="{{ request.csp_nonce }}">
   .card {
     box-shadow: 0 2px 8px rgba(36, 40, 44, 0.08) !important;
     border: 1px solid #D9DBDD !important;
@@ -1488,7 +1488,7 @@ Dashboard{% endblock %} {% block extra_head %}
     }
   }
 </style>
-<script>
+<script nonce="{{ request.csp_nonce }}">
   document.getElementById('historyBtn').addEventListener('click', function () {
     window.location.href = '/dashboard/?mode=history';
   });
