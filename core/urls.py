@@ -137,4 +137,5 @@ urlpatterns = [
 
     # Health check
     path("healthz", healthz, name="healthz"),
+    path("healthz/", healthz),
 ]

@@ -41,10 +41,6 @@ DEBUG: bool = env_bool("DEBUG")
 if isinstance(DEBUG, str):
     DEBUG = bool(strtobool(DEBUG))
 
-def _to_bool(v):
-    return v if isinstance(v, bool) else bool(strtobool(str(v)))
-
-CSP_UPGRADE_INSECURE_REQUESTS = _to_bool(globals().get("CSP_UPGRADE_INSECURE_REQUESTS", False))
 
 SECRET_KEY = ENV("SECRET_KEY")
 if not SECRET_KEY:
@@ -248,23 +244,33 @@ AUTH_PASSWORD_VALIDATORS = [
 # ────────────────────────────────────────────────────
 # Security profiles (DEV/PROD): HTTPS, Cookies/CSRF e CSP
 # ────────────────────────────────────────────────────
-# CSP baseline + CDNs
-CDN_HOSTS = (
+# --- CSP base policy ---
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = (
+    "'self'",
     "https://cdn.jsdelivr.net",
     "https://cdn.datatables.net",
     "https://cdnjs.cloudflare.com",
     "https://code.jquery.com",
 )
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'",) + CDN_HOSTS
-CSP_STYLE_SRC = ("'self'",) + CDN_HOSTS
-CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
+CSP_STYLE_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdn.datatables.net",
+    "https://cdnjs.cloudflare.com",
+    "https://code.jquery.com",
+)
 CSP_IMG_SRC = ("'self'", "data:")
-CSP_FONT_SRC = ("'self'", "data:") + CDN_HOSTS
-# ✅ Gera nonce automaticamente em <script> e <style> via request.csp_nonce
-#    Usado por ``csp.middleware.CSPMiddleware`` para aplicar nonces às
-#    diretivas listadas sem gerar diretivas inválidas como ``nonce-in``.
-CSP_INCLUDE_NONCE_IN = ["script-src", "style-src"]
+CSP_CONNECT_SRC = ("'self'",)
+CSP_FONT_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+)
+CSP_OBJECT_SRC = ("'none'",)
+CSP_BASE_URI = ("'self'",)
+CSP_NONCE_IN = ("script-src", "style-src")
+CSP_REPORT_ONLY = False
 
 if DEBUG:
     # Dev: sem HTTPS forçado
@@ -310,7 +316,6 @@ else:
 
     # CSP em PROD (sem inline; usa nonces nos <script>/<style> que precisares)
     CSP_UPGRADE_INSECURE_REQUESTS = True
-    # Se precisares de inline controlado, usa nonces: ``CSP_INCLUDE_NONCE_IN`` acima.
 
 # ────────────────────────────────────────────────────
 # Email
