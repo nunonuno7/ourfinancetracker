@@ -60,5 +60,5 @@ isort==5.13.2
 pytest==8.3.4
 pytest-django==4.9.0
 pytest-cov==6.0.0
-django-anymail
-resend
+django-anymail==13.0.1
+resend==2.13.0
