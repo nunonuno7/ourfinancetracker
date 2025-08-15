@@ -4009,6 +4009,13 @@ def dashboard_returns_json(request):
     end_period = request.GET.get("end_period")
     user = request.user
 
+    logger.info(
+        "📈 [dashboard_returns_json] user=%s start=%s end=%s",
+        user.id,
+        start_period,
+        end_period,
+    )
+
     # Fetch balances for investment accounts grouped by period
     balances_qs = (
         AccountBalance.objects.filter(
@@ -4021,6 +4028,10 @@ def dashboard_returns_json(request):
     )
 
     if not balances_qs:
+        logger.warning(
+            "[dashboard_returns_json] No investment balances found for user %s",
+            user.id,
+        )
         return JsonResponse({"series": []})
 
     periods = []
@@ -4107,6 +4118,12 @@ def dashboard_returns_json(request):
         }
         for period, ret in monthly_returns
     ]
+
+    logger.info(
+        "[dashboard_returns_json] Returning %s periods for user %s",
+        len(series),
+        user.id,
+    )
 
     return JsonResponse({"series": series})
 
