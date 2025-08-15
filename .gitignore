@@ -66,6 +66,8 @@ notas.txt
 # Git command noise files
 # ──────────────────────────────
 h git switch --detach *
+# Accidental file from previous git command
+h git switch --detach 8f10c2a
 
 # ──────────────────────────────
 # Ficheiros de build / static
