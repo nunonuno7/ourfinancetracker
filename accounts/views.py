@@ -25,6 +25,7 @@ from .tokens import (
     validate_activation_token,
     revoke_activation_token,
 )
+from .forms import SignupForm
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +33,26 @@ MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_TIMEOUT = 600  # 10 minutes in seconds
 
 def signup(request):
+    form = SignupForm(request.POST or None)
     if request.method == "POST":
-        username = request.POST["username"].strip()
-        email = request.POST["email"].strip().lower()
-        password = request.POST["password"]
+        if not form.is_valid():
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
+
+        username = form.cleaned_data["username"]
+        email = form.cleaned_data["email"]
+        password = form.cleaned_data["password"]
 
         if User.objects.filter(username__iexact=username).exists():
             messages.error(request, "This username is already taken. Please choose another one.")
-            return render(request, "accounts/signup.html", status=400)
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         # Se já existir conta ativa com este email
         if User.objects.filter(email__iexact=email, is_active=True).exists():
             messages.error(request, "An account with this email already exists. Try resetting your password.")
-            return render(request, "accounts/signup.html", status=400)
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         # Se existir conta inativa com o mesmo email, reenvia ativação em vez de criar nova
         existing_inactive = User.objects.filter(email__iexact=email, is_active=False).first()
@@ -88,7 +96,7 @@ def signup(request):
                     request,
                     "There was an error sending the activation email. Please try again later.",
                 )
-                return render(request, "accounts/signup.html")
+                return render(request, "accounts/signup.html", {"form": form})
 
             messages.info(request, "We have resent the activation link to your email.")
             return render(request, "accounts/check_email.html")
@@ -100,7 +108,7 @@ def signup(request):
                 )
         except IntegrityError:
             messages.error(request, "This username is already taken. Please choose another one.")
-            return render(request, "accounts/signup.html", status=400)
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         # Generate activation token
         token = generate_activation_token(user)
@@ -140,11 +148,11 @@ def signup(request):
                 request,
                 "There was an error sending the activation email. Please try again later.",
             )
-            return render(request, "accounts/signup.html")
+            return render(request, "accounts/signup.html", {"form": form})
 
         return render(request, "accounts/check_email.html")
 
-    return render(request, "accounts/signup.html")
+    return render(request, "accounts/signup.html", {"form": form})
 
 def activate(request, uidb64, token):
     """
