@@ -8,6 +8,7 @@ import os
 import warnings
 from pathlib import Path
 from dotenv import load_dotenv
+from csp.constants import NONCE
 
 try:
     import dj_database_url  # type: ignore
@@ -245,32 +246,39 @@ AUTH_PASSWORD_VALIDATORS = [
 # Security profiles (DEV/PROD): HTTPS, Cookies/CSRF e CSP
 # ────────────────────────────────────────────────────
 # --- CSP base policy ---
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = (
-    "'self'",
-    "https://cdn.jsdelivr.net",
-    "https://cdn.datatables.net",
-    "https://cdnjs.cloudflare.com",
-    "https://code.jquery.com",
-)
-CSP_STYLE_SRC = (
-    "'self'",
-    "https://cdn.jsdelivr.net",
-    "https://cdn.datatables.net",
-    "https://cdnjs.cloudflare.com",
-    "https://code.jquery.com",
-)
-CSP_IMG_SRC = ("'self'", "data:")
-CSP_CONNECT_SRC = ("'self'",)
-CSP_FONT_SRC = (
-    "'self'",
-    "https://cdn.jsdelivr.net",
-    "https://cdnjs.cloudflare.com",
-)
-CSP_OBJECT_SRC = ("'none'",)
-CSP_BASE_URI = ("'self'",)
-CSP_NONCE_IN = ("script-src", "style-src")
-CSP_REPORT_ONLY = False
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ("'self'",),
+        "script-src": (
+            "'self'",
+            NONCE,
+            "https://cdn.jsdelivr.net",
+            "https://cdn.datatables.net",
+            "https://cdnjs.cloudflare.com",
+            "https://code.jquery.com",
+        ),
+        "style-src": (
+            "'self'",
+            NONCE,
+            "https://cdn.jsdelivr.net",
+            "https://cdn.datatables.net",
+            "https://cdnjs.cloudflare.com",
+            "https://code.jquery.com",
+        ),
+        "img-src": ("'self'", "data:"),
+        "connect-src": ("'self'",),
+        "font-src": (
+            "'self'",
+            "https://cdn.jsdelivr.net",
+            "https://cdnjs.cloudflare.com",
+        ),
+        "object-src": ("'none'",),
+        "base-uri": ("'self'",),
+    }
+}
+
+if not DEBUG:
+    CONTENT_SECURITY_POLICY["DIRECTIVES"]["upgrade-insecure-requests"] = []
 
 if DEBUG:
     # Dev: sem HTTPS forçado
@@ -285,9 +293,6 @@ if DEBUG:
     CSRF_COOKIE_HTTPONLY = False
     CSRF_USE_SESSIONS = False
     CSRF_FAILURE_VIEW = "django.views.csrf.csrf_failure"
-
-    # CSP em DEV
-    CSP_UPGRADE_INSECURE_REQUESTS = False
 
     # Origens confiáveis (HTTP + portas)
     CSRF_TRUSTED_ORIGINS = [
@@ -314,8 +319,6 @@ else:
     CSRF_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_HTTPONLY = True  # muda para False se precisares de ler via JS
 
-    # CSP em PROD (sem inline; usa nonces nos <script>/<style> que precisares)
-    CSP_UPGRADE_INSECURE_REQUESTS = True
 
 # ────────────────────────────────────────────────────
 # Email
@@ -371,8 +374,7 @@ if DEBUG:
     SESSION_COOKIE_SECURE = False
 
     # Do not emit the CSP upgrade directive in dev
-    # Ensure this is a real boolean False (not a truthy string)
-    CSP_UPGRADE_INSECURE_REQUESTS = False
+    CONTENT_SECURITY_POLICY["DIRECTIVES"].pop("upgrade-insecure-requests", None)
 
     # No HSTS while on HTTP
     SECURE_HSTS_SECONDS = 0
