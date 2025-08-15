@@ -1,69 +1,70 @@
 
-Django==5.1.4
+# Core framework
+Django==5.1.11
 
 # Django extensions and utilities
-django-extensions==3.2.3
+django-extensions==4.1
 django-widget-tweaks==1.5.0
-django-cors-headers==4.4.0
+django-cors-headers==4.7.0
 
 # Database
-psycopg2-binary==2.9.9
-dj-database-url==2.2.0
+psycopg2-binary==2.9.10
+dj-database-url==3.0.1
 
 # Cache (Redis for production)
-redis==5.1.1
-django-redis==5.4.0
+redis==6.4.0
+django-redis==6.0.0
 
 # Security and authentication
-django-axes==6.5.1
+django-axes==6.5.2
 django-ratelimit==4.1.0
 django-csp==4.0
-argon2-cffi==23.1.0
+argon2-cffi==25.1.0
 PyJWT==2.10.1
 
 # Environment configuration
-python-dotenv==1.0.1
+python-dotenv==1.1.1
 
 # Data analysis and manipulation
-pandas==2.2.3
-numpy==2.2.1
+pandas==2.3.1
+numpy==2.3.2
 
 # File export
 openpyxl==3.1.5
-xlsxwriter==3.2.0
+xlsxwriter==3.2.5
 
 # Date processing
 python-dateutil==2.9.0.post0
 
 # Task queue
-celery==5.3.6
-django-celery-beat==2.6.0
+celery==5.5.3
+django-celery-beat==2.8.1
 
 # Development and debug
-django-debug-toolbar==4.4.6
+django-debug-toolbar==6.0.0
 
 # Production server
 gunicorn==23.0.0
-whitenoise==6.8.2
+whitenoise==6.9.0
 
 # HTTP requests and utilities
-requests==2.32.3
-pytz==2024.2
+requests==2.32.4
+pytz==2025.2
 
 # Structured logging
-django-structlog==8.1.0
+django-structlog==9.1.1
 
 # Backup utilities
-django-dbbackup==4.2.0
+django-dbbackup==4.3.0
 
 # Code quality (development)
-flake8==7.1.1
-black==24.10.0
-isort==5.13.2
+flake8==7.3.0
+black==25.1.0
+isort==6.0.1
 
 # Testing
-pytest==8.3.4
-pytest-django==4.9.0
-pytest-cov==6.0.0
+pytest==8.4.1
+pytest-django==4.11.1
+pytest-cov==6.2.1
 django-anymail==13.0.1
 resend==2.13.0
