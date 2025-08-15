@@ -98,4 +98,16 @@ def create_default_account(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=FxRate)
 def clear_cache_on_fx_rate(sender, instance, **kwargs):
-    cache.clear()
+    """Invalidate cached FX rates and KPI aggregates when rates change."""
+    # Remove direct and inverse FX cache entries for the affected pair
+    cache.delete(f"fx:{instance.date}:{instance.base.code}:{instance.quote.code}")
+    cache.delete(f"fx:{instance.date}:{instance.quote.code}:{instance.base.code}")
+
+    # Clear any cached KPI aggregates – iterate over known keys when possible
+    try:
+        for key in list(cache._cache.keys()):
+            if "kpi:" in str(key):
+                cache.delete(str(key).split(":", 2)[-1])
+    except Exception:
+        # Fallback for cache backends without key inspection support
+        cache.clear()
