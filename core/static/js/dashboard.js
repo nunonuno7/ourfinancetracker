@@ -2044,6 +2044,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIdx = periods.length - 1;
         const startIdx = Math.max(0, endIdx - 2);
         periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
+        updateDashboard();
       }
     });
 
@@ -2052,6 +2053,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIdx = periods.length - 1;
         const startIdx = Math.max(0, endIdx - 5);
         periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
+        updateDashboard();
       }
     });
 
@@ -2060,12 +2062,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIdx = periods.length - 1;
         const startIdx = Math.max(0, endIdx - 11);
         periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
+        updateDashboard();
       }
     });
 
     document.getElementById('all-periods')?.addEventListener('click', () => {
       if (periods.length > 0) {
         periodSlider.noUiSlider.set([periods[0], periods[periods.length - 1]]);
+        updateDashboard();
       }
     });
 
@@ -2355,7 +2359,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   // Connect slider events to update dashboard with optimized debounce
-  const updateDashboardDebounced = debounce(updateDashboard, 500);
+  const updateDashboardDebounced = debounce(updateDashboard, 200);
 
   // Year slider event listeners - only on set (final value)
   if (yearSlider) {
