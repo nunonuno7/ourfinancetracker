@@ -33,9 +33,10 @@ DEBUG: bool = env_bool("DEBUG")
 if isinstance(DEBUG, str):
     DEBUG = bool(strtobool(DEBUG))
 
-val = globals().get("CSP_UPGRADE_INSECURE_REQUESTS", False)
-if isinstance(val, str):
-    CSP_UPGRADE_INSECURE_REQUESTS = bool(strtobool(val))
+def _to_bool(v):
+    return v if isinstance(v, bool) else bool(strtobool(str(v)))
+
+CSP_UPGRADE_INSECURE_REQUESTS = _to_bool(globals().get("CSP_UPGRADE_INSECURE_REQUESTS", False))
 
 SECRET_KEY = ENV("SECRET_KEY")
 if not SECRET_KEY:
@@ -255,7 +256,7 @@ CSP_FONT_SRC = ("'self'", "data:") + CDN_HOSTS
 # ✅ Gera nonce automaticamente em <script> e <style> via request.csp_nonce
 #    Usado por ``csp.middleware.CSPMiddleware`` para aplicar nonces às
 #    diretivas listadas sem gerar diretivas inválidas como ``nonce-in``.
-CSP_NONCE_IN = ["script-src", "style-src"]
+CSP_INCLUDE_NONCE_IN = ["script-src", "style-src"]
 
 if DEBUG:
     # Dev: sem HTTPS forçado
@@ -302,7 +303,7 @@ else:
 
     # CSP em PROD (sem inline; usa nonces nos <script>/<style> que precisares)
     CSP_UPGRADE_INSECURE_REQUESTS = True
-    # Se precisares de inline controlado, usa nonces: ``CSP_NONCE_IN`` acima.
+    # Se precisares de inline controlado, usa nonces: ``CSP_INCLUDE_NONCE_IN`` acima.
 
 # ────────────────────────────────────────────────────
 # Email
