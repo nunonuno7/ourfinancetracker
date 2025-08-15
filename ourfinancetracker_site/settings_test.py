@@ -29,3 +29,8 @@ CONN_MAX_AGE = 0
 
 # --- Optional: make tests deterministic & quiet noisy integrations ---
 DEBUG = False
+SECURE_SSL_REDIRECT = False
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
+AXES_LOCKOUT_HTTP_RESPONSE_CODE = 200
+AXES_HTTP_RESPONSE_CODE = 200

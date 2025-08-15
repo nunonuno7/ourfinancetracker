@@ -101,18 +101,18 @@
     <table class="table table-bordered table-hover align-middle">
       <thead class="table-light">
         <tr>
-          <th style="width: 30px;">⇅</th>
+          <th class="w-30">⇅</th>
           <th>Name</th>
           <th>Type</th>
           <th>Currency</th>
           <th>Created At</th>
-          <th style="width: 180px;">Actions</th>
+          <th class="w-180">Actions</th>
         </tr>
       </thead>
       <tbody id="account-table" class="sortable-table" data-reorder-url="{% url 'account_reorder' %}">
         {% for account in accounts %}
         <tr data-id="{{ account.pk }}" class="draggable-row">
-          <td class="text-center handle" style="cursor: grab;">⋮⋮</td>
+          <td class="text-center handle cursor-grab">⋮⋮</td>
           <td><strong>{{ account.name }}</strong></td>
           <td>{{ account.account_type.name }}</td>
           <td>{{ account.currency.code }}</td>
