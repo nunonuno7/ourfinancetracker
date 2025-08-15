@@ -354,22 +354,32 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         # Queries SQL otimizadas para melhor performance
         with connection.cursor() as cursor:
+            period_expr = (
+                "CAST(dp.year AS TEXT) || '-' || printf('%%02d', dp.month)"
+                if connection.vendor == "sqlite"
+                else "CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0'))"
+            )
+
             # Transações do utilizador
-            cursor.execute("""
-                SELECT 
-                    CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
+            cursor.execute(
+                f"""
+                SELECT
+                    {period_expr} as period,
                     tx.type, tx.amount
                 FROM core_transaction tx
                 INNER JOIN core_dateperiod dp ON tx.period_id = dp.id
                 WHERE tx.user_id = %s
                 ORDER BY dp.year, dp.month
-            """, [user.id])
+                """,
+                [user.id],
+            )
             tx_rows = cursor.fetchall()
 
             # Saldos das contas
-            cursor.execute("""
-                SELECT 
-                    CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
+            cursor.execute(
+                f"""
+                SELECT
+                    {period_expr} as period,
                     ab.reported_balance, at.name as account_type
                 FROM core_accountbalance ab
                 INNER JOIN core_account a ON ab.account_id = a.id
@@ -377,7 +387,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
                 WHERE a.user_id = %s
                 ORDER BY dp.year, dp.month
-            """, [user.id])
+                """,
+                [user.id],
+            )
             bal_rows = cursor.fetchall()
 
         # Converter para DataFrames para análise

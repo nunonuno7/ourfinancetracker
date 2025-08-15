@@ -6,7 +6,6 @@ CSP (django-csp), WhiteNoise, Redis opcional, Debug Toolbar e django-axes.
 from __future__ import annotations
 import os
 import warnings
-from distutils.util import strtobool
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -24,6 +23,15 @@ ENV = os.getenv
 
 def env_bool(key: str, default: str = "false") -> bool:
     return ENV(key, default).lower() in {"1", "true", "yes", "on"}
+
+
+def strtobool(val: str) -> bool:
+    val = val.lower()
+    if val in {"y", "yes", "t", "true", "on", "1"}:
+        return True
+    if val in {"n", "no", "f", "false", "off", "0"}:
+        return False
+    raise ValueError(f"invalid truth value {val}")
 
 # ────────────────────────────────────────────────────
 # Core flags & secret
