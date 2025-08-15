@@ -19,10 +19,14 @@ db.sqlite3
 *.py,cover
 *.py,orig
 
-# Variáveis de ambiente
+# Dotenv
 .env
+.env_*
 .env.*
-!.env.example
+.env_production
+.env.example
+
+# Só modelos sem segredos
 !.env.template
 !.env.sample
 
