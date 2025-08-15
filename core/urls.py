@@ -8,6 +8,10 @@ from .views import (
     # Transactions
     TransactionCreateView,
     TransactionUpdateView, TransactionDeleteView,
+    RecurringTransactionListView,
+    RecurringTransactionCreateView,
+    RecurringTransactionUpdateView,
+    RecurringTransactionDeleteView,
     transactions_json, import_transactions_xlsx,
     import_transactions_template, transaction_clear_cache,
     export_transactions_xlsx, export_data_xlsx, transaction_bulk_update,
@@ -85,6 +89,12 @@ urlpatterns = [
     path('transactions/estimate/years/', views.get_available_years, name='get_available_years'),
     path('transactions/estimate/<int:transaction_id>/delete/', views.delete_estimated_transaction, name='delete_estimated_transaction'),
     path('transactions/estimate/period/<int:period_id>/delete/', views.delete_estimated_transaction_by_period, name='delete_estimated_transaction_by_period'),
+
+    # Recurring transactions
+    path("recurring/", RecurringTransactionListView.as_view(), name="recurring_list"),
+    path("recurring/new/", RecurringTransactionCreateView.as_view(), name="recurring_create"),
+    path("recurring/<int:pk>/edit/", RecurringTransactionUpdateView.as_view(), name="recurring_update"),
+    path("recurring/<int:pk>/delete/", RecurringTransactionDeleteView.as_view(), name="recurring_delete"),
 
     # Categories
     path("categories/", CategoryListView.as_view(), name="category_list"),

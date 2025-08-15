@@ -61,6 +61,7 @@ from .forms import (
     CategoryForm,
     TransactionForm,
     UserInFormKwargsMixin,
+    RecurringTransactionForm,
 )
 from .models import (
     Account,
@@ -72,6 +73,7 @@ from .models import (
     Tag,
     Transaction,
     User,
+    RecurringTransaction,
 )
 from .utils.cache_helpers import clear_tx_cache
 from .finance.returns import portfolio_return
@@ -716,6 +718,44 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
 
         # For regular requests, use standard flow
         return super().post(request, *args, **kwargs)
+
+
+class RecurringTransactionListView(LoginRequiredMixin, ListView):
+    model = RecurringTransaction
+    template_name = "core/recurringtransaction_list.html"
+
+    def get_queryset(self):
+        return RecurringTransaction.objects.filter(user=self.request.user)
+
+
+class RecurringTransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateView):
+    model = RecurringTransaction
+    form_class = RecurringTransactionForm
+    template_name = "core/recurringtransaction_form.html"
+    success_url = reverse_lazy("recurring_list")
+
+    def form_valid(self, form):
+        form.instance.user = self.request.user
+        return super().form_valid(form)
+
+
+class RecurringTransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
+    model = RecurringTransaction
+    form_class = RecurringTransactionForm
+    template_name = "core/recurringtransaction_form.html"
+    success_url = reverse_lazy("recurring_list")
+
+    def get_queryset(self):
+        return RecurringTransaction.objects.filter(user=self.request.user)
+
+
+class RecurringTransactionDeleteView(OwnerQuerysetMixin, DeleteView):
+    model = RecurringTransaction
+    template_name = "core/confirms/recurring_confirm_delete.html"
+    success_url = reverse_lazy("recurring_list")
+
+    def get_queryset(self):
+        return RecurringTransaction.objects.filter(user=self.request.user)
 
 
 

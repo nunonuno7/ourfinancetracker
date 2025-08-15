@@ -416,40 +416,48 @@ class Budget(models.Model):
 
 
 class RecurringTransaction(models.Model):
-    class Frequency(models.TextChoices):
+    class Schedule(models.TextChoices):
         DAILY = "daily", "Daily"
         WEEKLY = "weekly", "Weekly"
         MONTHLY = "monthly", "Monthly"
-        YEARLY = "yearly", "Yearly"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recurring_transactions")
+    schedule = models.CharField(max_length=10, choices=Schedule.choices)
+    category = models.ForeignKey(
+        "Category",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_templates",
+    )
     amount = models.DecimalField(max_digits=14, decimal_places=2)
-    frequency = models.CharField(max_length=10, choices=Frequency.choices)
-    next_occurrence = models.DateField()
-
-    end_period = models.ForeignKey(
-        "DatePeriod",
+    account = models.ForeignKey(
+        "Account",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="recurring_transactions",
-        help_text="Optional period when recurrence ends",
     )
-
-    is_active = models.BooleanField(default=True)
-    template_transaction = models.ForeignKey(
-        "Transaction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="recurrence_templates"
-    )
-    position = models.PositiveIntegerField(default=0)
+    tags = models.ManyToManyField("Tag", blank=True, related_name="recurring_transactions")
+    next_run_at = models.DateTimeField()
+    active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user} – {self.amount} ({self.frequency})"
+        return f"{self.user} – {self.amount} ({self.schedule})"
+
+    def schedule_next(self):
+        from datetime import timedelta
+        from dateutil.relativedelta import relativedelta
+
+        if self.schedule == self.Schedule.DAILY:
+            self.next_run_at += timedelta(days=1)
+        elif self.schedule == self.Schedule.WEEKLY:
+            self.next_run_at += timedelta(weeks=1)
+        else:
+            self.next_run_at += relativedelta(months=1)
+        self.save(update_fields=["next_run_at"])
 
 
 class ImportLog(models.Model):

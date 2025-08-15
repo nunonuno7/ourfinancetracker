@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     "csp",
     "axes",
     "anymail",
+    "django_celery_beat",
     # Projeto
     "accounts",
     "core",
@@ -365,6 +366,13 @@ LOGGING = {
 SUPABASE_URL = ENV("SUPABASE_URL")
 SUPABASE_KEY = ENV("SUPABASE_KEY")
 SUPABASE_JWT_SECRET = ENV("SUPABASE_JWT_SECRET")
+
+# Celery
+CELERY_BROKER_URL = ENV("CELERY_BROKER_URL", default="memory://")
+CELERY_RESULT_BACKEND = ENV("CELERY_RESULT_BACKEND", default="cache+memory://")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # --- Final dev overrides (must stay at the end of settings.py) ---
 if DEBUG:

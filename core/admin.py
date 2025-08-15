@@ -9,6 +9,7 @@ from .models import (
     Category,
     Transaction,
     UserSettings,
+    RecurringTransaction,
 )
 
 # Registo simples
@@ -28,3 +29,10 @@ class TransactionAdmin(admin.ModelAdmin):
     list_filter = ("type", "user", "is_estimated")
     search_fields = ("notes",)
     autocomplete_fields = ("category",)
+
+
+@admin.register(RecurringTransaction)
+class RecurringTransactionAdmin(admin.ModelAdmin):
+    list_display = ("user", "schedule", "amount", "next_run_at", "active")
+    list_filter = ("schedule", "active")
+    autocomplete_fields = ("category", "account")

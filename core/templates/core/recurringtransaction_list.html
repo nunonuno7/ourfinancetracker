@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Recurring Transactions</h1>
+<table class="table">
+  <tr><th>Schedule</th><th>Amount</th><th>Next run</th><th></th></tr>
+  {% for obj in object_list %}
+  <tr>
+    <td>{{ obj.get_schedule_display }}</td>
+    <td>{{ obj.amount }}</td>
+    <td>{{ obj.next_run_at }}</td>
+    <td>
+      <a href="{% url 'recurring_update' obj.pk %}">Edit</a>
+      <a href="{% url 'recurring_delete' obj.pk %}">Delete</a>
+    </td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="4">No recurring transactions.</td></tr>
+  {% endfor %}
+</table>
+<a href="{% url 'recurring_create' %}">Add new</a>
+{% endblock %}
