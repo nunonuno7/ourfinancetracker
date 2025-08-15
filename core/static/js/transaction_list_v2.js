@@ -863,11 +863,11 @@ class TransactionManager {
     }
 
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
-    const checkboxVisibility = this.bulkMode ? "" : 'style="display: none;"';
+    const checkboxClass = this.bulkMode ? "" : " d-none";
 
     return `
       <tr data-id="${tx.id}" class="${rowClass}">
-        <td ${checkboxVisibility} class="text-center">
+        <td class="text-center${checkboxClass}">
           <input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}>
         </td>
         <td class="text-nowrap">${formatDate(tx.date)}</td>
@@ -1530,7 +1530,7 @@ class TransactionManager {
   showToast(message, type, delay = 3000) {
     const toastId = `toast-${Date.now()}-${Math.random()}`;
     const toast = $(`
-      <div class="toast position-fixed top-0 end-0 m-3" id="${toastId}" style="z-index: 9999;">
+      <div class="toast position-fixed top-0 end-0 m-3 toast-high" id="${toastId}">
         <div class="toast-body bg-${type} text-white">
           ${message}
         </div>
@@ -1562,9 +1562,9 @@ class TransactionManager {
               </h5>
             </div>
             <div class="modal-body text-center">
-              <div class="progress mb-3" style="height: 25px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                     role="progressbar" style="width: 0%" id="bulk-progress-bar">
+              <div class="progress mb-3 h-25">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                     role="progressbar" id="bulk-progress-bar">
                   <span id="progress-text">0%</span>
                 </div>
               </div>

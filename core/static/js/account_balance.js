@@ -140,10 +140,10 @@ function addRow() {
           <table class="table table-hover mb-0">
             <thead class="table-light">
               <tr>
-                <th style="width: 40px;" class="text-center">📱</th>
+                <th class="text-center w-40">📱</th>
                 <th>Account Name</th>
-                <th class="text-end" style="width: 180px;">Balance</th>
-                <th style="width: 60px;" class="text-center">Actions</th>
+                <th class="text-end w-180">Balance</th>
+                <th class="text-center w-60">Actions</th>
               </tr>
             </thead>
             <tbody class="sortable-table" id="balance-table" data-reorder-url="/account-reorder/">

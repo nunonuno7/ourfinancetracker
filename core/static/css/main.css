@@ -1203,3 +1203,4 @@ button:hover,
 .modal-narrow { max-width: 400px; }
 .modal-rounded { border-radius: 8px; }
 .delete-confirm-text { font-size: 16px; color: #333; }
+.toast-high { z-index: 9999; }
