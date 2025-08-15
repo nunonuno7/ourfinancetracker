@@ -238,7 +238,7 @@ CDN_HOSTS = (
     "https://cdnjs.cloudflare.com",
     "https://code.jquery.com",
 )
-# ✅ Gera nonce automaticamente em <script> e <style> com {% csp_nonce %}
+# ✅ Gera nonce automaticamente em <script> e <style> via request.csp_nonce
 CSP_NONCE_IN = ["script-src", "style-src"]
 
 if DEBUG:
@@ -255,16 +255,13 @@ if DEBUG:
     CSRF_USE_SESSIONS = False
     CSRF_FAILURE_VIEW = "django.views.csrf.csrf_failure"
 
-    # CSP em DEV (permitir inline para velocidade)
+    # CSP em DEV: mesmos requisitos de PROD, usando sempre nonces
     CSP_UPGRADE_INSECURE_REQUESTS = False
     CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
-    CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS + ("'unsafe-inline'",)  # ← agora permite inline scripts em DEV
-    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS + ("'unsafe-inline'",)
+    CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS
+    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS
     CSP_IMG_SRC     = ("'self'", "data:")
     CSP_FONT_SRC    = ("'self'", "data:") + CDN_HOSTS
-    # Se precisares mesmo de attributes (ex.: onload), ativa com django-csp ≥3.7:
-    # CSP_SCRIPT_SRC_ATTR = ("'self'", "'unsafe-inline'")
-    # CSP_STYLE_SRC_ATTR  = ("'self'", "'unsafe-inline'")
 
     # Origens confiáveis (HTTP + portas)
     CSRF_TRUSTED_ORIGINS = [
