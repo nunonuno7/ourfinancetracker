@@ -78,9 +78,9 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-grow-1">
-              <h6 class="card-title text-muted mb-1">⬆️ Income</h6>
-              <h4 class="mb-0 fw-bold text-success">€ {{ kpis.income|floatformat:2 }}</h4>
-              <small class="text-muted">
+              <h6 class="card-title kpi-title text-muted mb-1">⬆️ Income</h6>
+              <h4 class="kpi-value mb-0 fw-bold text-success">€ {{ kpis.income|floatformat:2 }}</h4>
+              <small class="text-muted kpi-footer">
                 {% if kpis.income > 0 %}
                 <span class="text-success">
                   <i class="fas fa-arrow-up"></i> Active
@@ -100,9 +100,9 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-grow-1">
-              <h6 class="card-title text-muted mb-1">⬇️ Expenses</h6>
-              <h4 class="mb-0 fw-bold text-danger">€ {{ kpis.expenses|floatformat:2 }}</h4>
-              <small class="text-muted">
+              <h6 class="card-title kpi-title text-muted mb-1">⬇️ Expenses</h6>
+              <h4 class="kpi-value mb-0 fw-bold text-danger">€ {{ kpis.expenses|floatformat:2 }}</h4>
+              <small class="text-muted kpi-footer">
                 {% if kpis.income > 0 %}
                 {% widthratio kpis.expenses kpis.income 100 as expense_ratio %}
                 <span class="{% if expense_ratio < 70 %}text-success{% elif expense_ratio < 90 %}text-warning{% else %}text-danger{% endif %}">
@@ -123,9 +123,9 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-grow-1">
-              <h6 class="card-title text-muted mb-1">📈 Investments</h6>
-              <h4 class="mb-0 fw-bold text-primary">€ {{ kpis.investments|floatformat:2 }}</h4>
-              <small class="text-muted">
+              <h6 class="card-title kpi-title text-muted mb-1">📈 Investments</h6>
+              <h4 class="kpi-value mb-0 fw-bold text-primary">€ {{ kpis.investments|floatformat:2 }}</h4>
+              <small class="text-muted kpi-footer">
                 {% if kpis.income > 0 %}
                 {% widthratio kpis.investments kpis.income 100 as investment_ratio %}
                 <span class="{% if investment_ratio > 20 %}text-success{% elif investment_ratio > 10 %}text-warning{% else %}text-muted{% endif %}">
@@ -146,9 +146,9 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-grow-1">
-              <h6 class="card-title text-muted mb-1">⚖️ Net Balance</h6>
-              <h4 class="mb-0 fw-bold text-{% if kpis.net >= 0 %}success{% else %}danger{% endif %}">€ {{ kpis.net|floatformat:2 }}</h4>
-              <small class="text-muted">
+              <h6 class="card-title kpi-title text-muted mb-1">⚖️ Net Balance</h6>
+              <h4 class="kpi-value mb-0 fw-bold text-{% if kpis.net >= 0 %}success{% else %}danger{% endif %}">€ {{ kpis.net|floatformat:2 }}</h4>
+              <small class="text-muted kpi-footer">
                 {% if kpis.net >= 0 %}
                 <span class="text-success">
                   <i class="fas fa-check-circle"></i> Positive flow
@@ -867,19 +867,19 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-success mb-1">⬆️ Average Income</h6>
-              <h4 class="card-text mb-0" id="receita-media">€ 0</h4>
-              <small class="text-muted">Monthly</small>
+              <h6 class="card-title kpi-title text-success mb-1">⬆️ Average Income</h6>
+              <h4 class="card-text kpi-value mb-0" id="receita-media">€ 0</h4>
+              <small class="text-muted kpi-subtitle">Monthly</small>
             </div>
             <i class="fas fa-arrow-up fa-2x text-success opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-success w-0"
               id="receita-progress"
             ></div>
           </div>
-          <small class="text-muted mt-1 d-block" id="receita-change">-</small>
+          <small class="text-muted kpi-footer" id="receita-change">-</small>
         </div>
       </div>
     </div>
@@ -888,19 +888,19 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-danger mb-1">⬇️ Expenses</h6>
-              <h4 class="card-text mb-0" id="despesa-estimada">€ 0</h4>
-              <small class="text-muted">Calculated</small>
+              <h6 class="card-title kpi-title text-danger mb-1">⬇️ Expenses</h6>
+              <h4 class="card-text kpi-value mb-0" id="despesa-estimada">€ 0</h4>
+              <small class="text-muted kpi-subtitle">Calculated</small>
             </div>
             <i class="fas fa-arrow-down fa-2x text-danger opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-danger w-0"
               id="despesa-progress"
             ></div>
           </div>
-          <small class="text-muted mt-1 d-block" id="despesa-change">-</small>
+          <small class="text-muted kpi-footer" id="despesa-change">-</small>
         </div>
       </div>
     </div>
@@ -908,7 +908,7 @@ Dashboard{% endblock %} {% block extra_head %}
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       {% with verified=kpis.verified_expenses_pct|clamp_pct verification=kpis.verification_level|default:"Moderate" verified_str=kpis.verified_expenses_pct|clamp_pct|floatformat:2 %}
         {% with aria="Verified Expenses, "|add:verified_str|add:" percent. Verification: "|add:verification %}
-          {% include "core/partials/kpi_card.html" with border_class="border-info" title_class="text-info" title="Verified Expenses" icon='<i class="fas fa-receipt fa-2x text-info opacity-25"></i>' value_id="verified-expenses" value=verified_str|add:"%" subtitle="Share of total expenses" meter=verified progress_id="verified-progress" progress_bar_class="bg-info" footer_id="verified-change" footer="Verification: "|add:verification footer_badge_class="badge bg-warning-subtle text-warning-emphasis" info_tooltip="Share of total expenses that are verified (not estimated)." aria_label=aria %}
+          {% include "core/partials/kpi_card.html" with border_class="border-info" title_class="text-info" title="Verified Expenses" icon='<i class="fas fa-receipt fa-2x text-info opacity-25"></i>' value_id="verified-expenses" value=verified_str|add:"%" subtitle="Share of total expenses" progress_id="verified-progress" progress_bar_class="bg-info" footer_id="verified-change" footer="Verification: "|add:verification footer_badge_class="badge bg-warning-subtle text-warning-emphasis" info_tooltip="Share of total expenses that are verified (not estimated)." aria_label=aria %}
         {% endwith %}
       {% endwith %}
     </div>
@@ -917,19 +917,19 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-info mb-1">📈 Invested Amount</h6>
-              <h4 class="card-text mb-0" id="valor-investido">€ 0</h4>
-              <small class="text-muted">Total</small>
+              <h6 class="card-title kpi-title text-info mb-1">📈 Invested Amount</h6>
+              <h4 class="card-text kpi-value mb-0" id="valor-investido">€ 0</h4>
+              <small class="text-muted kpi-subtitle">Total</small>
             </div>
             <i class="fas fa-chart-line fa-2x text-info opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-info w-0"
               id="investido-progress"
             ></div>
           </div>
-          <small class="text-muted mt-1 d-block" id="investido-change">-</small>
+          <small class="text-muted kpi-footer" id="investido-change">-</small>
         </div>
       </div>
     </div>
@@ -938,21 +938,19 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-purple mb-1">⚖️ Total Net Worth</h6>
-              <h4 class="card-text mb-0" id="patrimonio-total">€ 0</h4>
-              <small class="text-muted">Current</small>
+              <h6 class="card-title kpi-title text-purple mb-1">⚖️ Total Net Worth</h6>
+              <h4 class="card-text kpi-value mb-0" id="patrimonio-total">€ 0</h4>
+              <small class="text-muted kpi-subtitle">Current</small>
             </div>
             <i class="fas fa-gem fa-2x text-purple opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-purple w-0"
               id="patrimonio-progress"
             ></div>
           </div>
-          <small class="text-muted mt-1 d-block" id="patrimonio-change"
-            >-</small
-          >
+          <small class="text-muted kpi-footer" id="patrimonio-change">-</small>
         </div>
       </div>
     </div>
@@ -961,19 +959,19 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title text-dark mb-1">⚖️ Savings Rate</h6>
-              <h4 class="card-text mb-0" id="taxa-poupanca">0%</h4>
-              <small class="text-muted">of income</small>
+              <h6 class="card-title kpi-title text-dark mb-1">⚖️ Savings Rate</h6>
+              <h4 class="card-text kpi-value mb-0" id="taxa-poupanca">0%</h4>
+              <small class="text-muted kpi-subtitle">of income</small>
             </div>
             <i class="fas fa-percent fa-2x text-dark opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-dark w-0"
               id="poupanca-progress"
             ></div>
           </div>
-          <small class="text-muted mt-1 d-block" id="poupanca-change">-</small>
+          <small class="text-muted kpi-footer" id="poupanca-change">-</small>
         </div>
       </div>
     </div>
