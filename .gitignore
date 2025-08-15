@@ -21,8 +21,13 @@ db.sqlite3
 
 # Variáveis de ambiente
 .env
-..env_production
+.env.*
+!.env.example
+!.env.template
+!.env.sample
 
+# redundante mas explícito:
+.env_production
 # Log & runtime files
 *.log
 *.pot
@@ -66,3 +71,11 @@ h git switch --detach *
 # ──────────────────────────────
 /staticfiles/
 /media/
+
+# Dotenv
+.env
+.env_*
+!.env.example
+!.env.template
+!.env.sample
+.env_production
