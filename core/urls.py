@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import TemplateView
 
 from . import views
 from .views import (
@@ -45,6 +46,7 @@ from .views import (
 from .views_reporting import proxy_report_csv_token
 
 urlpatterns = [
+    path("service-worker.js", TemplateView.as_view(template_name="core/service-worker.js", content_type="application/javascript"), name="service_worker"),
     # Home
     path("", HomeView.as_view(), name="home"),
 

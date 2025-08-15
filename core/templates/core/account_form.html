@@ -14,7 +14,7 @@
 
   <form method="post" id="account-form" novalidate>
     {% csrf_token %}
-    <div style="display:none">
+    <div class="d-none">
       {{ form.non_field_errors }}
     </div>
 

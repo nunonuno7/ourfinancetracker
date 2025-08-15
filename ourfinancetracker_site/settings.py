@@ -282,7 +282,6 @@ if DEBUG:
 
     # CSP em DEV
     CSP_UPGRADE_INSECURE_REQUESTS = False
-    CSP_STYLE_SRC = CSP_STYLE_SRC + ("'unsafe-inline'",)
 
     # Origens confiáveis (HTTP + portas)
     CSRF_TRUSTED_ORIGINS = [
