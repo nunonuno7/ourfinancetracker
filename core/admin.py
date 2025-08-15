@@ -13,7 +13,13 @@ from .models import (
 )
 
 # Registo simples
-admin.site.register([Currency, AccountType, Account, AccountBalance, UserSettings])
+admin.site.register([Currency, AccountType, AccountBalance, UserSettings])
+
+
+# Registo personalizado para Account
+@admin.register(Account)
+class AccountAdmin(admin.ModelAdmin):
+    search_fields = ("name", "user__username")
 
 # Registo personalizado para Category
 @admin.register(Category)
