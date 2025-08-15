@@ -237,15 +237,18 @@ CDN_HOSTS = (
     "https://cdnjs.cloudflare.com",
     "https://code.jquery.com",
 )
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'",) + CDN_HOSTS
-CSP_STYLE_SRC = ("'self'",) + CDN_HOSTS
-CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
-CSP_IMG_SRC = ("'self'", "data:")
-CSP_FONT_SRC = ("'self'", "data:") + CDN_HOSTS
-# ✅ Gera nonce automaticamente em <script> e <style> via request.csp_nonce
+
+# --- CSP base (safe defaults) ---
+CSP_DEFAULT_SRC = globals().get("CSP_DEFAULT_SRC", ("'self'",))
+CSP_SCRIPT_SRC = globals().get("CSP_SCRIPT_SRC", ("'self'",) + CDN_HOSTS)
+CSP_STYLE_SRC = globals().get("CSP_STYLE_SRC", ("'self'",) + CDN_HOSTS)
+CSP_CONNECT_SRC = globals().get("CSP_CONNECT_SRC", ("'self'",) + CDN_HOSTS)
+CSP_IMG_SRC = globals().get("CSP_IMG_SRC", ("'self'", "data:"))
+CSP_FONT_SRC = globals().get("CSP_FONT_SRC", ("'self'", "data:") + CDN_HOSTS)
+# Enable nonces for script/style blocks (harmless if unused in templates)
 CSP_INCLUDE_NONCE_IN = ["script-src", "style-src"]
 
+# --- Environment-specific toggles ---
 if DEBUG:
     # Dev: sem HTTPS forçado
     SECURE_SSL_REDIRECT = False
@@ -262,7 +265,10 @@ if DEBUG:
 
     # CSP em DEV
     CSP_UPGRADE_INSECURE_REQUESTS = False
-    CSP_STYLE_SRC = CSP_STYLE_SRC + ("'unsafe-inline'",)
+
+    # Allow inline style attributes only in DEBUG to avoid CSP violations
+    if "'unsafe-inline'" not in CSP_STYLE_SRC:
+        CSP_STYLE_SRC = CSP_STYLE_SRC + ("'unsafe-inline'",)
 
     # Origens confiáveis (HTTP + portas)
     CSRF_TRUSTED_ORIGINS = [
