@@ -5,7 +5,15 @@ const DynamicCSS = (() => {
 
   function ensureSheet() {
     if (sheet) return sheet;
-    const nonce = window.CSP_NONCE;
+    let nonce = window.CSP_NONCE;
+    if (!nonce) {
+      const meta = document.querySelector('meta[name="csp-nonce"]');
+      if (meta) nonce = meta.getAttribute('content');
+    }
+    if (!nonce) {
+      const script = document.querySelector('script[nonce]');
+      if (script) nonce = script.getAttribute('nonce');
+    }
     const el = document.createElement('style');
     if (nonce) el.setAttribute('nonce', nonce);
     document.head.appendChild(el);
@@ -29,6 +37,16 @@ const DynamicCSS = (() => {
 
   return { classFor };
 })();
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (s) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[s]));
+}
 
 class TransactionManager {
   constructor() {
@@ -802,7 +820,7 @@ class TransactionManager {
         'Transfer': 'type-badge type-transfer'
       };
       const className = typeClasses[type] || 'type-badge';
-      return `<span class="${className}">${this.getTypeIcon(type)} ${type}</span>`;
+      return `<span class="${className}">${this.getTypeIcon(type)} ${escapeHtml(type)}</span>`;
     };
 
     // Format amount with proper styling
@@ -820,19 +838,21 @@ class TransactionManager {
         amountClass = numAmount >= 0 ? 'amount-positive' : 'amount-negative';
       }
       
-      return `<span class="transaction-amount ${amountClass}">${tx.amount_formatted}</span>`;
+      return `<span class="transaction-amount ${amountClass}">${escapeHtml(tx.amount_formatted)}</span>`;
     };
 
     // Format category as pill
     const formatCategory = (category) => {
       if (!category || category === '') return '<span class="text-muted">-</span>';
-      return `<span class="category-pill" title="${category}">${category}</span>`;
+      const safe = escapeHtml(category);
+      return `<span class="category-pill" title="${safe}">${safe}</span>`;
     };
 
     // Format account as pill
     const formatAccount = (account) => {
       if (!account || account === 'No account') return '<span class="text-muted">-</span>';
-      return `<span class="account-pill" title="${account}">${account}</span>`;
+      const safe = escapeHtml(account);
+      return `<span class="account-pill" title="${safe}">${safe}</span>`;
     };
 
     // Format tags as pills
@@ -841,13 +861,14 @@ class TransactionManager {
       
       const tagList = tags.split(', ').filter(tag => tag.trim());
       if (tagList.length === 0) return '<span class="text-muted">-</span>';
-      
-      const tagPills = tagList.slice(0, 2).map(tag => 
-        `<span class="tag-pill" title="${tag}">${tag}</span>`
-      ).join(' ');
-      
+
+      const tagPills = tagList.slice(0, 2).map(tag => {
+        const safe = escapeHtml(tag);
+        return `<span class="tag-pill" title="${safe}">${safe}</span>`;
+      }).join(' ');
+
       const moreCount = tagList.length - 2;
-      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${tagList.slice(2).join(', ')}">+${moreCount}</span>` : '';
+      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${escapeHtml(tagList.slice(2).join(', '))}">+${moreCount}</span>` : '';
       
       return `<div class="tags-container">${tagPills}${moreIndicator}</div>`;
     };
@@ -858,7 +879,7 @@ class TransactionManager {
       const day = date.getDate().toString().padStart(2, '0');
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const year = date.getFullYear().toString().substr(-2);
-      return `<span class="text-nowrap">${day}/${month}/${year}</span>`;
+      return `<span class="text-nowrap">${escapeHtml(`${day}/${month}/${year}`)}</span>`;
     };
 
     // Handle actions based on transaction type and editability
@@ -906,13 +927,14 @@ class TransactionManager {
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
     const checkboxClass = this.bulkMode ? "" : " d-none";
 
-    return `
+    const template = document.createElement('template');
+    template.innerHTML = `
       <tr data-id="${tx.id}" class="${rowClass}">
         <td class="text-center${checkboxClass}">
           <input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}>
         </td>
         <td class="text-nowrap">${formatDate(tx.date)}</td>
-        <td class="d-none d-md-table-cell text-muted">${tx.period}</td>
+        <td class="d-none d-md-table-cell text-muted">${escapeHtml(tx.period)}</td>
         <td>${getTypeBadge(tx.type)}${systemBadge}</td>
         <td class="text-end">${formatAmount(tx.amount_formatted, tx.type)}</td>
         <td class="d-none d-lg-table-cell">${formatCategory(tx.category)}</td>
@@ -921,6 +943,9 @@ class TransactionManager {
         <td class="text-center">${actionsHtml}</td>
       </tr>
     `;
+    const row = template.content.firstElementChild;
+    row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+    return row;
   }
 
   getTypeIcon(type) {
