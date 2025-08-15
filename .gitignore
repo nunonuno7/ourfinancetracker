@@ -21,6 +21,7 @@ db.sqlite3
 
 # Variáveis de ambiente
 .env
+..env_production
 
 # Log & runtime files
 *.log

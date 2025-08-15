@@ -1,30 +1,12 @@
-"""Django **settings.py** — versão optimizada para **Supabase Postgres**.
-
-Principais características 🔧
-────────────────────────────
-• Mantém‐se compatível com desenvolvimento local *(SQLite)* caso o
-  Postgres não esteja configurado, mas **usa sempre a mesma base Supabase**
-  quando presentes as variáveis DB_* ou DATABASE_URL.
-• Carrega variáveis de ambiente via **python‑dotenv**.
-• Debug Toolbar apenas em `DEBUG=True`.
-• Redis opcional — se `REDIS_URL` não existir recorre a `LocMemCache`.
-• WhiteNoise para servir estáticos em produção.
-• Logging com **RotatingFileHandler** e filtro para suprimir spam das
-  chamadas JSON.
-
-EnvVars mínimas ⬇️
-─────────────────
-SECRET_KEY, DEBUG, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT (5432),
-REDIS_URL *(opcional)*, SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET.
 """
-from __future__ import annotations
+Django settings.py — consolidado para DEV/PROD com Supabase Postgres,
+CSP (django-csp), WhiteNoise, Redis opcional, Debug Toolbar e django-axes.
+"""
 
-import logging
-import logging.handlers
+from __future__ import annotations
 import os
 import warnings
 from pathlib import Path
-
 from dotenv import load_dotenv
 
 try:
@@ -33,113 +15,83 @@ except ImportError:  # pragma: no cover
     dj_database_url = None
 
 # ────────────────────────────────────────────────────
-# Carregar .env (se existir)
+# Paths & .env
 # ────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+ENV = os.getenv
 
-ENV = os.getenv  # alias
-
-# ────────────────────────────────────────────────────
-# Authentication backends (django-axes must be first)
-# ────────────────────────────────────────────────────
-AUTHENTICATION_BACKENDS = [
-    'axes.backends.AxesStandaloneBackend',
-    'django.contrib.auth.backends.ModelBackend',
-    # add others here if you use them (e.g. allauth)
-]
+def env_bool(key: str, default: str = "false") -> bool:
+    return ENV(key, default).lower() in {"1", "true", "yes", "on"}
 
 # ────────────────────────────────────────────────────
-# Segurança & chave secreta
+# Core flags & secret
 # ────────────────────────────────────────────────────
-DEBUG: bool = ENV("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
-SECRET_KEY: str | None = ENV("SECRET_KEY")
+DEBUG: bool = env_bool("DEBUG")
+SECRET_KEY = ENV("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is required")
 
 if not DEBUG:
-    warnings.filterwarnings("ignore")  # Suppress warnings in production
+    warnings.filterwarnings("ignore")
 
 # ────────────────────────────────────────────────────
-# Hosts e CSRF
+# Hosts & CSRF trusted origins
 # ────────────────────────────────────────────────────
-# Hosts allowed to serve the app (no scheme here)
 ALLOWED_HOSTS = [
-    ".ourfinancetracker.com",   # both ourfinancetracker.com and subdomains
-    ".onrender.com",            # Render
-    ".replit.dev",              # Replit
+    ".ourfinancetracker.com",
+    ".onrender.com",
+    ".replit.dev",
     "localhost",
     "127.0.0.1",
 ]
 
-# CSRF trusted origins (must include scheme; ports allowed for non-standard ports)
 CSRF_TRUSTED_ORIGINS = [
     "https://ourfinancetracker.com",
     "https://www.ourfinancetracker.com",
-    "http://localhost:8000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:8001",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:8000", "http://localhost:8001",
+    "http://127.0.0.1:8000", "http://127.0.0.1:8001",
+    "http://localhost:3000", "http://127.0.0.1:3000",
 ]
 
-def _extend_from_env_list(env_key, target_list, require_scheme=False):
-    raw = os.getenv(env_key, "")
+def _extend_from_env_list(env_key: str, target_list: list[str], require_scheme: bool = False) -> None:
+    raw = ENV(env_key, "") or ""
     if not raw:
         return
     for item in [x.strip() for x in raw.split(",") if x.strip()]:
         if require_scheme and not (item.startswith("http://") or item.startswith("https://")):
-            # Skip invalid origin if scheme is missing
             continue
         target_list.append(item)
 
-# Add dynamic Replit domain support
-replit_dev_domain = os.getenv("REPLIT_DEV_DOMAIN")
-if replit_dev_domain:
-    ALLOWED_HOSTS.append(replit_dev_domain)
-    CSRF_TRUSTED_ORIGINS.extend([
-        f"https://{replit_dev_domain}",
-        f"http://{replit_dev_domain}",
-    ])
+if ENV("REPLIT_DEV_DOMAIN"):
+    dom = ENV("REPLIT_DEV_DOMAIN")
+    ALLOWED_HOSTS.append(dom)
+    CSRF_TRUSTED_ORIGINS += [f"https://{dom}", f"http://{dom}"]
 
 _extend_from_env_list("EXTRA_ALLOWED_HOSTS", ALLOWED_HOSTS, require_scheme=False)
 _extend_from_env_list("EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True)
 
-# Adicionar configuração específica para CSRF
-if DEBUG:
-    CSRF_COOKIE_SAMESITE = 'Lax'
-    CSRF_USE_SESSIONS = False
-    CSRF_COOKIE_HTTPONLY = False
-    # Para debug CSRF em desenvolvimento
-    CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
-else:
-    CSRF_COOKIE_HTTPONLY = True
-
 # ────────────────────────────────────────────────────
-# Apps & middleware
+# Apps & Middleware
 # ────────────────────────────────────────────────────
 INSTALLED_APPS = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
+    # Django
+    "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
+    "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
     "django.contrib.sites",
     # Terceiros
     "whitenoise.runserver_nostatic",
     "widget_tweaks",
     "django.contrib.humanize",
+    "csp",
     "axes",
     "anymail",
-    # Internos
-    "accounts",  # Moved before core to prioritize its templates
+    # Projeto
+    "accounts",
     "core",
 ]
 
-# Debug Toolbar only if explicitly toggled
-SHOW_DEBUG_TOOLBAR = ENV("SHOW_DEBUG_TOOLBAR", "False").lower() in {"1", "true", "yes", "on"}
+SHOW_DEBUG_TOOLBAR = env_bool("SHOW_DEBUG_TOOLBAR")
 if DEBUG and SHOW_DEBUG_TOOLBAR:
     INSTALLED_APPS += ["debug_toolbar"]
 
@@ -154,47 +106,19 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.log_filter.SuppressJsonLogMiddleware",
-    # Performance monitoring (only in DEBUG)
-    "core.middleware.performance.PerformanceMiddleware" if DEBUG else None,
-    # django-axes should be last
-    "axes.middleware.AxesMiddleware",
 ]
+if DEBUG:
+    MIDDLEWARE.append("core.middleware.performance.PerformanceMiddleware")
+MIDDLEWARE.append("axes.middleware.AxesMiddleware")  # axes por último
 
-# Remove None values from middleware list
-MIDDLEWARE = [m for m in MIDDLEWARE if m is not None]
-
-# Add Debug Toolbar middleware if enabled
 if DEBUG and SHOW_DEBUG_TOOLBAR:
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
     INTERNAL_IPS = ["127.0.0.1"]
 
-# ────────────────────────────────────────────────────
-# Content Security Policy
-# ────────────────────────────────────────────────────
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = (
-    "'self'",
-    "https://cdn.jsdelivr.net",
-    "https://code.jquery.com",
-    "https://cdn.datatables.net",
-    "https://cdnjs.cloudflare.com",
-)
-CSP_STYLE_SRC = (
-    "'self'",
-    "https://cdn.jsdelivr.net",
-    "https://cdn.datatables.net",
-    "https://cdnjs.cloudflare.com",
-)
-CSP_FONT_SRC = (
-    "'self'",
-    "https://cdn.jsdelivr.net",
-    "https://cdnjs.cloudflare.com",
-)
-CSP_IMG_SRC = (
-    "'self'",
-    "data:",
-)
-CSP_CONNECT_SRC = ("'self'",)
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
 
 ROOT_URLCONF = "ourfinancetracker_site.urls"
 WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
@@ -205,10 +129,7 @@ WSGI_APPLICATION = "ourfinancetracker_site.wsgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [
-            BASE_DIR / "accounts" / "templates",
-            BASE_DIR / "core" / "templates"
-        ],
+        "DIRS": [BASE_DIR / "accounts" / "templates", BASE_DIR / "core" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -222,13 +143,13 @@ TEMPLATES = [
 ]
 
 # ────────────────────────────────────────────────────
-# Base de dados – prioriza Supabase/Postgres
+# Base de dados (Supabase prioritário; fallback SQLite)
 # ────────────────────────────────────────────────────
-SUPA_URL = ENV("DATABASE_URL")  # string completa
+SUPA_URL = ENV("DATABASE_URL")
 if not SUPA_URL and ENV("DB_HOST"):
     SUPA_URL = (
-        f"postgresql://{ENV('DB_USER')}:{ENV('DB_PASSWORD')}@{ENV('DB_HOST')}:"
-        f"{ENV('DB_PORT', '5432')}/{ENV('DB_NAME')}"
+        f"postgresql://{ENV('DB_USER')}:{ENV('DB_PASSWORD')}"
+        f"@{ENV('DB_HOST')}:{ENV('DB_PORT','5432')}/{ENV('DB_NAME')}"
     )
 
 if SUPA_URL and dj_database_url:
@@ -240,37 +161,28 @@ if SUPA_URL and dj_database_url:
         )
     }
 else:
-    # Fallback leve para dev — SQLite
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
+        "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
     }
 
 # ────────────────────────────────────────────────────
-# Cache
+# Cache (Redis opcional)
 # ────────────────────────────────────────────────────
-if redis_url := ENV("REDIS_URL"):
+if ENV("REDIS_URL"):
     CACHES = {
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": redis_url,
+            "LOCATION": ENV("REDIS_URL"),
             "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
             "KEY_PREFIX": "ourft",
             "TIMEOUT": 300,
         }
     }
 else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "ourfinancetracker-cache",
-        }
-    }
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "ourft-cache"}}
 
 # ────────────────────────────────────────────────────
-# Internacionalização
+# I18N
 # ────────────────────────────────────────────────────
 LANGUAGE_CODE = "en-gb"
 TIME_ZONE = ENV("TIME_ZONE", "Europe/Lisbon")
@@ -278,19 +190,15 @@ USE_I18N = True
 USE_TZ = True
 
 # ────────────────────────────────────────────────────
-# Ficheiros estáticos & media
+# Static & Media (WhiteNoise)
 # ────────────────────────────────────────────────────
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "core" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
-# Use WhiteNoise with proper fallback for missing files
-if DEBUG:
-    STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
-else:
-    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
-# Ensure WhiteNoise serves static files with correct MIME types
+STATICFILES_STORAGE = (
+    "django.contrib.staticfiles.storage.StaticFilesStorage" if DEBUG
+    else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+)
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
 
@@ -298,143 +206,20 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # ────────────────────────────────────────────────────
-# Autenticação
+# Auth / misc
 # ────────────────────────────────────────────────────
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
-
-# Password reset timeout (1 hour = 3600 seconds)
-PASSWORD_RESET_TIMEOUT = 3600
-
-# Account activation token expiration (default 15 minutes)
-ACCOUNT_ACTIVATION_TOKEN_EXPIRATION_SECONDS = int(
-    ENV("ACCOUNT_ACTIVATION_TOKEN_EXPIRATION_SECONDS", "900")
-)
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-# Sites framework
 SITE_ID = 1
 
-# ────────────────────────────────────────────────────
-# Logging estruturado
-# ────────────────────────────────────────────────────
-class SuppressNoisyEndpointsFilter(logging.Filter):
-    """Suppress logs for noisy API endpoints"""
-    def filter(self, record: logging.LogRecord) -> bool:
-        message = record.getMessage()
-        noisy_paths = [
-            "/transactions/json",
-            "/transactions/totals-v2/",
-            "/dashboard/kpis/",
-            "/static/",
-            "/favicon.ico",
-            "/api/",
-        ]
-        return not any(path in message for path in noisy_paths)
-
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "filters": {
-        "suppress_noisy_endpoints": {"()": SuppressNoisyEndpointsFilter},
-        "require_debug_false": {"()": "django.utils.log.RequireDebugFalse"},
-        "require_debug_true": {"()": "django.utils.log.RequireDebugTrue"},
-    },
-    "formatters": {
-        "verbose": {
-            "format": "[{levelname}] {asctime} {name} {process:d} {thread:d} {message}",
-            "style": "{",
-        },
-        "simple": {"format": "[{levelname}] {message}", "style": "{"},
-        "performance": {
-            "format": "🚀 [{levelname}] {asctime} {message}",
-            "style": "{",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler" if DEBUG else "logging.NullHandler",
-            "formatter": "simple" if DEBUG else "verbose",
-            "filters": ["suppress_noisy_endpoints"],
-            "level": "DEBUG" if DEBUG else "INFO",
-        },
-        "console_noisy": {
-            "class": "logging.StreamHandler" if DEBUG else "logging.NullHandler",
-            "formatter": "simple",
-            "level": "WARNING",  # Only warnings and errors for noisy endpoints
-        },
-        "file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOG_DIR / "django.log",
-            "maxBytes": 5 * 1024 * 1024,
-            "backupCount": 5,
-            "formatter": "verbose",
-            "level": "INFO",  # File logs start at INFO
-        },
-        "performance_file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOG_DIR / "performance.log",
-            "maxBytes": 2 * 1024 * 1024,
-            "backupCount": 3,
-            "formatter": "performance",
-            "level": "WARNING",
-        },
-    },
-    "root": {
-        "handlers": ["console", "file"],
-        "level": "DEBUG" if DEBUG else "INFO",
-    },
-    "loggers": {
-        "django.server": {
-            "handlers": ["console_noisy", "file"],
-            "level": "WARNING",  # Reduce server log noise
-            "propagate": False,
-        },
-        "django.request": {
-            "handlers": ["console", "file"],
-            "level": "WARNING",  # Only log request errors
-            "propagate": False,
-        },
-        "core": {
-            "handlers": ["console", "file"],
-            "level": "DEBUG" if DEBUG else "INFO",
-            "propagate": False,
-        },
-        "core.performance": {
-            "handlers": ["console", "performance_file"],
-            "level": "WARNING",  # Only log slow requests
-            "propagate": False,
-        },
-        "accounts": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        # Suppress axios/CORS preflight noise
-        "django.security.csrf": {
-            "handlers": ["file"],
-            "level": "ERROR",
-            "propagate": False,
-        },
-    },
-}
-
-# ────────────────────────────────────────────────────
-# Strong password hashing (Argon2 first)
-# ────────────────────────────────────────────────────
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
-
-# Relaxed password policy
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
@@ -443,64 +228,119 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ────────────────────────────────────────────────────
-# Segurança extra
+# Security profiles (DEV/PROD): HTTPS, Cookies/CSRF e CSP
 # ────────────────────────────────────────────────────
-if not DEBUG:
+# CSP baseline + CDNs
+CSP_DEFAULT_SRC = ("'self'",)
+CDN_HOSTS = (
+    "https://cdn.jsdelivr.net",
+    "https://cdn.datatables.net",
+    "https://cdnjs.cloudflare.com",
+    "https://code.jquery.com",
+)
+# ✅ Gera nonce automaticamente em <script> e <style> com {% csp_nonce %}
+CSP_NONCE_IN = ["script-src", "style-src"]
+
+if DEBUG:
+    # Dev: sem HTTPS forçado
+    SECURE_SSL_REDIRECT = False
+    SECURE_PROXY_SSL_HEADER = None
+
+    # Cookies & CSRF em HTTP
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_HTTPONLY = False
+    CSRF_USE_SESSIONS = False
+    CSRF_FAILURE_VIEW = "django.views.csrf.csrf_failure"
+
+    # CSP em DEV (permitir inline para velocidade)
+    CSP_UPGRADE_INSECURE_REQUESTS = False
+    CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
+    CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS + ("'unsafe-inline'",)  # ← agora permite inline scripts em DEV
+    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS + ("'unsafe-inline'",)
+    CSP_IMG_SRC     = ("'self'", "data:")
+    CSP_FONT_SRC    = ("'self'", "data:") + CDN_HOSTS
+    # Se precisares mesmo de attributes (ex.: onload), ativa com django-csp ≥3.7:
+    # CSP_SCRIPT_SRC_ATTR = ("'self'", "'unsafe-inline'")
+    # CSP_STYLE_SRC_ATTR  = ("'self'", "'unsafe-inline'")
+
+    # Origens confiáveis (HTTP + portas)
+    CSRF_TRUSTED_ORIGINS = [
+        "http://127.0.0.1:8000", "http://127.0.0.1:8001",
+        "http://localhost:8000", "http://localhost:8001",
+        "http://localhost:3000", "http://127.0.0.1:3000",
+    ]
+
+else:
+    # Prod: HTTPS obrigatório e cabeçalhos fortes
     SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
-
-    # Safer defaults in production
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
-    # If behind a proxy/Render/NGINX:
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# SameSite cookies (safe default for both envs)
-SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SAMESITE = "Lax"
+    # Cookies & CSRF
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_HTTPONLY = True  # muda para False se precisares de ler via JS
+
+    # CSP em PROD (sem inline; usa nonces nos <script>/<style> que precisares)
+    CSP_UPGRADE_INSECURE_REQUESTS = True
+    CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
+    CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS
+    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS
+    CSP_IMG_SRC     = ("'self'", "data:")
+    CSP_FONT_SRC    = ("'self'", "data:") + CDN_HOSTS
+    # Se precisares de inline controlado, mantém nonces: CSP_NONCE_IN acima.
 
 # ────────────────────────────────────────────────────
-# Login attempt throttling (brute-force protection)
+# Email
+# ────────────────────────────────────────────────────
+EMAIL_BACKEND = ENV("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+DEFAULT_FROM_EMAIL = ENV("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com")
+EMAIL_LINK_DOMAIN = ENV("EMAIL_LINK_DOMAIN", "www.ourfinancetracker.com")
+EMAIL_HOST = ENV("EMAIL_HOST", "")
+EMAIL_PORT = int(ENV("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "true")
+EMAIL_HOST_USER = ENV("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = ENV("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = int(ENV("EMAIL_TIMEOUT", "20"))
+SERVER_EMAIL = ENV("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+if DEBUG and not EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# ────────────────────────────────────────────────────
+# django-axes (brute-force)
 # ────────────────────────────────────────────────────
 AXES_ENABLED = not DEBUG
 AXES_FAILURE_LIMIT = 5
-AXES_COOLOFF_TIME = 1  # hours
+AXES_COOLOFF_TIME = 1  # horas
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_LOCKOUT_CALLABLE = None
 
 # ────────────────────────────────────────────────────
-# Email configuration
+# Logging (simples e suficiente)
 # ────────────────────────────────────────────────────
-# --- Email configuration ---
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
-
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com")
-EMAIL_LINK_DOMAIN = os.getenv("EMAIL_LINK_DOMAIN", "www.ourfinancetracker.com")
-
-EMAIL_HOST = os.getenv("EMAIL_HOST", "")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_USE_TLS = (os.getenv("EMAIL_USE_TLS", "true").lower() == "true")
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
-
-# In development, default to console backend so emails are visible in the terminal.
-if DEBUG and not os.getenv("EMAIL_HOST"):
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-
-# Security for cookies (HTTPS in production)
-CSRF_COOKIE_SECURE = not DEBUG
-SESSION_COOKIE_SECURE = not DEBUG
-
-# Server email for Django system messages (error reports, etc.)
-SERVER_EMAIL = os.getenv("SERVER_EMAIL", os.getenv("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com"))
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler", "level": "DEBUG" if DEBUG else "INFO"}},
+    "root": {"handlers": ["console"], "level": "DEBUG" if DEBUG else "INFO"},
+    "loggers": {
+        "django.server": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "django.request": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+    },
+}
 
 # ────────────────────────────────────────────────────
-# Supabase creds (para RPC)
+# Supabase (se precisares no código)
 # ────────────────────────────────────────────────────
 SUPABASE_URL = ENV("SUPABASE_URL")
 SUPABASE_KEY = ENV("SUPABASE_KEY")
