@@ -23,6 +23,7 @@ from .models import (
     AccountType,
     Currency,
     Tag,
+    RecurringTransaction,
     ALLOWED_ACCOUNT_TYPE_NAMES,
 )
 
@@ -542,3 +543,24 @@ class TransactionImportForm(forms.Form):
             "class": "form-control"
         })
     )
+
+
+class RecurringTransactionForm(UserAwareMixin, forms.ModelForm):
+    class Meta:
+        model = RecurringTransaction
+        fields = ["schedule", "amount", "account", "category", "tags", "next_run_at", "active"]
+        widgets = {
+            "schedule": forms.Select(attrs={"class": "form-select"}),
+            "amount": forms.TextInput(attrs={"class": "form-control text-end"}),
+            "account": forms.Select(attrs={"class": "form-select"}),
+            "category": forms.Select(attrs={"class": "form-select"}),
+            "tags": forms.SelectMultiple(attrs={"class": "form-select"}),
+            "next_run_at": forms.DateTimeInput(attrs={"type": "datetime-local", "class": "form-control"}),
+        }
+
+    def __init__(self, *args, user: User | None = None, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
+        if self.user:
+            self.fields["account"].queryset = Account.objects.filter(user=self.user)
+            self.fields["category"].queryset = Category.objects.filter(user=self.user)
+            self.fields["tags"].queryset = Tag.objects.filter(user=self.user)
