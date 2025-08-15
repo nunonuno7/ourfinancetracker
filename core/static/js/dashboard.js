@@ -1621,14 +1621,14 @@ document.addEventListener("DOMContentLoaded", () => {
       evolutionCanvas.style.display = 'block';
     } else if (chartType === 'flows' && flowsCanvas) {
       flowsCanvas.style.display = 'block';
-      updateFlowsChart(analysisData);
     } else if (chartType === 'returns' && returnsCanvas) {
       returnsCanvas.style.display = 'block';
-      updateReturnsChart();
     } else if (chartType === 'expenses' && expensesCanvas) {
       expensesCanvas.style.display = 'block';
-      updateExpensesChart();
     }
+
+    // Ensure the selected chart reflects current filters
+    updateDashboard();
   };
 
   const generateInsights = (data) => {
