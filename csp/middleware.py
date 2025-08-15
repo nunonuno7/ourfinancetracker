@@ -30,12 +30,16 @@ class CSPMiddleware:
         for attr in dir(settings):
             if not attr.startswith("CSP_"):
                 continue
-            if attr in {"CSP_NONCE_IN"}:  # helper settings - not directives
+            # Helper settings that shouldn't become directives
+            if attr in {"CSP_NONCE_IN", "CSP_INCLUDE_NONCE_IN"}:
                 continue
             directive = attr[4:].replace("_", "-").lower()
             self._directive_settings[directive] = getattr(settings, attr)
 
-        nonce_in = getattr(settings, "CSP_NONCE_IN", [])
+        # ``CSP_NONCE_IN`` is the canonical setting, but support the old
+        # ``CSP_INCLUDE_NONCE_IN`` for backwards compatibility.
+        nonce_in = list(getattr(settings, "CSP_NONCE_IN", []))
+        nonce_in += list(getattr(settings, "CSP_INCLUDE_NONCE_IN", []))
         self._nonce_directives = {
             d.replace("_", "-").lower() for d in nonce_in
         }

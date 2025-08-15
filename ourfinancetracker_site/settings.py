@@ -244,7 +244,9 @@ CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
 CSP_IMG_SRC = ("'self'", "data:")
 CSP_FONT_SRC = ("'self'", "data:") + CDN_HOSTS
 # ✅ Gera nonce automaticamente em <script> e <style> via request.csp_nonce
-CSP_INCLUDE_NONCE_IN = ["script-src", "style-src"]
+#    Usado por ``csp.middleware.CSPMiddleware`` para aplicar nonces às
+#    diretivas listadas sem gerar diretivas inválidas como ``nonce-in``.
+CSP_NONCE_IN = ["script-src", "style-src"]
 
 if DEBUG:
     # Dev: sem HTTPS forçado
@@ -291,7 +293,7 @@ else:
 
     # CSP em PROD (sem inline; usa nonces nos <script>/<style> que precisares)
     CSP_UPGRADE_INSECURE_REQUESTS = True
-    # Se precisares de inline controlado, usa nonces: CSP_INCLUDE_NONCE_IN acima.
+    # Se precisares de inline controlado, usa nonces: ``CSP_NONCE_IN`` acima.
 
 # ────────────────────────────────────────────────────
 # Email
