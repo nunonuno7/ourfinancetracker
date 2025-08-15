@@ -73,7 +73,7 @@ pip install -r requirements.txt
 
 # Copy and configure environment variables
 cp .env.example .env
-# edit values as needed
+# edit values as needed (set SUPABASE_DB_URL with your Supabase connection)
 
 # Create the database and apply migrations
 python manage.py migrate

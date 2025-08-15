@@ -143,9 +143,9 @@ TEMPLATES = [
 ]
 
 # ────────────────────────────────────────────────────
-# Base de dados (Supabase prioritário; fallback SQLite)
+# Base de dados (Supabase prioritário via SUPABASE_DB_URL/DATABASE_URL; fallback SQLite)
 # ────────────────────────────────────────────────────
-SUPA_URL = ENV("DATABASE_URL")
+SUPA_URL = ENV("SUPABASE_DB_URL") or ENV("DATABASE_URL")
 if not SUPA_URL and ENV("DB_HOST"):
     SUPA_URL = (
         f"postgresql://{ENV('DB_USER')}:{ENV('DB_PASSWORD')}"
