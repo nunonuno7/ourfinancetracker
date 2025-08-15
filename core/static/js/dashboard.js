@@ -1704,11 +1704,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Render insights with animations
     container.innerHTML = insights.map((insight, index) => `
-      <div class="insight-item insight-${insight.type}" style="animation-delay: ${index * 0.1}s;">
+      <div class="insight-item insight-${insight.type}" data-delay="${index * 0.1}s">
         <h6 class="mb-2">${insight.title}</h6>
         <p class="mb-0">${insight.text}</p>
       </div>
     `).join('');
+    container.querySelectorAll('.insight-item').forEach(item => {
+      item.style.animationDelay = item.dataset.delay;
+    });
   };
 
   // Enhanced slider initialization functions with better UX

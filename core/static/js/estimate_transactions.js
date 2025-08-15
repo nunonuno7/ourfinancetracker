@@ -498,7 +498,7 @@ class EstimationManager {
     showToast(message, type, delay = 3000) {
         const toastId = `toast-${Date.now()}`;
         const toast = $(`
-            <div class="toast position-fixed top-0 end-0 m-3" id="${toastId}" style="z-index: 9999;">
+            <div class="toast position-fixed top-0 end-0 m-3 toast-high" id="${toastId}">
                 <div class="toast-body bg-${type} text-white">
                     ${message}
                 </div>
