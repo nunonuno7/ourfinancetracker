@@ -231,15 +231,20 @@ AUTH_PASSWORD_VALIDATORS = [
 # Security profiles (DEV/PROD): HTTPS, Cookies/CSRF e CSP
 # ────────────────────────────────────────────────────
 # CSP baseline + CDNs
-CSP_DEFAULT_SRC = ("'self'",)
 CDN_HOSTS = (
     "https://cdn.jsdelivr.net",
     "https://cdn.datatables.net",
     "https://cdnjs.cloudflare.com",
     "https://code.jquery.com",
 )
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = ("'self'",) + CDN_HOSTS
+CSP_STYLE_SRC = ("'self'",) + CDN_HOSTS
+CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
+CSP_IMG_SRC = ("'self'", "data:")
+CSP_FONT_SRC = ("'self'", "data:") + CDN_HOSTS
 # ✅ Gera nonce automaticamente em <script> e <style> via request.csp_nonce
-CSP_NONCE_IN = ["script-src", "style-src"]
+CSP_INCLUDE_NONCE_IN = ["script-src", "style-src"]
 
 if DEBUG:
     # Dev: sem HTTPS forçado
@@ -255,13 +260,9 @@ if DEBUG:
     CSRF_USE_SESSIONS = False
     CSRF_FAILURE_VIEW = "django.views.csrf.csrf_failure"
 
-    # CSP em DEV: mesmos requisitos de PROD, usando sempre nonces
+    # CSP em DEV
     CSP_UPGRADE_INSECURE_REQUESTS = False
-    CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
-    CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS
-    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS
-    CSP_IMG_SRC     = ("'self'", "data:")
-    CSP_FONT_SRC    = ("'self'", "data:") + CDN_HOSTS
+    CSP_STYLE_SRC = CSP_STYLE_SRC + ("'unsafe-inline'",)
 
     # Origens confiáveis (HTTP + portas)
     CSRF_TRUSTED_ORIGINS = [
@@ -290,12 +291,7 @@ else:
 
     # CSP em PROD (sem inline; usa nonces nos <script>/<style> que precisares)
     CSP_UPGRADE_INSECURE_REQUESTS = True
-    CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
-    CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS
-    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS
-    CSP_IMG_SRC     = ("'self'", "data:")
-    CSP_FONT_SRC    = ("'self'", "data:") + CDN_HOSTS
-    # Se precisares de inline controlado, mantém nonces: CSP_NONCE_IN acima.
+    # Se precisares de inline controlado, usa nonces: CSP_INCLUDE_NONCE_IN acima.
 
 # ────────────────────────────────────────────────────
 # Email
