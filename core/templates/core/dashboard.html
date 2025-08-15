@@ -24,10 +24,11 @@ Dashboard{% endblock %} {% block extra_head %}
          title="Previous period">
         <i class="fas fa-chevron-left"></i>
       </a>
-      <input id="periodPicker"
-             type="month"
-             class="form-control form-control-sm min-w-150"
-             value="{{ period }}">
+      <input id="periodPicker" 
+             type="month" 
+             class="form-control form-control-sm" 
+             value="{{ period }}" 
+             style="min-width: 150px;">
       <a href="/dashboard/?mode=period&period={{ next_period }}" 
          class="btn btn-outline-secondary btn-sm" 
          aria-label="Next period"
@@ -207,12 +208,10 @@ Dashboard{% endblock %} {% block extra_head %}
                     {{ savings_rate }}%
                   </small>
                 </div>
-                <div class="progress progress-thin">
-                  <div class="progress-bar bg-{% if savings_rate > 20 %}success{% elif savings_rate > 10 %}warning{% else %}danger{% endif %} savings-rate-bar"></div>
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar bg-{% if savings_rate > 20 %}success{% elif savings_rate > 10 %}warning{% else %}danger{% endif %}" 
+                       style="width: {% if savings_rate > 0 %}{{ savings_rate }}{% else %}0{% endif %}%"></div>
                 </div>
-                <style nonce="{{ request.csp_nonce }}">
-                  .savings-rate-bar { width: {% if savings_rate > 0 %}{{ savings_rate }}{% else %}0{% endif %}% }
-                </style>
               </div>
 
               {% widthratio kpis.investments kpis.income 100 as investment_rate %}
@@ -221,12 +220,9 @@ Dashboard{% endblock %} {% block extra_head %}
                   <small class="text-muted">Investment Rate</small>
                   <small class="fw-bold text-primary">{{ investment_rate }}%</small>
                 </div>
-                <div class="progress progress-thin">
-                  <div class="progress-bar bg-primary investment-rate-bar"></div>
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar bg-primary" style="width: {{ investment_rate }}%"></div>
                 </div>
-                <style nonce="{{ request.csp_nonce }}">
-                  .investment-rate-bar { width: {{ investment_rate }}% }
-                </style>
               </div>
 
               {% if savings_rate > 20 %}
@@ -317,13 +313,10 @@ Dashboard{% endblock %} {% block extra_head %}
                           <span class="h5 mb-0 fw-bold text-danger">€ {{ item.total|floatformat:2 }}</span>
                         </div>
                       </div>
-                      <div class="progress mt-2 progress-thin">
+                      <div class="progress mt-2" style="height: 6px;">
                         {% if kpis.expenses > 0 %}
                         {% widthratio item.total kpis.expenses 100 as progress_pct %}
-                        <div class="progress-bar bg-danger category-progress-{{ forloop.counter }}"></div>
-                        <style nonce="{{ request.csp_nonce }}">
-                          .category-progress-{{ forloop.counter }} { width: {{ progress_pct }}% }
-                        </style>
+                        <div class="progress-bar bg-danger" style="width: {{ progress_pct }}%"></div>
                         {% endif %}
                       </div>
                     </div>
@@ -873,10 +866,11 @@ Dashboard{% endblock %} {% block extra_head %}
             </div>
             <i class="fas fa-arrow-up fa-2x text-success opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress mt-2" style="height: 4px">
             <div
-              class="progress-bar bg-success w-0"
+              class="progress-bar bg-success"
               id="receita-progress"
+              style="width: 0%"
             ></div>
           </div>
           <small class="text-muted mt-1 d-block" id="receita-change">-</small>
@@ -894,10 +888,11 @@ Dashboard{% endblock %} {% block extra_head %}
             </div>
             <i class="fas fa-arrow-down fa-2x text-danger opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress mt-2" style="height: 4px">
             <div
-              class="progress-bar bg-danger w-0"
+              class="progress-bar bg-danger"
               id="despesa-progress"
+              style="width: 0%"
             ></div>
           </div>
           <small class="text-muted mt-1 d-block" id="despesa-change">-</small>
@@ -923,10 +918,11 @@ Dashboard{% endblock %} {% block extra_head %}
             </div>
             <i class="fas fa-chart-line fa-2x text-info opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress mt-2" style="height: 4px">
             <div
-              class="progress-bar bg-info w-0"
+              class="progress-bar bg-info"
               id="investido-progress"
+              style="width: 0%"
             ></div>
           </div>
           <small class="text-muted mt-1 d-block" id="investido-change">-</small>
@@ -944,10 +940,11 @@ Dashboard{% endblock %} {% block extra_head %}
             </div>
             <i class="fas fa-gem fa-2x text-purple opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress mt-2" style="height: 4px">
             <div
-              class="progress-bar bg-purple w-0"
+              class="progress-bar bg-purple"
               id="patrimonio-progress"
+              style="width: 0%"
             ></div>
           </div>
           <small class="text-muted mt-1 d-block" id="patrimonio-change"
@@ -967,10 +964,11 @@ Dashboard{% endblock %} {% block extra_head %}
             </div>
             <i class="fas fa-percent fa-2x text-dark opacity-25"></i>
           </div>
-          <div class="progress mt-2 progress-xthin">
+          <div class="progress mt-2" style="height: 4px">
             <div
-              class="progress-bar bg-dark w-0"
+              class="progress-bar bg-dark"
               id="poupanca-progress"
+              style="width: 0%"
             ></div>
           </div>
           <small class="text-muted mt-1 d-block" id="poupanca-change">-</small>
