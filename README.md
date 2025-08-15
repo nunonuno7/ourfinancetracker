@@ -96,3 +96,9 @@ Use comma-separated values. For `EXTRA_CSRF_TRUSTED_ORIGINS`, each origin must i
 ## 📄 Licence
 
 Distributed under the MIT licence. See the `LICENSE` file for more details.
+
+## 🧪 Running tests
+
+```bash
+DATABASE_URL=sqlite:////tmp/testdb.sqlite3 pytest
+```
