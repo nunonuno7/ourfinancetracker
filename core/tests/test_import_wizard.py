@@ -42,6 +42,15 @@ def test_invalid_data_preview(client):
 
 
 @pytest.mark.django_db
+def test_bad_excel_file(client):
+    user = User.objects.create_user("u4")
+    client.force_login(user)
+    file = SimpleUploadedFile("bad.xlsx", b"not-an-excel")
+    resp = client.post(reverse("transaction_import_wizard"), {"file": file}, follow=True)
+    assert b"Could not read Excel file" in resp.content
+
+
+@pytest.mark.django_db
 def test_partial_valid_import(monkeypatch, client):
     user = User.objects.create_user("u3")
     client.force_login(user)

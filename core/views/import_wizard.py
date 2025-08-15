@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 from io import BytesIO
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -17,10 +17,13 @@ REQUIRED_COLUMNS = ["Date", "Type", "Amount", "Category", "Account"]
 VALID_TYPES = {"IN", "EX", "IV", "TR", "AJ"}
 
 
-def _parse_file(uploaded_file) -> pd.DataFrame:
-    data = uploaded_file.read()
-    df = pd.read_excel(BytesIO(data))
-    return df
+def _parse_file(uploaded_file) -> Optional[pd.DataFrame]:
+    """Return a DataFrame for the uploaded Excel file or ``None`` if invalid."""
+    try:
+        data = uploaded_file.read()
+        return pd.read_excel(BytesIO(data))
+    except Exception:  # broad catch to surface feedback to the user
+        return None
 
 
 def _validate_rows(df: pd.DataFrame) -> Dict[str, List]:
@@ -61,6 +64,9 @@ def _validate_rows(df: pd.DataFrame) -> Dict[str, List]:
 def upload(request: HttpRequest) -> HttpResponse:
     if request.method == "POST" and request.FILES.get("file"):
         df = _parse_file(request.FILES["file"])
+        if df is None:
+            messages.error(request, "Could not read Excel file")
+            return redirect("transaction_import_wizard")
         missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
         if missing:
             messages.error(request, f"Missing columns: {', '.join(missing)}")
