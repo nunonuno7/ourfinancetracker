@@ -212,7 +212,7 @@
 </div>
 
 <!-- JS -->
-<script src="{% static 'js/account_balance.js' %}" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="{% static 'js/drag_reorder.js' %}" defer></script>
+<script src="{% static 'js/account_balance.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" nonce="{{ request.csp_nonce }}"></script>
+<script src="{% static 'js/drag_reorder.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
 {% endblock %}

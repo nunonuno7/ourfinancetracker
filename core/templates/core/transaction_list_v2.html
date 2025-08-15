@@ -441,8 +441,8 @@
 </script>
 
 <!-- Page-specific dependencies -->
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr" nonce="{{ request.csp_nonce }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js" nonce="{{ request.csp_nonce }}"></script>
 <link
   rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
@@ -939,6 +939,6 @@
 </style>
 
 <!-- Custom JavaScript -->
-<script src="{% static 'js/transaction_list_ajax.js' %}"></script>
+<script src="{% static 'js/transaction_list_ajax.js' %}" nonce="{{ request.csp_nonce }}"></script>
 
 {% endblock %}
