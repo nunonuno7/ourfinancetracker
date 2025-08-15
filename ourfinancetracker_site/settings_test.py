@@ -36,8 +36,7 @@ AXES_LOCKOUT_HTTP_RESPONSE_CODE = 200
 AXES_HTTP_RESPONSE_CODE = 200
 
 # Ensure CSP middleware emits the upgrade directive during tests
-CSP_UPGRADE_INSECURE_REQUESTS = True
-CSP_REPORT_ONLY = False
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["upgrade-insecure-requests"] = []
 
 # Allow Django test client host
 ALLOWED_HOSTS.append("testserver")
