@@ -72,6 +72,8 @@ from .models import (
     Tag,
     Transaction,
     User,
+    convert_amount,
+    get_default_currency,
 )
 from .utils.cache_helpers import clear_tx_cache
 
@@ -150,29 +152,40 @@ def _shift_period(period_yyyy_mm: str, delta_months: int) -> str:
     return f"{year:04d}-{month:02d}"
 
 
-def build_kpis_for_period(tx):
-    """Build basic KPI metrics for a single period.
+def build_kpis_for_period(user, period_str: str):
+    """Build KPI metrics for a period in the user's base currency."""
+    cache_key = f"kpi:{user.id}:{period_str}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
-    Calculates total income, expenses, investments and the resulting net
-    amount for the provided queryset of transactions.
-    """
-    stats = tx.aggregate(
-        income=Sum("amount", filter=Q(type=Transaction.Type.INCOME)),
-        expenses=Sum("amount", filter=Q(type=Transaction.Type.EXPENSE)),
-        investments=Sum("amount", filter=Q(type=Transaction.Type.INVESTMENT)),
+    year, month = map(int, period_str.split("-"))
+    tx = (
+        Transaction.objects.filter(user=user, period__year=year, period__month=month)
+        .select_related("account__currency")
     )
-
-    income = stats["income"] or Decimal("0")
-    expenses = abs(stats["expenses"] or Decimal("0"))
-    investments = stats["investments"] or Decimal("0")
-    net = income - expenses  # Net Balance = Income - Expenses (investments don't count)
-
-    return {
+    base_currency = (
+        getattr(user, "settings", None) and user.settings.base_currency
+    ) or get_default_currency()
+    income = expenses = investments = Decimal("0")
+    for t in tx:
+        src_currency = t.account.currency if t.account and t.account.currency else base_currency
+        converted = convert_amount(t.amount, src_currency, base_currency, t.date)
+        if t.type == Transaction.Type.INCOME:
+            income += converted
+        elif t.type == Transaction.Type.EXPENSE:
+            expenses += abs(converted)
+        elif t.type == Transaction.Type.INVESTMENT:
+            investments += converted
+    net = income - expenses
+    data = {
         "income": float(income),
         "expenses": float(expenses),
         "investments": float(investments),
         "net": float(net),
     }
+    cache.set(cache_key, data, 86400)
+    return data
 
 
 def build_charts_for_period(tx):
@@ -233,8 +246,8 @@ def dashboard(request):
         year, month = map(int, period.split("-"))
         tx = Transaction.objects.filter(
             user=request.user, period__year=year, period__month=month
-        )
-        kpis = build_kpis_for_period(tx)
+        ).select_related("account__currency")
+        kpis = build_kpis_for_period(request.user, period)
         charts = build_charts_for_period(tx)
         
         # Enhanced expense statistics
@@ -4008,45 +4021,60 @@ def dashboard_returns_json(request):
     start_period = request.GET.get("start_period")
     end_period = request.GET.get("end_period")
     user = request.user
+    base_currency = (
+        getattr(user, "settings", None) and user.settings.base_currency
+    ) or get_default_currency()
 
-    # Fetch balances for investment accounts grouped by period
+    cache_key = f"returns:{user.id}:{start_period}:{end_period}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse({"series": cached})
+
     balances_qs = (
         AccountBalance.objects.filter(
             account__user=user,
             account__account_type__name__istartswith="invest",
         )
-        .values("period__year", "period__month")
-        .annotate(balance=Sum("reported_balance"))
+        .select_related("account__currency", "period")
         .order_by("period__year", "period__month")
     )
 
-    if not balances_qs:
+    balance_map: dict[str, Decimal] = {}
+    periods_list: list[str] = []
+    for bal in balances_qs:
+        period_str = f"{bal.period.year:04d}-{bal.period.month:02d}"
+        periods_list.append(period_str)
+        rate_date = date(bal.period.year, bal.period.month, 1)
+        amount = convert_amount(
+            bal.reported_balance,
+            bal.account.currency,
+            base_currency,
+            rate_date,
+        )
+        balance_map[period_str] = balance_map.get(period_str, Decimal("0")) + amount
+
+    periods = sorted(set(periods_list))
+
+    if not balance_map:
         return JsonResponse({"series": []})
 
-    periods = []
-    balance_map: dict[str, Decimal] = {}
-    for row in balances_qs:
-        period_str = f"{row['period__year']:04d}-{row['period__month']:02d}"
-        periods.append(period_str)
-        balance_map[period_str] = row["balance"]
+    if start_period and end_period and re.match(r"^\d{4}-(0[1-9]|1[0-2])$", start_period) and re.match(r"^\d{4}-(0[1-9]|1[0-2])$", end_period):
+        periods = [p for p in periods if start_period <= p <= end_period]
 
-    # Apply optional period filtering
-    if start_period and end_period:
-        if re.match(r"^\d{4}-(0[1-9]|1[0-2])$", start_period) and re.match(
-            r"^\d{4}-(0[1-9]|1[0-2])$", end_period
-        ):
-            periods = [p for p in periods if start_period <= p <= end_period]
-
-    # Fetch investment flows per period (net amount)
     flows_qs = (
         Transaction.objects.filter(user=user, type="IV")
-        .values("period__year", "period__month")
-        .annotate(flow=Sum("amount"))
+        .select_related("account__currency", "period")
     )
-    flow_map = {
-        f"{row['period__year']:04d}-{row['period__month']:02d}": row["flow"]
-        for row in flows_qs
-    }
+    flow_map: dict[str, Decimal] = {}
+    for t in flows_qs:
+        period_str = f"{t.period.year:04d}-{t.period.month:02d}"
+        amount = convert_amount(
+            t.amount,
+            t.account.currency if t.account else base_currency,
+            base_currency,
+            t.date,
+        )
+        flow_map[period_str] = flow_map.get(period_str, Decimal("0")) + amount
 
     def _to_float(value: Decimal | None) -> float | None:
         if value is None:
@@ -4107,7 +4135,7 @@ def dashboard_returns_json(request):
         }
         for period, ret in monthly_returns
     ]
-
+    cache.set(cache_key, series, 86400)
     return JsonResponse({"series": series})
 
 

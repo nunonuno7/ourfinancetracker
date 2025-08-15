@@ -9,10 +9,11 @@ from .models import (
     Category,
     Transaction,
     UserSettings,
+    FxRate,
 )
 
 # Registo simples
-admin.site.register([Currency, AccountType, Account, AccountBalance, UserSettings])
+admin.site.register([Currency, AccountType, Account, AccountBalance, UserSettings, FxRate])
 
 # Registo personalizado para Category
 @admin.register(Category)

@@ -380,6 +380,15 @@ class UserSettings(models.Model):
         null=True,
         blank=True,
     )
+    base_currency = models.ForeignKey(
+        Currency,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        default=get_default_currency_id,
+        related_name="user_base_currency",
+        help_text="Base currency for reporting",
+    )
     timezone = models.CharField(max_length=64, default="Europe/Lisbon")
     start_of_month = models.PositiveSmallIntegerField(
         default=1,
@@ -593,3 +602,6 @@ def _create_initial_balance_on_account_creation(sender, instance, created, **kwa
             period=period,
             reported_balance=0
         )
+
+
+from .fx_rate import FxRate, convert_amount

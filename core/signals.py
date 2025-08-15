@@ -5,9 +5,19 @@ from django.utils.timezone import now
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save, post_delete, pre_delete
 from django.db import transaction
+from django.core.cache import cache
 from decimal import Decimal
 
-from .models import Transaction, Account, AccountBalance, AccountType, Currency, UserSettings, DatePeriod
+from .models import (
+    Transaction,
+    Account,
+    AccountBalance,
+    AccountType,
+    Currency,
+    UserSettings,
+    DatePeriod,
+    FxRate,
+)
 from core.utils.cache_helpers import clear_tx_cache
 import logging
 from datetime import date
@@ -49,6 +59,7 @@ def clear_transaction_cache(sender, instance, **kwargs):
         clear_transaction_cache._processing = True
         logger.debug(f"🧹 Sinal ativado — limpando cache para user_id={instance.user_id}")
         clear_tx_cache(instance.user_id)
+        cache.clear()
     finally:
         delattr(clear_transaction_cache, '_processing')
 
@@ -83,3 +94,8 @@ def create_default_account(sender, instance, created, **kwargs):
             currency=currency,
             created_at=now()
         )
+
+
+@receiver(post_save, sender=FxRate)
+def clear_cache_on_fx_rate(sender, instance, **kwargs):
+    cache.clear()
