@@ -6,6 +6,7 @@ CSP (django-csp), WhiteNoise, Redis opcional, Debug Toolbar e django-axes.
 from __future__ import annotations
 import os
 import warnings
+from distutils.util import strtobool
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -28,6 +29,14 @@ def env_bool(key: str, default: str = "false") -> bool:
 # Core flags & secret
 # ────────────────────────────────────────────────────
 DEBUG: bool = env_bool("DEBUG")
+# If DEBUG is loaded from env as a string, normalize it
+if isinstance(DEBUG, str):
+    DEBUG = bool(strtobool(DEBUG))
+
+val = globals().get("CSP_UPGRADE_INSECURE_REQUESTS", False)
+if isinstance(val, str):
+    CSP_UPGRADE_INSECURE_REQUESTS = bool(strtobool(val))
+
 SECRET_KEY = ENV("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is required")
@@ -340,3 +349,17 @@ LOGGING = {
 SUPABASE_URL = ENV("SUPABASE_URL")
 SUPABASE_KEY = ENV("SUPABASE_KEY")
 SUPABASE_JWT_SECRET = ENV("SUPABASE_JWT_SECRET")
+
+# --- Final dev overrides (must stay at the end of settings.py) ---
+if DEBUG:
+    # Do not force HTTPS in dev
+    SECURE_SSL_REDIRECT = False
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = False
+
+    # Do not emit the CSP upgrade directive in dev
+    # Ensure this is a real boolean False (not a truthy string)
+    CSP_UPGRADE_INSECURE_REQUESTS = False
+
+    # No HSTS while on HTTP
+    SECURE_HSTS_SECONDS = 0

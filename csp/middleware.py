@@ -31,7 +31,7 @@ class CSPMiddleware:
             if not attr.startswith("CSP_"):
                 continue
             # Helper settings that shouldn't become directives
-            if attr in {"CSP_NONCE_IN", "CSP_INCLUDE_NONCE_IN"}:
+            if attr in {"CSP_NONCE_IN", "CSP_INCLUDE_NONCE_IN", "CSP_UPGRADE_INSECURE_REQUESTS"}:
                 continue
             directive = attr[4:].replace("_", "-").lower()
             self._directive_settings[directive] = getattr(settings, attr)
@@ -62,6 +62,10 @@ class CSPMiddleware:
                 sources.append(f"'nonce-{nonce}'")
 
             directives.append(f"{directive} {' '.join(sources)}".strip())
+
+        flag = getattr(settings, "CSP_UPGRADE_INSECURE_REQUESTS", False)
+        if flag is True:
+            directives.append("upgrade-insecure-requests")
 
         return "; ".join(directives)
 
