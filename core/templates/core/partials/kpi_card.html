@@ -10,9 +10,14 @@
       </div>
       {% if icon %}{{ icon|safe }}{% endif %}
     </div>
-    <div class="progress mt-2" style="height: 4px">
-      <div class="progress-bar {{ progress_bar_class }}"{% if progress_id %} id="{{ progress_id }}"{% endif %} style="width: {{ meter }}%"></div>
+    <div class="progress mt-2 progress-xthin">
+      <div class="progress-bar {{ progress_bar_class }}"{% if progress_id %} id="{{ progress_id }}"{% endif %}></div>
     </div>
+    {% if progress_id %}
+    <style nonce="{{ request.csp_nonce }}">#{{ progress_id }} { width: {{ meter }}%; }</style>
+    {% else %}
+    <style nonce="{{ request.csp_nonce }}">.kpi-progress-bar { width: {{ meter }}%; }</style>
+    {% endif %}
     {% if footer %}
     <small class="text-muted mt-1 d-block"{% if footer_id %} id="{{ footer_id }}"{% endif %}>
       {% if footer_badge_class %}<span class="{{ footer_badge_class }}">{{ footer }}</span>{% else %}{{ footer }}{% endif %}
