@@ -255,7 +255,8 @@
         <label class="form-label mb-0 fw-bold">📄 Show:</label>
         <select
           id="page-size-selector"
-          class="form-select form-select-sm w-auto"
+          class="form-select form-select-sm"
+          style="width: auto"
         >
           <option value="25">25 per page</option>
           <option value="50">50 per page</option>
@@ -306,15 +307,16 @@
         <table id="transactions-table" class="table table-hover mb-0 table-sm">
           <thead class="table-dark sticky-top">
             <tr class="text-nowrap">
-              <th class="th-checkbox">
+              <th style="width: 40px; padding: 0.75rem 0.5rem; text-align: center;">
                 <input
                   type="checkbox"
-                  class="form-check-input d-none"
+                  class="form-check-input"
                   id="select-all"
+                  style="display: none"
                 />
-                <span class="badge bg-secondary fs-7">#</span>
+                <span class="badge bg-secondary" style="font-size: 0.7rem;">#</span>
               </th>
-              <th class="sortable-header min-w-110 p-075" data-sort="date">
+              <th class="sortable-header" data-sort="date" style="min-width: 110px; padding: 0.75rem;">
                 <div class="d-flex align-items-center">
                   <span class="me-1">📅</span>
                   <span class="d-none d-sm-inline">Date</span>
@@ -322,8 +324,9 @@
                 </div>
               </th>
               <th
-                class="d-none d-md-table-cell sortable-header min-w-100 p-075"
+                class="d-none d-md-table-cell sortable-header"
                 data-sort="period"
+                style="min-width: 100px; padding: 0.75rem;"
               >
                 <div class="d-flex align-items-center">
                   <span class="me-1">📆</span>
@@ -331,14 +334,14 @@
                   <i class="fas fa-sort sort-icon ms-1"></i>
                 </div>
               </th>
-              <th class="sortable-header min-w-90 p-075" data-sort="type">
+              <th class="sortable-header" data-sort="type" style="min-width: 90px; padding: 0.75rem;">
                 <div class="d-flex align-items-center">
                   <span class="me-1">📊</span>
                   <span class="d-none d-sm-inline">Type</span>
                   <i class="fas fa-sort sort-icon ms-1"></i>
                 </div>
               </th>
-              <th class="sortable-header text-end min-w-120 p-075" data-sort="amount">
+              <th class="sortable-header text-end" data-sort="amount" style="min-width: 120px; padding: 0.75rem;">
                 <div class="d-flex align-items-center justify-content-end">
                   <span class="me-1">💰</span>
                   <span>Amount</span>
@@ -346,8 +349,9 @@
                 </div>
               </th>
               <th
-                class="d-none d-lg-table-cell sortable-header min-w-120 p-075"
+                class="d-none d-lg-table-cell sortable-header"
                 data-sort="category"
+                style="min-width: 120px; padding: 0.75rem;"
               >
                 <div class="d-flex align-items-center">
                   <span class="me-1">🏷️</span>
@@ -356,8 +360,9 @@
                 </div>
               </th>
               <th
-                class="d-none d-xl-table-cell sortable-header min-w-100 p-075"
+                class="d-none d-xl-table-cell sortable-header"
                 data-sort="tags"
+                style="min-width: 100px; padding: 0.75rem;"
               >
                 <div class="d-flex align-items-center">
                   <span class="me-1">🏷️</span>
@@ -366,8 +371,9 @@
                 </div>
               </th>
               <th
-                class="d-none d-md-table-cell sortable-header min-w-100 p-075"
+                class="d-none d-md-table-cell sortable-header"
                 data-sort="account"
+                style="min-width: 100px; padding: 0.75rem;"
               >
                 <div class="d-flex align-items-center">
                   <span class="me-1">🏦</span>
@@ -375,7 +381,7 @@
                   <i class="fas fa-sort sort-icon ms-1"></i>
                 </div>
               </th>
-              <th class="w-120 p-075 text-center">
+              <th style="width: 120px; padding: 0.75rem; text-align: center;">
                 <div class="d-flex align-items-center justify-content-center">
                   <span class="me-1">⚙️</span>
                   <span class="d-none d-sm-inline">Actions</span>
