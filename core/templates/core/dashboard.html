@@ -1083,14 +1083,14 @@ Dashboard{% endblock %} {% block extra_head %}
 
 {% endblock %} {% block extra_js %}
 <!-- Chart.js with advanced plugins -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" nonce="{{ request.csp_nonce }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js" nonce="{{ request.csp_nonce }}"></script>
 <!-- noUiSlider for range filters -->
 <link
   href="https://cdn.jsdelivr.net/npm/nouislider@15.7.0/dist/nouislider.min.css"
   rel="stylesheet"
 />
-<script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.0/dist/nouislider.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.0/dist/nouislider.min.js" nonce="{{ request.csp_nonce }}"></script>
 
 <style nonce="{{ request.csp_nonce }}">
   .card {
@@ -1502,5 +1502,5 @@ Dashboard{% endblock %} {% block extra_head %}
     window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(this.value)}`;
   });
 </script>
-<script type="module" src="{% static 'js/dashboard.js' %}"></script>
+<script type="module" src="{% static 'js/dashboard.js' %}" nonce="{{ request.csp_nonce }}"></script>
 {% endblock %}

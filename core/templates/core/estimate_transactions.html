@@ -363,5 +363,5 @@
     // Ensure jQuery is loaded and pass CSRF token to the EstimationManager
     window.csrfToken = '{{ csrf_token }}';
 </script>
-<script src="{% static 'js/estimate_transactions.js' %}" defer></script>
+<script src="{% static 'js/estimate_transactions.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
 {% endblock %}
