@@ -55,14 +55,14 @@ from django.views.generic import (
     UpdateView,
 )
 
-from .forms import (
+from ..forms import (
     AccountBalanceFormSet,
     AccountForm,
     CategoryForm,
     TransactionForm,
     UserInFormKwargsMixin,
 )
-from .models import (
+from ..models import (
     Account,
     AccountBalance,
     AccountType,
@@ -73,7 +73,7 @@ from .models import (
     Transaction,
     User,
 )
-from .utils.cache_helpers import clear_tx_cache
+from ..utils.cache_helpers import clear_tx_cache
 
 logger = logging.getLogger(__name__)
 
@@ -1080,7 +1080,7 @@ def transaction_bulk_delete(request):
         # Use optimized bulk deletion with atomic transaction
         with db_transaction.atomic():
             # First, delete related TransactionTag entries in bulk
-            from .models import TransactionTag
+            from ..models import TransactionTag
             tag_delete_count = TransactionTag.objects.filter(
                 transaction_id__in=valid_transactions
             ).delete()[0]
@@ -1294,7 +1294,7 @@ def import_transactions_xlsx(request):
                 return render(request, 'core/import_form.html')
 
             # Use optimized bulk importer
-            from .utils.import_helpers import BulkTransactionImporter
+            from ..utils.import_helpers import BulkTransactionImporter
             
             importer = BulkTransactionImporter(request.user, batch_size=5000)  # Increased batch size for better performance
             result = importer.import_dataframe(df_clean)
@@ -3270,7 +3270,7 @@ def estimate_transaction_view(request):
 @login_required
 def estimate_transaction_for_period(request):
     """Estimate transaction for a specific period."""
-    from .services.finance_estimation import FinanceEstimationService
+    from ..services.finance_estimation import FinanceEstimationService
 
     try:
         data = json.loads(request.body)
@@ -3321,7 +3321,7 @@ def estimate_transaction_for_period(request):
 @login_required
 def get_estimation_summaries(request):
     """Get estimation summaries for multiple periods."""
-    from .services.finance_estimation import FinanceEstimationService
+    from ..services.finance_estimation import FinanceEstimationService
 
     try:
         # Get year filter from request

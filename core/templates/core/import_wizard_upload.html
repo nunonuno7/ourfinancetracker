@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Import Transactions - Step 1</h2>
+  <form method="post" enctype="multipart/form-data" action="{% url 'transaction_import_wizard' %}" class="card p-4">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label for="id_file" class="form-label">Excel file</label>
+      <input type="file" name="file" id="id_file" class="form-control" accept=".xlsx" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Preview</button>
+  </form>
+</div>
+{% endblock %}

@@ -42,6 +42,7 @@ from .views import (
     # Health check
     healthz,
 )
+from .views.import_wizard import upload as import_wizard_upload, commit as import_wizard_commit
 
 from .views_reporting import proxy_report_csv_token
 
@@ -70,6 +71,8 @@ urlpatterns = [
     path("data/export-excel/", export_data_xlsx, name="data_export_xlsx"),
     path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
+    path("transactions/import-wizard/", import_wizard_upload, name="transaction_import_wizard"),
+    path("transactions/import-wizard/commit/", import_wizard_commit, name="transaction_import_wizard_commit"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("transactions/clear-session-flag/", clear_session_flag, name="clear_session_flag"),
 
