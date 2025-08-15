@@ -5,7 +5,6 @@ from typing import Callable, Type
 
 from django.core.exceptions import PermissionDenied
 from django.db.models import Model, QuerySet
-from django.http import HttpResponseForbidden
 
 
 def scope_queryset(queryset: QuerySet, user) -> QuerySet:
@@ -25,21 +24,27 @@ def get_object_for_user(model: Type[Model], user, **filters):
         raise PermissionDenied from exc
 
 
-def user_scoped(model: Type[Model], lookup_kwarg: str = "pk", obj_kwarg: str = "scoped_obj"):
-    """Decorator ensuring the looked up object belongs to ``request.user``.
+def user_scoped(
+    model: Type[Model],
+    lookup_kwarg: str = "pk",
+    lookup_field: str = "id",
+    obj_kwarg: str = "scoped_obj",
+):
+    """Ensure a looked up object belongs to ``request.user``.
 
-    The resolved object is injected into ``kwargs`` using ``obj_kwarg``. If the
-    object does not exist for the authenticated user a ``403`` is returned.
+    ``lookup_kwarg`` specifies the name of the keyword argument containing the
+    lookup value from the URL. ``lookup_field`` is the model field used for the
+    lookup (defaults to ``id``). The resolved object is injected into
+    ``kwargs`` using ``obj_kwarg``.
     """
 
     def decorator(view_func: Callable):
         @wraps(view_func)
         def _wrapped(request, *args, **kwargs):
             lookup_val = kwargs.get(lookup_kwarg)
-            try:
-                obj = get_object_for_user(model, request.user, id=lookup_val)
-            except PermissionDenied:
-                return HttpResponseForbidden()
+            obj = get_object_for_user(
+                model, request.user, **{lookup_field: lookup_val}
+            )
             kwargs[obj_kwarg] = obj
             return view_func(request, *args, **kwargs)
 
