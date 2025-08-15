@@ -48,7 +48,7 @@ class TransactionManager {
     this.updateSortIndicators();
 
     // Initialize checkbox column as hidden (since bulk mode starts as false)
-    $("#transactions-table thead th:first-child").css("display", "none");
+    $("#transactions-table thead th:first-child").addClass("d-none");
 
     console.log("✅ [init] Complete initialization finished");
   }
@@ -1230,18 +1230,18 @@ class TransactionManager {
     // Show/hide the entire checkbox column in the header
     const checkboxHeader = $("#transactions-table thead th:first-child");
     if (enabled) {
-      checkboxHeader.css("display", "");
+      checkboxHeader.removeClass("d-none");
     } else {
-      checkboxHeader.css("display", "none");
+      checkboxHeader.addClass("d-none");
     }
 
     // Show/hide all cells of the first column in the tbody
     $("#transactions-tbody tr").each(function () {
       const firstCell = $(this).find("td:first-child");
       if (enabled) {
-        firstCell.css("display", "");
+        firstCell.removeClass("d-none");
       } else {
-        firstCell.css("display", "none");
+        firstCell.addClass("d-none");
       }
     });
 
@@ -1563,10 +1563,8 @@ class TransactionManager {
             </div>
             <div class="modal-body text-center">
               <div class="progress mb-3 h-25">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                     role="progressbar" id="bulk-progress-bar">
-                  <span id="progress-text">0%</span>
-                </div>
+                <progress id="bulk-progress-bar" class="w-100" value="0" max="100"></progress>
+                <div id="progress-text">0%</div>
               </div>
               <div id="progress-message" class="text-muted">
                 ${initialMessage}
@@ -1596,14 +1594,11 @@ class TransactionManager {
     const progressMessage = $("#progress-message");
 
     if (progressBar.length) {
-      progressBar.css("width", percent + "%");
+      progressBar.attr("value", percent);
       progressText.text(percent + "%");
       progressMessage.text(message);
 
-      // Add success styling when complete
       if (percent >= 100) {
-        progressBar.removeClass("bg-primary").addClass("bg-success");
-        progressBar.removeClass("progress-bar-animated");
         progressMessage.html(
           '<i class="fas fa-check-circle text-success me-1"></i>' + message,
         );
