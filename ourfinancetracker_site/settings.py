@@ -259,7 +259,8 @@ if DEBUG:
     CSP_UPGRADE_INSECURE_REQUESTS = False
     CSP_CONNECT_SRC = ("'self'",) + CDN_HOSTS
     CSP_SCRIPT_SRC  = ("'self'",) + CDN_HOSTS
-    CSP_STYLE_SRC   = ("'self'",) + CDN_HOSTS
+    # Allow inline styles in development to simplify debugging templates
+    CSP_STYLE_SRC   = ("'self'", "'unsafe-inline'") + CDN_HOSTS
     CSP_IMG_SRC     = ("'self'", "data:")
     CSP_FONT_SRC    = ("'self'", "data:") + CDN_HOSTS
 

@@ -77,8 +77,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Enhanced chart initialization
   const initCharts = () => {
-    const ctx1 = document.getElementById('evolution-chart').getContext('2d');
-    const ctx2 = document.getElementById('allocation-chart').getContext('2d');
+    const evolutionCanvas = document.getElementById('evolution-chart');
+    const allocationCanvas = document.getElementById('allocation-chart');
+    if (!evolutionCanvas || !allocationCanvas) {
+      console.warn('⚠️ Chart canvas elements missing, skipping chart initialization');
+      return;
+    }
+    const ctx1 = evolutionCanvas.getContext('2d');
+    const ctx2 = allocationCanvas.getContext('2d');
 
     // Evolution Chart with enhanced features
     charts.evolution = new Chart(ctx1, {
@@ -625,8 +631,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (allYears && allYears.length > 0) {
           console.log('📅 [initializeSlidersWithData] Initializing year slider with years:', allYears);
           initYearSlider(allYears);
-          console.log('📅 [initializeSlidersWithData] Initializing period slider with periods:', fullPeriods?.length || 0);
-          initPeriodSlider(fullPeriods || [], true, 12);
+          if (periodSlider) {
+            console.log('📅 [initializeSlidersWithData] Initializing period slider with periods:', fullPeriods?.length || 0);
+            initPeriodSlider(fullPeriods || [], true, 12);
+          }
           updateYearRangeDisplay();
         } else {
           console.warn('⚠️ [initializeSlidersWithData] No years available, using current year');
@@ -635,7 +643,9 @@ document.addEventListener("DOMContentLoaded", () => {
           const currentMonth = new Date().getMonth();
           const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const currentPeriod = `${monthNames[currentMonth]}/${currentYear.toString().slice(-2)}`;
-          initPeriodSlider([currentPeriod], true, 1);
+          if (periodSlider) {
+            initPeriodSlider([currentPeriod], true, 1);
+          }
         }
       } else {
         console.log('ℹ️ [initializeSlidersWithData] Sliders already initialized');
@@ -1762,7 +1772,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const y = 2000 + parseInt(p.split("/")[1]);
         return y >= selectedYearRange[0] && y <= selectedYearRange[1];
       });
-      initPeriodSlider(fullPeriods, true, 12);
+      if (periodSlider) {
+        initPeriodSlider(fullPeriods, true, 12);
+      }
       updateDashboard(); // Update dashboard when year range changes
     });
 
