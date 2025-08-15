@@ -74,6 +74,7 @@ from .models import (
     User,
 )
 from .utils.cache_helpers import clear_tx_cache
+from .finance.returns import portfolio_return
 
 logger = logging.getLogger(__name__)
 
@@ -4068,28 +4069,15 @@ def dashboard_returns_json(request):
                     flow,
                 )
         else:
-            denom = prev_balance + flow
-            if denom <= 0:
-                ret = None
-                if settings.DEBUG:
-                    logger.debug(
-                        "Period %s invalid denom prev_balance=%s flow=%s denom=%s",
-                        period,
-                        prev_balance,
-                        flow,
-                        denom,
-                    )
-            else:
-                ret = (balance - denom) / denom * Decimal("100")
-                if settings.DEBUG:
-                    logger.debug(
-                        "Period %s prev_balance=%s flow=%s denom=%s return=%s",
-                        period,
-                        prev_balance,
-                        flow,
-                        denom,
-                        ret,
-                    )
+            ret = portfolio_return(balance, prev_balance, flow)
+            if settings.DEBUG:
+                logger.debug(
+                    "Period %s prev_balance=%s flow=%s return=%s",
+                    period,
+                    prev_balance,
+                    flow,
+                    ret,
+                )
 
         monthly_returns.append((period, ret))
         prev_balance = balance
