@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
 {% load filtros %}
-{% now "Y-m-d" as today %} {% block content %} {% csrf_token %}
+{% now "Y-m-d" as today %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/transaction_list_v2.css' %}">
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
 <div class="container-fluid mt-4">
   <!-- CSRF Token -->
   <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
@@ -309,7 +317,7 @@
               <th class="th-checkbox">
                 <input
                   type="checkbox"
-                  class="form-check-input d-none"
+                  class="form-check-input is-hidden"
                   id="select-all"
                 />
                 <span class="badge bg-secondary fs-7">#</span>
