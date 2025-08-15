@@ -74,6 +74,7 @@ from .models import (
     User,
 )
 from .utils.cache_helpers import clear_tx_cache
+from .services.query_scope import user_scoped
 
 logger = logging.getLogger(__name__)
 
@@ -3397,24 +3398,14 @@ def get_estimation_summaries(request):
         }, status=500)
 
 
-@require_POST  
+@require_POST
 @login_required
-def delete_estimated_transaction(request, transaction_id):
+@user_scoped(Transaction, lookup_kwarg="transaction_id", obj_kwarg="tx")
+def delete_estimated_transaction(request, transaction_id, tx):
     """Delete an estimated transaction."""
     try:
-        # Get the transaction and verify it belongs to user and is estimated
-        try:
-            tx = Transaction.objects.get(
-                id=transaction_id,
-                user=request.user,
-                is_estimated=True
-            )
-        except Transaction.DoesNotExist:
-            logger.warning(f"Estimated transaction {transaction_id} not found for user {request.user.id}")
-            return JsonResponse({
-                'success': True,
-                'message': 'No estimated transaction found to delete'
-            })
+        if not tx.is_estimated:
+            return HttpResponseForbidden()
 
         period_label = tx.period.label if tx.period else "Unknown"
         tx.delete()
@@ -3423,16 +3414,12 @@ def delete_estimated_transaction(request, transaction_id):
         clear_tx_cache(request.user.id, force=True)
 
         return JsonResponse({
-            'success': True,
-            'message': f'Estimated transaction for {period_label} deleted successfully'
+            "success": True,
+            "message": f"Estimated transaction for {period_label} deleted successfully",
         })
-
     except Exception as e:
         logger.error(f"Error deleting estimated transaction {transaction_id}: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 @require_POST  
