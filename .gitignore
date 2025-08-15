@@ -88,3 +88,12 @@ h git switch --detach *
 .env_production
 !.env.template
 !.env.sample
+
+# Dotenv
+.env
+.env_*
+.env.*
+.env.example
+.env_production
+!.env.template
+!.env.sample
