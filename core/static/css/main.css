@@ -774,17 +774,17 @@ button:hover,
     padding: 0.75rem;
   }
 
-  .kpi-card h6 {
+  .kpi-title {
     font-size: 0.8rem;
     margin-bottom: 0.5rem;
   }
 
-  .kpi-card h4 {
+  .kpi-value {
     font-size: 1.2rem;
     margin-bottom: 0.25rem;
   }
 
-  .kpi-card .progress {
+  .kpi-progress {
     height: 3px;
     margin-top: 0.5rem;
   }
@@ -1004,7 +1004,7 @@ button:hover,
 
 /* ===== Landscape orientation ===== */
 @media (max-width: 768px) and (orientation: landscape) {
-  .kpi-card h4 {
+  .kpi-value {
     font-size: 1rem;
   }
 
@@ -1166,14 +1166,18 @@ button:hover,
   font-family: 'Segoe UI', system-ui, -apple-system, 'Arial', sans-serif;
 }
 
-.kpi-card h6,
-.kpi-card h4,
-.kpi-card small {
+.kpi-title,
+.kpi-value,
+.kpi-subtitle {
   color: inherit !important;
 }
 
-.kpi-card .progress { height: 4px; }
+.kpi-title { margin-bottom: 0.5rem; }
+.kpi-value { margin-bottom: 0.25rem; }
+.kpi-progress { height: 4px; margin-top: 0.5rem; }
 .kpi-card .badge { font-size: .7rem; }
+.kpi-footer { font-size: .7rem; display: block; }
+.kpi-subtitle { font-size: 0.8rem; }
 
 /* Styles migrated from inline attributes */
 .kpi-muted { margin-top: 1rem; color: #666; }
