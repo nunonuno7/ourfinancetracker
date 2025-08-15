@@ -1,4 +1,35 @@
 // Transactions 2.0 JavaScript - Advanced functionality
+const DynamicCSS = (() => {
+  let sheet;
+  const created = new Set();
+
+  function ensureSheet() {
+    if (sheet) return sheet;
+    const nonce = window.CSP_NONCE;
+    const el = document.createElement('style');
+    if (nonce) el.setAttribute('nonce', nonce);
+    document.head.appendChild(el);
+    sheet = el.sheet;
+    return sheet;
+  }
+
+  function safeClassName(prop, value) {
+    return `dyn-${prop.replace(/[^a-z]/gi, '')}-${String(value).replace(/[^a-z0-9_-]/gi, '')}`;
+  }
+
+  function classFor(prop, value, important = true) {
+    const cn = safeClassName(prop, value);
+    if (!created.has(cn)) {
+      const rule = `.${cn}{${prop}:${value}${important ? ' !important' : ''};}`;
+      ensureSheet().insertRule(rule, sheet.cssRules.length);
+      created.add(cn);
+    }
+    return cn;
+  }
+
+  return { classFor };
+})();
+
 class TransactionManager {
   constructor() {
     console.log("🚀 [TransactionManager] Initializing Transaction Manager...");
@@ -734,7 +765,17 @@ class TransactionManager {
     $("#total-count").text(countMessage);
     console.log("📊 Count message set:", countMessage);
     console.log("✅ RENDERING COMPLETED");
+    this.checkInlineStyles();
     console.groupEnd();
+  }
+
+  checkInlineStyles() {
+    const container = document.getElementById("transactions-table");
+    if (!container) return;
+    const styled = container.querySelectorAll("[style]");
+    if (styled.length > 0) {
+      console.warn("[CSP] Inline styles detected:", styled);
+    }
   }
 
   createTransactionRow(tx, index) {
@@ -1149,11 +1190,11 @@ class TransactionManager {
 
     // If showing all transactions, hide pagination
     if (this.pageSize >= totalRecords) {
-      $("#pagination-nav").hide();
+      $("#pagination-nav").addClass("is-hidden");
       return;
     }
 
-    $("#pagination-nav").show();
+    $("#pagination-nav").removeClass("is-hidden");
 
     if (totalPages <= 1) return;
 
@@ -1224,7 +1265,7 @@ class TransactionManager {
 
   toggleBulkMode(enabled) {
     this.bulkMode = enabled;
-    $("#select-all").toggle(enabled);
+    $("#select-all").toggleClass("is-hidden", !enabled);
     $("#bulk-actions").toggleClass("d-none", !enabled);
 
     // Show/hide the entire checkbox column in the header
@@ -1529,8 +1570,10 @@ class TransactionManager {
 
   showToast(message, type, delay = 3000) {
     const toastId = `toast-${Date.now()}-${Math.random()}`;
+    const offset = document.querySelectorAll('.toast').length * 80;
+    const offsetClass = DynamicCSS.classFor('top', `${offset}px`);
     const toast = $(`
-      <div class="toast position-fixed top-0 end-0 m-3 toast-high" id="${toastId}">
+      <div class="toast position-fixed ${offsetClass} end-0 m-3 toast-high" id="${toastId}">
         <div class="toast-body bg-${type} text-white">
           ${message}
         </div>
@@ -1544,7 +1587,7 @@ class TransactionManager {
       toast.on("hidden.bs.toast", () => toast.remove());
     } else {
       // Persistent toast - won't auto-hide
-      toast.show();
+      toast.toast({ autohide: false }).toast("show");
     }
 
     return toast; // Return toast element for manual control
