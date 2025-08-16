@@ -457,6 +457,31 @@ class EstimationManager {
         $('#detail-missing-expenses').text(this.formatCurrency(details.missing_expenses || 0));
         $('#detail-missing-income').text(this.formatCurrency(details.missing_income || 0));
 
+        // Logic explanation for missing transactions
+        const logicExplanationElement = $('#logic-explanation');
+        const logicFormulaElement = $('#logic-formula');
+
+        const expectedExpenses = details.estimated_expenses || 0;
+        const missingExpenses = details.missing_expenses || 0;
+        const missingIncome = details.missing_income || 0;
+
+        const incomeText = this.formatCurrency(combinedIncome);
+        const savingsText = this.formatCurrency(Math.abs(savingsDiff));
+        const investmentText = this.formatCurrency(combinedInvestments);
+        const expectedText = this.formatCurrency(expectedExpenses);
+        const actualExpensesText = this.formatCurrency(combinedExpenses);
+
+        // Show formula for expected expenses
+        logicFormulaElement.text(`${incomeText} ${savingsDiff >= 0 ? '-' : '+'} ${savingsText} - ${investmentText} = ${expectedText}`);
+
+        if (missingExpenses > 0.01) {
+            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) are lower than expected (${expectedText}), resulting in missing expenses of ${this.formatCurrency(missingExpenses)}.`);
+        } else if (missingIncome > 0.01) {
+            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) exceed expected (${expectedText}), resulting in missing income of ${this.formatCurrency(missingIncome)}.`);
+        } else {
+            logicExplanationElement.text('Recorded and expected expenses match; no missing transactions detected.');
+        }
+
         // Show modal
         $('#estimationDetailsModal').modal('show');
     }
