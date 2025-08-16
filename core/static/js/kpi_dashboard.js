@@ -1,8 +1,9 @@
 (function(){
+  let goals = {};
   function clamp(x){ return Math.max(0, Math.min(100, Math.round(x))); }
   function parseNumberLike(text){
-    return parseFloat((text||"").replace(/[^\d.,-]/g,"" ).replace(/\./g,"").replace(",","."))
-           || parseFloat((text||"").replace(/[^\d.-]/g,"")) || 0;
+    // strip out currency symbols and thousands separators, keep decimal point
+    return parseFloat((text||"").replace(/[^0-9.,-]/g, "").replace(/,/g, "")) || 0;
   }
   function pctFor(actual, goal, mode){
     if (!goal || goal <= 0) return 0;
@@ -57,8 +58,11 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
-    let goals = await fetchGoals();
-    document.querySelectorAll(".kpi-card").forEach(card => recomputeCard(card, goals));
+    goals = await fetchGoals();
+    window.recomputeKPICards = () => {
+      document.querySelectorAll(".kpi-card").forEach(card => recomputeCard(card, goals));
+    };
+    window.recomputeKPICards();
 
     const modalEl = document.getElementById("kpiGoalsModal");
     const form = document.getElementById("kpiGoalsForm");
