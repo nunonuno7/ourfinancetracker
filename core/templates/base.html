@@ -24,6 +24,7 @@
 
   {% block extra_head %}{% endblock %}
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <link rel="stylesheet" href="{% static 'css/kpi_progress.css' %}">
 
     <!-- Project Color Overrides for Bootstrap -->
     <style nonce="{{ request.csp_nonce }}">
@@ -377,6 +378,7 @@
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js" defer nonce="{{ request.csp_nonce }}"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js" defer nonce="{{ request.csp_nonce }}"></script>
 <script src="{% static 'js/main.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
+<script defer src="{% static 'js/kpi_dashboard.js' %}"></script>
 
 <script nonce="{{ request.csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function() {

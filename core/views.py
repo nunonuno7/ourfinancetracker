@@ -73,6 +73,7 @@ from .models import (
     Transaction,
     User,
     RecurringTransaction,
+    UserSettings,
 )
 from .utils.cache_helpers import clear_tx_cache
 from .finance.returns import portfolio_return
@@ -4446,3 +4447,35 @@ def healthz(_request):
     response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+@require_http_methods(["GET"])
+@login_required
+def kpi_goals_get(request):
+    settings_obj, _ = UserSettings.objects.get_or_create(user=request.user)
+    return JsonResponse({"kpi_goals": settings_obj.kpi_goals or {}})
+
+
+@require_http_methods(["POST"])
+@login_required
+def kpi_goals_update(request):
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    key = data.get("kpi_key")
+    try:
+        goal = float(data.get("goal"))
+    except (TypeError, ValueError):
+        goal = 0
+    mode = data.get("mode", "closest")
+    if not key:
+        return JsonResponse({"error": "kpi_key required"}, status=400)
+    if mode not in {"higher", "lower", "closest"}:
+        mode = "closest"
+    settings_obj, _ = UserSettings.objects.get_or_create(user=request.user)
+    goals = settings_obj.kpi_goals or {}
+    goals[key] = {"goal": goal, "mode": mode}
+    settings_obj.kpi_goals = goals
+    settings_obj.save(update_fields=["kpi_goals"])
+    return JsonResponse({"kpi_goals": goals})

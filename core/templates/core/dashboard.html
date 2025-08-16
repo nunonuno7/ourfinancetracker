@@ -868,7 +868,7 @@ Dashboard{% endblock %} {% block extra_head %}
               <h4 class="card-text kpi-value mb-0" id="receita-media">€ 0</h4>
               <small class="text-muted kpi-subtitle">Monthly</small>
             </div>
-            <i class="fas fa-arrow-up fa-2x text-success opacity-25"></i>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="avg_income" data-kpi-mode="higher" aria-label="Configure Average Income">⚙️</button>
           </div>
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
@@ -889,7 +889,7 @@ Dashboard{% endblock %} {% block extra_head %}
               <h4 class="card-text kpi-value mb-0" id="despesa-estimada">€ 0</h4>
               <small class="text-muted kpi-subtitle">Calculated</small>
             </div>
-            <i class="fas fa-arrow-down fa-2x text-danger opacity-25"></i>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="avg_expense" data-kpi-mode="lower" aria-label="Configure Expenses">⚙️</button>
           </div>
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
@@ -905,7 +905,7 @@ Dashboard{% endblock %} {% block extra_head %}
     <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6 mb-3">
       {% with verified=kpis.verified_expenses_pct|clamp_pct verification=kpis.verification_level|default:"Moderate" verified_str=kpis.verified_expenses_pct|clamp_pct|floatformat:2 %}
         {% with aria="Verified Expenses, "|add:verified_str|add:" percent. Verification: "|add:verification %}
-          {% include "core/partials/kpi_card.html" with border_class="border-info" title_class="text-info" title="Verified Expenses" icon='<i class="fas fa-receipt fa-2x text-info opacity-25"></i>' value_id="verified-expenses" value=verified_str|add:"%" subtitle="Share of total expenses" progress_id="verified-progress" progress_bar_class="bg-info" footer_id="verified-change" footer="Verification: "|add:verification footer_badge_class="badge bg-warning-subtle text-warning-emphasis" info_tooltip="Share of total expenses that are verified (not estimated)." aria_label=aria %}
+          {% include "core/partials/kpi_card.html" with border_class="border-info" title_class="text-info" title="Verified Expenses" kpi_key="verified_expenses_pct" kpi_mode="higher" value_id="verified-expenses" value=verified_str|add:"%" subtitle="Share of total expenses" progress_id="verified-progress" progress_bar_class="bg-info" footer_id="verified-change" footer="Verification: "|add:verification footer_badge_class="badge bg-warning-subtle text-warning-emphasis" info_tooltip="Share of total expenses that are verified (not estimated)." aria_label=aria %}
         {% endwith %}
       {% endwith %}
     </div>
@@ -918,7 +918,7 @@ Dashboard{% endblock %} {% block extra_head %}
               <h4 class="card-text kpi-value mb-0" id="valor-investido">€ 0</h4>
               <small class="text-muted kpi-subtitle">Total</small>
             </div>
-            <i class="fas fa-chart-line fa-2x text-info opacity-25"></i>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="invested_amount" data-kpi-mode="higher" aria-label="Configure Invested Amount">⚙️</button>
           </div>
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
@@ -939,7 +939,7 @@ Dashboard{% endblock %} {% block extra_head %}
               <h4 class="card-text kpi-value mb-0" id="patrimonio-total">€ 0</h4>
               <small class="text-muted kpi-subtitle">Current</small>
             </div>
-            <i class="fas fa-gem fa-2x text-purple opacity-25"></i>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="net_worth" data-kpi-mode="higher" aria-label="Configure Total Net Worth">⚙️</button>
           </div>
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
@@ -960,7 +960,7 @@ Dashboard{% endblock %} {% block extra_head %}
               <h4 class="card-text kpi-value mb-0" id="taxa-poupanca">0%</h4>
               <small class="text-muted kpi-subtitle">of income</small>
             </div>
-            <i class="fas fa-percent fa-2x text-dark opacity-25"></i>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="savings_rate" data-kpi-mode="higher" aria-label="Configure Savings Rate">⚙️</button>
           </div>
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
@@ -973,6 +973,8 @@ Dashboard{% endblock %} {% block extra_head %}
       </div>
     </div>
   </div>
+
+  {% include "core/partials/kpi_goals_modal.html" %}
 
   <!-- Charts Row Enhanced -->
   <div class="row mb-4">

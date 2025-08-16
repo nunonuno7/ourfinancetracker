@@ -8,7 +8,7 @@
         <h4 class="card-text kpi-value mb-0"{% if value_id %} id="{{ value_id }}"{% endif %}>{{ value }}</h4>
         {% if subtitle %}<small class="text-muted kpi-subtitle">{{ subtitle }}</small>{% endif %}
       </div>
-      {% if icon %}{{ icon|safe }}{% endif %}
+      <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="{{ kpi_key }}" data-kpi-mode="{{ kpi_mode|default:'closest' }}" aria-label="Configure {{ title }}">⚙️</button>
     </div>
     <div class="progress kpi-progress mt-2 progress-xthin">
       <div class="progress-bar {{ progress_bar_class }} w-0"{% if progress_id %} id="{{ progress_id }}"{% endif %}></div>
