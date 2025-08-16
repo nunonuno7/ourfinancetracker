@@ -457,6 +457,10 @@ class EstimationManager {
         $('#detail-missing-expenses').text(this.formatCurrency(parseFloat(details.missing_expenses || 0)));
         $('#detail-missing-income').text(this.formatCurrency(parseFloat(details.missing_income || 0)));
 
+        // Amount that will be estimated
+        const currentlyEstimating = parseFloat(details.currently_estimating || 0);
+        $('#detail-currently-estimating').text(this.formatCurrency(currentlyEstimating));
+
         // Logic explanation for missing transactions
         const logicExplanationElement = $('#logic-explanation');
         const logicFormulaElement = $('#logic-formula');

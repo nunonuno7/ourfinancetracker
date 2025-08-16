@@ -60,7 +60,9 @@ def set_balance(account: Account, period: DatePeriod, amount: Decimal) -> None:
         balance.save(update_fields=["reported_balance"])
 
 
-def make_tx(*, user, account, category, period, amount, tx_type="EX", is_estimated=False):
+def make_tx(
+    *, user, account, category, period, amount, tx_type="EX", is_estimated=False
+):
     return Transaction.objects.create(
         user=user,
         account=account,
@@ -99,19 +101,26 @@ def test_estimate_creates_single_estimated_transaction_for_period(
     tx1 = run_estimate_for(client, period_aug)
     assert tx1 is not None
     assert (
-        Transaction.objects.filter(user=user, period=period_aug, is_estimated=True).count()
+        Transaction.objects.filter(
+            user=user, period=period_aug, is_estimated=True
+        ).count()
         == 1
     )
 
     run_estimate_for(client, period_aug)
     assert (
-        Transaction.objects.filter(user=user, period=period_aug, is_estimated=True).count()
+        Transaction.objects.filter(
+            user=user, period=period_aug, is_estimated=True
+        ).count()
         == 1
     )
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "sqlite", reason="transactions_json_v2 uses PostgreSQL-specific SQL")
+@pytest.mark.skipif(
+    connection.vendor == "sqlite",
+    reason="transactions_json_v2 uses PostgreSQL-specific SQL",
+)
 def test_estimated_transaction_is_visible_on_transactions_v2_page(
     client, user, savings_account
 ):
@@ -160,10 +169,14 @@ def test_manual_transaction_after_estimate_triggers_reestimate_warning(
     summary = service.get_estimation_summary(period_aug)
     assert summary["has_estimated_transaction"] is True
     assert summary["status"] != "balanced"
+    assert Decimal(str(summary["estimated_amount"])) == Decimal("150")
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "sqlite", reason="transactions_json_v2 uses PostgreSQL-specific SQL")
+@pytest.mark.skipif(
+    connection.vendor == "sqlite",
+    reason="transactions_json_v2 uses PostgreSQL-specific SQL",
+)
 def test_reestimate_replaces_previous_estimate_and_keeps_single_per_period(
     client, user, savings_account, category
 ):
