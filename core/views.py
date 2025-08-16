@@ -1168,6 +1168,26 @@ def import_transactions_xlsx(request):
 
             logger.info(f"📁 [import_transactions_xlsx] Starting import for user {request.user.id}, file: {uploaded_file.name}")
 
+            # Validate file extension
+            if not uploaded_file.name.lower().endswith('.xlsx'):
+                messages.error(request, 'Invalid file extension. Please upload an .xlsx file.')
+                return render(request, 'core/import_form.html')
+
+            # Validate MIME type
+            allowed_mime = {
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.ms-excel',
+            }
+            if uploaded_file.content_type not in allowed_mime:
+                messages.error(request, 'Invalid file type. Please upload a valid Excel file.')
+                return render(request, 'core/import_form.html')
+
+            # Validate file size (limit to 5MB)
+            max_upload_size = 5 * 1024 * 1024
+            if uploaded_file.size > max_upload_size:
+                messages.error(request, 'File too large. Maximum size is 5MB.')
+                return render(request, 'core/import_form.html')
+
             # Read Excel file
             df = pd.read_excel(uploaded_file)
             logger.info(f"📊 [import_transactions_xlsx] Read Excel file with shape: {df.shape}")
@@ -1215,14 +1235,31 @@ def import_transactions_xlsx(request):
             df_clean = df_non_empty[~missing_mask].copy()
             rows_after_dropna = len(df_clean)
             logger.debug(f"🧹 [import_transactions_xlsx] Rows after cleaning required columns: {initial_rows} → {rows_after_dropna}")
-            
-            # Log which columns have missing values
+
+            error_rows: set[int] = set()
+
+            # Log which columns have missing values with row details
             for col in required_cols:
-                missing_count = df_clean[col].isna().sum()
+                missing_mask_col = df_clean[col].isna()
+                missing_count = missing_mask_col.sum()
                 if missing_count > 0:
-                    logger.warning(f"⚠️ [import_transactions_xlsx] Column '{col}' has {missing_count} missing values")
-                    
-                    # Only log actual data samples in DEBUG mode
+                    logger.warning(
+                        f"⚠️ [import_transactions_xlsx] Column '{col}' has {missing_count} missing values"
+                    )
+                    missing_rows = (df_clean[missing_mask_col].index + 2).tolist()
+                    rows_preview = ", ".join(map(str, missing_rows[:5]))
+                    if col in ['Account', 'Category']:
+                        messages.warning(
+                            request,
+                            f"Missing {col} at rows: {rows_preview}{'...' if missing_count > 5 else ''}",
+                        )
+                    else:
+                        messages.error(
+                            request,
+                            f"Missing {col} at rows: {rows_preview}{'...' if missing_count > 5 else ''}",
+                        )
+                        error_rows.update(missing_rows)
+
                     if settings.DEBUG:
                         logger.debug(f"📋 [import_transactions_xlsx] Sample missing rows for '{col}':")
                         sample_missing = df_clean[df_clean[col].isna()].head(3)
@@ -1256,24 +1293,40 @@ def import_transactions_xlsx(request):
 
             try:
                 logger.info(f"🔄 [import_transactions_xlsx] Converting data types...")
-                
+
                 # Convert dates more carefully
                 if settings.DEBUG:
                     logger.debug(f"📅 [import_transactions_xlsx] Sample date values: {df_clean['Date'].head().tolist()}")
                 df_clean['Date'] = pd.to_datetime(df_clean['Date'], errors='coerce').dt.date
-                invalid_dates = df_clean['Date'].isna().sum()
+                invalid_date_mask = df_clean['Date'].isna()
+                invalid_dates = invalid_date_mask.sum()
                 if invalid_dates > 0:
                     logger.error(f"❌ [import_transactions_xlsx] {invalid_dates} invalid dates found")
-                    df_clean = df_clean.dropna(subset=['Date'])
-                
+                    invalid_rows = (df_clean[invalid_date_mask].index + 2).tolist()
+                    error_rows.update(invalid_rows)
+                    rows_preview = ", ".join(map(str, invalid_rows[:5]))
+                    messages.error(
+                        request,
+                        f"Invalid date at rows: {rows_preview}{'...' if invalid_dates > 5 else ''}",
+                    )
+                    df_clean = df_clean[~invalid_date_mask]
+
                 # Convert amounts more carefully
                 if settings.DEBUG:
                     logger.debug(f"💰 [import_transactions_xlsx] Sample amount values: {df_clean['Amount'].head().tolist()}")
                 df_clean['Amount'] = pd.to_numeric(df_clean['Amount'], errors='coerce')
-                invalid_amounts = df_clean['Amount'].isna().sum()
+                invalid_amount_mask = df_clean['Amount'].isna()
+                invalid_amounts = invalid_amount_mask.sum()
                 if invalid_amounts > 0:
                     logger.error(f"❌ [import_transactions_xlsx] {invalid_amounts} invalid amounts found")
-                    df_clean = df_clean.dropna(subset=['Amount'])
+                    invalid_rows = (df_clean[invalid_amount_mask].index + 2).tolist()
+                    error_rows.update(invalid_rows)
+                    rows_preview = ", ".join(map(str, invalid_rows[:5]))
+                    messages.error(
+                        request,
+                        f"Invalid amount at rows: {rows_preview}{'...' if invalid_amounts > 5 else ''}",
+                    )
+                    df_clean = df_clean[~invalid_amount_mask]
                 
                 logger.info(f"📅 [import_transactions_xlsx] Date range: {df_clean['Date'].min()} to {df_clean['Date'].max()}")
                 logger.info(f"💰 [import_transactions_xlsx] Amount range: {df_clean['Amount'].min()} to {df_clean['Amount'].max()}")
@@ -1288,10 +1341,18 @@ def import_transactions_xlsx(request):
                 logger.info(f"📊 [import_transactions_xlsx] Original types: {original_types}")
                 
                 # Check for completely empty types
-                empty_types = (df_clean['Type'] == '').sum()
+                empty_type_mask = df_clean['Type'] == ''
+                empty_types = empty_type_mask.sum()
                 if empty_types > 0:
                     logger.error(f"❌ [import_transactions_xlsx] {empty_types} rows have empty Type values")
-                    df_clean = df_clean[df_clean['Type'] != '']
+                    invalid_rows = (df_clean[empty_type_mask].index + 2).tolist()
+                    error_rows.update(invalid_rows)
+                    rows_preview = ", ".join(map(str, invalid_rows[:5]))
+                    messages.error(
+                        request,
+                        f"Invalid type at rows: {rows_preview}{'...' if empty_types > 5 else ''}",
+                    )
+                    df_clean = df_clean[~empty_type_mask]
                 
                 # Log final data shape
                 final_rows = len(df_clean)
@@ -1342,12 +1403,17 @@ def import_transactions_xlsx(request):
             
             imported_count = result['imported']
             errors = result['errors']
+            total_rows = initial_rows
+            errors_count = len(errors) + len(error_rows)
+            ignored_count = max(total_rows - imported_count - errors_count, 0)
 
             # Clear cache after import
             clear_tx_cache(request.user.id, force=True)
             logger.info(f"🗄️ [import_transactions_xlsx] Cache cleared for user {request.user.id}")
 
-            logger.info(f"📊 [import_transactions_xlsx] Import completed: {imported_count} imported, {len(errors)} errors")
+            logger.info(
+                f"📊 [import_transactions_xlsx] Import completed: {imported_count} imported, {errors_count} errors"
+            )
 
             # Clear any existing messages to prevent duplicates
             storage = messages.get_messages(request)
@@ -1355,8 +1421,15 @@ def import_transactions_xlsx(request):
                 pass  # Iterate through to mark as consumed
             storage.used = True
 
+            summary_msg = (
+                f"Import summary: {imported_count} inserted, {ignored_count} ignored, {errors_count} errors."
+            )
+            messages.info(request, summary_msg)
+
             if errors:
-                messages.warning(request, f'Imported {imported_count} transactions with {len(errors)} errors.')
+                messages.warning(
+                    request, f'Imported {imported_count} transactions with {len(errors)} errors.'
+                )
                 if len(errors) <= 5:  # Show first 5 errors
                     for error in errors[:5]:
                         messages.error(request, error)
@@ -1366,7 +1439,9 @@ def import_transactions_xlsx(request):
             else:
                 # Clear any remaining messages before adding the final success message
                 list(messages.get_messages(request))
-                messages.success(request, f'Successfully imported {imported_count} transactions.')
+                messages.success(
+                    request, f'Successfully imported {imported_count} transactions.'
+                )
 
             # Stay on import page instead of redirecting
             return render(request, 'core/import_form.html')
