@@ -3429,16 +3429,13 @@ def transaction_estimate(request):
     if account_id:
         filter_kwargs["account_id"] = account_id
 
-    actual_total = (
-        Transaction.objects.filter(**filter_kwargs)
-        .exclude(is_estimated=True)
-        .aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
+    totals = Transaction.objects.filter(**filter_kwargs).aggregate(
+        actual=Sum("amount", filter=Q(is_estimated=False)),
+        estimate=Sum("amount", filter=Q(is_estimated=True)),
     )
-
-    current_tx = Transaction.objects.filter(**filter_kwargs, is_estimated=True).first()
-    current_amount = current_tx.amount if current_tx else None
-    will_replace = current_tx is not None
+    actual_total = totals["actual"] or Decimal("0")
+    current_amount = totals["estimate"]
+    will_replace = current_amount is not None
 
     if request.method == "GET":
         response = {
