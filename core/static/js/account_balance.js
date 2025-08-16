@@ -140,7 +140,7 @@ function addRow() {
           <table class="table table-hover mb-0">
             <thead class="table-light">
               <tr>
-                <th class="text-center w-40">📱</th>
+                <th class="text-center">📱</th>
                 <th>Account Name</th>
                 <th class="text-end w-180">Balance</th>
                 <th class="text-center w-60">Actions</th>
