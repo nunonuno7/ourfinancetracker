@@ -77,268 +77,57 @@
 
             <!-- Details Modal -->
             <div class="modal fade" id="estimationDetailsModal" tabindex="-1">
-                <div class="modal-dialog modal-xl">
+                <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header bg-primary text-white">
                             <h5 class="modal-title">
                                 <i class="fas fa-calculator me-2"></i>
-                                Financial Estimation Details
+                                Estimation Summary
                             </h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
                             <div class="alert alert-secondary text-center mb-4">
-                                <h6 class="mb-0">Currently Estimating: <span id="detail-currently-estimating">€0.00</span></h6>
+                                <h6 class="mb-0">
+                                    Currently Estimating: <span id="detail-currently-estimating">€0.00</span>
+                                </h6>
                             </div>
-                            <!-- Period Info Header -->
-                            <div class="alert alert-primary mb-4">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-calendar-alt me-2 fs-4"></i>
-                                    <div>
-                                        <h6 class="mb-1">Analysis for Period: <span id="modal-period-title" class="text-primary fw-bold">Loading...</span></h6>
-                                        <p class="mb-0 small">
-                                            This analysis compares your recorded transactions with account balance changes to detect discrepancies and suggest missing transactions.
-                                        </p>
-                                    </div>
-                                </div>
+                            <div class="mb-4">
+                                <h6 class="text-primary">
+                                    Period: <span id="modal-period-title" class="fw-bold">Loading...</span>
+                                </h6>
+                                <p class="small mb-0">
+                                    We compare your records with your savings to find missing transactions.
+                                </p>
                             </div>
 
-                            <!-- Step-by-Step Calculation Process -->
-                            <div class="row">
-                                <div class="col-12">
-                                    <h5 class="mb-3 text-primary">
-                                        <i class="fas fa-list-ol me-2"></i>
-                                        Step-by-Step Calculation Process
-                                    </h5>
-                                </div>
-                            </div>
+                            <h6 class="text-primary">1. Recorded Totals</h6>
+                            <ul class="list-unstyled ps-3 mb-4">
+                                <li><strong>Income:</strong> <span id="detail-income-inserted">€0.00</span></li>
+                                <li><strong>Expenses:</strong> <span id="detail-expense-inserted">€0.00</span></li>
+                                <li><strong>Investments:</strong> <span id="detail-investment-inserted">€0.00</span></li>
+                                <li><strong>Net:</strong> <span id="detail-combined-total">€0.00</span></li>
+                            </ul>
 
-                            <!-- Step 1: Recorded Transactions -->
-                            <div class="card mb-3">
-                                <div class="card-header bg-info text-white">
-                                    <h6 class="mb-0">
-                                        <span class="badge bg-light text-dark me-2">1</span>
-                                        <i class="fas fa-receipt me-2"></i>
-                                        Your Recorded Transactions (Real + Estimated)
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="bg-light p-3 rounded">
-                                                <h6 class="text-muted mb-2">
-                                                    <i class="fas fa-plus-circle text-success me-1"></i>
-                                                    Total Income
-                                                </h6>
-                                                <div class="h4 text-success mb-0" id="detail-income-inserted">€0.00</div>
-                                                <small class="text-muted">Money coming in</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="bg-light p-3 rounded">
-                                                <h6 class="text-muted mb-2">
-                                                    <i class="fas fa-minus-circle text-danger me-1"></i>
-                                                    Total Expenses
-                                                </h6>
-                                                <div class="h4 text-danger mb-0" id="detail-expense-inserted">€0.00</div>
-                                                <small class="text-muted">Money going out</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="row mt-3">
-                                        <div class="col-md-6">
-                                            <div class="bg-light p-3 rounded">
-                                                <h6 class="text-muted mb-2">
-                                                    <i class="fas fa-chart-line text-info me-1"></i>
-                                                    Total Investments
-                                                </h6>
-                                                <div class="h4 text-info mb-0" id="detail-investment-inserted">€0.00</div>
-                                                <small class="text-muted">Money invested</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="bg-primary text-white p-3 rounded">
-                                                <h6 class="mb-2">
-                                                    <i class="fas fa-equals me-1"></i>
-                                                    Net Transaction Result
-                                                </h6>
-                                                <div class="h4 mb-0" id="detail-combined-total">€0.00</div>
-                                                <small class="opacity-75">Income - Expenses - Investments</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <h6 class="text-primary">2. Savings Change</h6>
+                            <ul class="list-unstyled ps-3 mb-4">
+                                <li><strong>Current balance:</strong> <span id="detail-savings-current">€0.00</span></li>
+                                <li><strong>Next balance:</strong> <span id="detail-savings-next">€0.00</span></li>
+                                <li><strong>Change:</strong> <span id="detail-savings-diff" class="badge bg-secondary">€0.00</span></li>
+                            </ul>
 
-                            <!-- Step 2: Account Balance Analysis -->
-                            <div class="card mb-3">
-                                <div class="card-header bg-success text-white">
-                                    <h6 class="mb-0">
-                                        <span class="badge bg-light text-dark me-2">2</span>
-                                        <i class="fas fa-piggy-bank me-2"></i>
-                                        Savings Account Balance Analysis
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-4">
-                                            <div class="text-center p-3 border rounded">
-                                                <h6 class="text-muted mb-2">
-                                                    <i class="fas fa-calendar-day me-1"></i>
-                                                    Current Month Balance
-                                                </h6>
-                                                <div class="h4 mb-0" id="detail-savings-current">€0.00</div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="text-center p-3 border rounded">
-                                                <h6 class="text-muted mb-2">
-                                                    <i class="fas fa-calendar-plus me-1"></i>
-                                                    Next Month Balance
-                                                </h6>
-                                                <div class="h4 mb-0" id="detail-savings-next">€0.00</div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="text-center p-3 border rounded bg-light">
-                                                <h6 class="text-muted mb-2">
-                                                    <i class="fas fa-exchange-alt me-1"></i>
-                                                    Savings Change
-                                                </h6>
-                                                <div class="h4 mb-0">
-                                                    <span id="detail-savings-diff" class="badge bg-primary fs-6">€0.00</span>
-                                                </div>
-                                                <small class="text-muted">Next - Current</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="alert alert-info mt-3 mb-0">
-                                        <i class="fas fa-info-circle me-2"></i>
-                                        <strong>What this means:</strong> If savings increased, you should have less expenses than income. If savings decreased, you spent more than you earned.
-                                    </div>
-                                </div>
-                            </div>
+                            <h6 class="text-primary">3. Expected vs Recorded Expenses</h6>
+                            <p class="small">Expected = Income - Savings Change - Investments</p>
+                            <ul class="list-unstyled ps-3 mb-2">
+                                <li><strong>Expected:</strong> <span id="detail-estimated-expenses">€0.00</span></li>
+                                <li><strong>Recorded:</strong> <span id="detail-actual-expenses">€0.00</span></li>
+                            </ul>
+                            <p class="small mb-4" id="logic-explanation"></p>
+                            <p class="small mb-4" id="logic-formula"></p>
 
-                            <!-- Step 3: Mathematical Estimation -->
-                            <div class="card mb-3">
-                                <div class="card-header bg-warning text-dark">
-                                    <h6 class="mb-0">
-                                        <span class="badge bg-dark text-white me-2">3</span>
-                                        <i class="fas fa-calculator me-2"></i>
-                                        Mathematical Estimation Process
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-8">
-                                            <h6 class="text-primary mb-3">
-                                                <i class="fas fa-formula me-1"></i>
-                                                Expected Expenses Formula
-                                            </h6>
-                                            <div class="bg-light p-4 rounded mb-3">
-                                                <div class="row align-items-center">
-                                                    <div class="col-auto">
-                                                        <span class="badge bg-primary text-white">Expected Expenses</span>
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <span class="h5 mb-0">=</span>
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <span class="badge bg-success">Total Income</span>
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <span class="h5 mb-0">-</span>
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <span class="badge bg-info">Savings Change</span>
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <span class="h5 mb-0">-</span>
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <span class="badge bg-secondary">Investments</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <div class="border p-3 rounded">
-                                                        <h6 class="text-muted mb-2">Expected Expenses</h6>
-                                                        <div class="h5 mb-0" id="detail-estimated-expenses">€0.00</div>
-                                                        <small class="text-muted">What you should have spent</small>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <div class="border p-3 rounded">
-                                                        <h6 class="text-muted mb-2">Actual Expenses</h6>
-                                                        <div class="h5 mb-0" id="detail-actual-expenses">€0.00</div>
-                                                        <small class="text-muted">What you recorded</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="bg-primary text-white p-3 rounded text-center">
-                                                <h6 class="mb-2">
-                                                    <i class="fas fa-lightbulb me-1"></i>
-                                                    Logic Explanation
-                                                </h6>
-                                                <p class="small mb-0" id="logic-explanation"></p>
-                                                <hr class="my-2 opacity-50">
-                                                <p class="small mb-0"><strong id="logic-formula"></strong></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Step 4: Results and Recommendations -->
-                            <div class="card">
-                                <div class="card-header bg-danger text-white">
-                                    <h6 class="mb-0">
-                                        <span class="badge bg-light text-dark me-2">4</span>
-                                        <i class="fas fa-search me-2"></i>
-                                        Missing Transaction Detection
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="alert alert-danger">
-                                                <h6 class="alert-heading">
-                                                    <i class="fas fa-exclamation-triangle me-1"></i>
-                                                    Missing Expenses
-                                                </h6>
-                                                <div class="h4 text-danger" id="detail-missing-expenses">€0.00</div>
-                                                <small>Expenses you may have forgotten to record</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="alert alert-success">
-                                                <h6 class="alert-heading">
-                                                    <i class="fas fa-plus-circle me-1"></i>
-                                                    Missing Income
-                                                </h6>
-                                                <div class="h4 text-success" id="detail-missing-income">€0.00</div>
-                                                <small>Income you may have forgotten to record</small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="alert alert-info mb-0">
-                                        <div class="d-flex align-items-start">
-                                            <i class="fas fa-robot me-2 mt-1"></i>
-                                            <div>
-                                                <h6 class="alert-heading">System Recommendation</h6>
-                                                <p class="mb-0">
-                                                    Based on this analysis, the system can automatically create an estimated transaction to balance your books. 
-                                                    This helps ensure your financial records match your actual account balances.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="alert alert-info mb-0">
+                                <strong>Missing Expenses:</strong> <span id="detail-missing-expenses">€0.00</span><br>
+                                <strong>Missing Income:</strong> <span id="detail-missing-income">€0.00</span>
                             </div>
                         </div>
                         <div class="modal-footer bg-light">
