@@ -103,3 +103,6 @@ h git switch --detach 8f10c2a
 .env_production
 !.env.template
 !.env.sample
+
+# Node.js dependencies
+node_modules/
