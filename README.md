@@ -93,6 +93,19 @@ EXTRA_CSRF_TRUSTED_ORIGINS=https://example.com,https://sub.domain.com
 
 Use comma-separated values. For `EXTRA_CSRF_TRUSTED_ORIGINS`, each origin must include the scheme (`http://` or `https://`).
 
+## 🍪 Cookie policy and integrations
+
+The application now sets both session and CSRF cookies with `SameSite=Strict` to mitigate cross-site request forgery. This can
+affect integrations that rely on cross-site requests or iframes. If an integration requires a more permissive policy, the
+behaviour can be overridden via environment variables:
+
+```bash
+SESSION_COOKIE_SAMESITE=Lax
+CSRF_COOKIE_SAMESITE=Lax
+```
+
+Use `None`, `Lax`, or `Strict` as needed.
+
 ## 📄 Licence
 
 Distributed under the MIT licence. See the `LICENSE` file for more details.

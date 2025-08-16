@@ -1,6 +1,6 @@
 """
-Django settings.py — consolidado para DEV/PROD com Supabase Postgres,
-CSP (django-csp), WhiteNoise, Redis opcional, Debug Toolbar e django-axes.
+Django settings.py — consolidated for DEV/PROD with Supabase Postgres,
+CSP (django-csp), WhiteNoise, optional Redis, Debug Toolbar, and django-axes.
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
     "django.contrib.sites",
-    # Terceiros
+    # Third-party
     "whitenoise.runserver_nostatic",
     "widget_tweaks",
     "django.contrib.humanize",
@@ -102,7 +102,7 @@ INSTALLED_APPS = [
     "axes",
     "anymail",
     "django_celery_beat",
-    # Projeto
+    # Project
     "accounts",
     "core",
 ]
@@ -125,7 +125,7 @@ MIDDLEWARE = [
 ]
 if DEBUG:
     MIDDLEWARE.append("core.middleware.performance.PerformanceMiddleware")
-MIDDLEWARE.append("axes.middleware.AxesMiddleware")  # axes por último
+MIDDLEWARE.append("axes.middleware.AxesMiddleware")  # axes middleware must come last
 
 if DEBUG and SHOW_DEBUG_TOOLBAR:
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
@@ -159,7 +159,7 @@ TEMPLATES = [
 ]
 
 # ────────────────────────────────────────────────────
-# Base de dados (Supabase prioritário via SUPABASE_DB_URL/DATABASE_URL; fallback SQLite)
+# Database (Supabase preferred via SUPABASE_DB_URL/DATABASE_URL; fallback SQLite)
 # ────────────────────────────────────────────────────
 SUPA_URL = ENV("SUPABASE_DB_URL") or ENV("DATABASE_URL")
 if not SUPA_URL and ENV("DB_HOST"):
@@ -182,7 +182,7 @@ else:
     }
 
 # ────────────────────────────────────────────────────
-# Cache (Redis opcional)
+# Cache (optional Redis)
 # ────────────────────────────────────────────────────
 if ENV("REDIS_URL"):
     CACHES = {
@@ -244,7 +244,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ────────────────────────────────────────────────────
-# Security profiles (DEV/PROD): HTTPS, Cookies/CSRF e CSP
+# Security profiles (DEV/PROD): HTTPS, Cookies/CSRF, and CSP
 # ────────────────────────────────────────────────────
 # --- CSP base policy ---
 CONTENT_SECURITY_POLICY = {
@@ -281,21 +281,22 @@ CONTENT_SECURITY_POLICY = {
 if not DEBUG:
     CONTENT_SECURITY_POLICY["DIRECTIVES"]["upgrade-insecure-requests"] = []
 
+SESSION_COOKIE_SAMESITE = ENV("SESSION_COOKIE_SAMESITE", "Strict")
+CSRF_COOKIE_SAMESITE = ENV("CSRF_COOKIE_SAMESITE", "Strict")
+
 if DEBUG:
-    # Dev: sem HTTPS forçado
+    # Dev: no forced HTTPS
     SECURE_SSL_REDIRECT = False
     SECURE_PROXY_SSL_HEADER = None
 
-    # Cookies & CSRF em HTTP
+    # Cookies & CSRF over HTTP
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
-    SESSION_COOKIE_SAMESITE = "Lax"
-    CSRF_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_HTTPONLY = False
     CSRF_USE_SESSIONS = False
     CSRF_FAILURE_VIEW = "django.views.csrf.csrf_failure"
 
-    # Origens confiáveis (HTTP + portas)
+    # Trusted origins (HTTP + ports)
     CSRF_TRUSTED_ORIGINS += [
         "http://127.0.0.1:8000", "http://127.0.0.1:8001",
         "http://localhost:8000", "http://localhost:8001",
@@ -303,7 +304,7 @@ if DEBUG:
     ]
 
 else:
-    # Prod: HTTPS obrigatório e cabeçalhos fortes
+    # Prod: enforce HTTPS and strong headers
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_HSTS_SECONDS = 31536000
@@ -318,10 +319,8 @@ else:
     # Cookies & CSRF
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SAMESITE = "Lax"
-    CSRF_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_HTTPONLY = True
-    CSRF_COOKIE_HTTPONLY = True  # muda para False se precisares de ler via JS
+    CSRF_COOKIE_HTTPONLY = True  # set to False if JS needs to read it
 
 
 # ────────────────────────────────────────────────────
@@ -345,12 +344,12 @@ if DEBUG and not EMAIL_HOST:
 # ────────────────────────────────────────────────────
 AXES_ENABLED = not DEBUG
 AXES_FAILURE_LIMIT = 5
-AXES_COOLOFF_TIME = 1  # horas
+AXES_COOLOFF_TIME = 1  # hours
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_LOCKOUT_CALLABLE = None
 
 # ────────────────────────────────────────────────────
-# Logging (simples e suficiente)
+# Logging (simple and sufficient)
 # ────────────────────────────────────────────────────
 LOGGING = {
     "version": 1,
@@ -375,7 +374,7 @@ LOGGING = {
 }
 
 # ────────────────────────────────────────────────────
-# Supabase (se precisares no código)
+# Supabase (if needed in code)
 # ────────────────────────────────────────────────────
 SUPABASE_URL = ENV("SUPABASE_URL")
 SUPABASE_KEY = ENV("SUPABASE_KEY")
