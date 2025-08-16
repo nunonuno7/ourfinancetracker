@@ -36,9 +36,7 @@ def signup(request):
     form = SignupForm(request.POST or None)
     if request.method == "POST":
         if not form.is_valid():
-            for field, errors in form.errors.items():
-                for error in errors:
-                    messages.error(request, f"{field}: {error}")
+            messages.error(request, "Invalid data")
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         username = form.cleaned_data["username"]
@@ -46,15 +44,15 @@ def signup(request):
         password = form.cleaned_data["password"]
 
         if User.objects.filter(username__iexact=username).exists():
-            messages.error(request, "This username is already taken. Please choose another one.")
+            messages.error(request, "Invalid data")
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
-        # Se já existir conta ativa com este email
+        # If an active account already exists with this email
         if User.objects.filter(email__iexact=email, is_active=True).exists():
-            messages.error(request, "An account with this email already exists. Try resetting your password.")
+            messages.error(request, "Invalid data")
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
-        # Se existir conta inativa com o mesmo email, reenvia ativação em vez de criar nova
+        # If an inactive account exists with the same email, resend activation instead of creating a new one
         existing_inactive = User.objects.filter(email__iexact=email, is_active=False).first()
         if existing_inactive:
             # Generate activation token for existing user
@@ -107,7 +105,7 @@ def signup(request):
                     username=username, email=email, password=password, is_active=False
                 )
         except IntegrityError:
-            messages.error(request, "This username is already taken. Please choose another one.")
+            messages.error(request, "Invalid data")
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         # Generate activation token
