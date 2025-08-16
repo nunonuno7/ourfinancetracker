@@ -1,5 +1,4 @@
 (function(){
-  let goals = {};
   function clamp(x){ return Math.max(0, Math.min(100, Math.round(x))); }
   function parseNumberLike(text){
     return parseFloat((text||"").replace(/[^\d.,-]/g,"" ).replace(/\./g,"").replace(",","."))
@@ -58,11 +57,8 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
-    goals = await fetchGoals();
-    window.recomputeKPICards = () => {
-      document.querySelectorAll(".kpi-card").forEach(card => recomputeCard(card, goals));
-    };
-    window.recomputeKPICards();
+    let goals = await fetchGoals();
+    document.querySelectorAll(".kpi-card").forEach(card => recomputeCard(card, goals));
 
     const modalEl = document.getElementById("kpiGoalsModal");
     const form = document.getElementById("kpiGoalsForm");
