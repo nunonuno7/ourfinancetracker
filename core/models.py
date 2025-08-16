@@ -4,7 +4,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
-from django.db.models import UniqueConstraint
+from django.db.models import UniqueConstraint, Q
 from datetime import date
 from django.dispatch import receiver
 from django.db.models.signals import post_save
@@ -315,6 +315,13 @@ class Transaction(models.Model):
             models.Index(fields=["user", "type"]),
         ]
         ordering = ("-date", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "period", "type", "category", "account"],
+                condition=Q(is_estimated=True),
+                name="unique_estimate_per_scope",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.date} {self.get_type_display()} {self.amount}"
