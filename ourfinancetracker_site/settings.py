@@ -352,11 +352,22 @@ AXES_LOCKOUT_CALLABLE = None
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler", "level": "DEBUG" if DEBUG else "INFO"}},
-    "root": {"handlers": ["console"], "level": "DEBUG" if DEBUG else "INFO"},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "level": "DEBUG"},
+        "null": {"class": "logging.NullHandler"},
+    },
+    "root": {"handlers": ["console"] if DEBUG else ["null"], "level": "DEBUG" if DEBUG else "INFO"},
     "loggers": {
-        "django.server": {"handlers": ["console"], "level": "WARNING", "propagate": False},
-        "django.request": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "django.server": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
 }
 
