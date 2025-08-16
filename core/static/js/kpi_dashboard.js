@@ -60,6 +60,7 @@
     document.querySelectorAll(".kpi-card").forEach(card => recomputeCard(card, goals));
   }
   document.addEventListener("kpiValuesUpdated", recomputeAll);
+  document.addEventListener("kpiGoalsUpdated", recomputeAll);
 
   document.addEventListener("DOMContentLoaded", async () => {
     goals = await fetchGoals();
@@ -105,6 +106,7 @@
         });
         if (r.ok){
           goals[payload.kpi_key] = {goal: payload.goal, mode: payload.mode};
+          document.dispatchEvent(new Event('kpiGoalsUpdated'));
           if (currentCard) recomputeCard(currentCard, goals);
           modal?.hide();
         }
