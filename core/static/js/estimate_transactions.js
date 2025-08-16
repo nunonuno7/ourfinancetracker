@@ -408,9 +408,9 @@ class EstimationManager {
         $('#modal-period-title').text(summary.period);
 
         // Estimated Transactions
-        const estimatedIncome = details.estimated_income || 0;
-        const estimatedExpenses = details.estimated_expenses_tx || 0;
-        const estimatedInvestments = details.estimated_investments || 0;
+        const estimatedIncome = parseFloat(details.estimated_income || 0);
+        const estimatedExpenses = parseFloat(details.estimated_expenses_tx || 0);
+        const estimatedInvestments = parseFloat(details.estimated_investments || 0);
         
         $('#detail-estimated-income').text(this.formatCurrency(estimatedIncome));
         $('#detail-estimated-expenses-tx').text(this.formatCurrency(estimatedExpenses));
@@ -421,9 +421,9 @@ class EstimationManager {
         $('#detail-estimated-total').text(this.formatCurrencyWithSign(estimatedTotal));
 
         // Combined Totals
-        const combinedIncome = (details.real_income || 0) + (details.estimated_income || 0);
-        const combinedExpenses = (details.real_expenses || 0) + (details.estimated_expenses_tx || 0);
-        const combinedInvestments = (details.real_investments || 0) + (details.estimated_investments || 0);
+        const combinedIncome = parseFloat(details.real_income || 0) + parseFloat(details.estimated_income || 0);
+        const combinedExpenses = parseFloat(details.real_expenses || 0) + parseFloat(details.estimated_expenses_tx || 0);
+        const combinedInvestments = parseFloat(details.real_investments || 0) + parseFloat(details.estimated_investments || 0);
         
         $('#detail-income-inserted').text(this.formatCurrency(combinedIncome));
         $('#detail-expense-inserted').text(this.formatCurrency(combinedExpenses));
@@ -437,7 +437,7 @@ class EstimationManager {
         $('#detail-savings-current').text(this.formatCurrency(details.savings_current || 0));
         $('#detail-savings-next').text(this.formatCurrency(details.savings_next || 0));
 
-        const savingsDiff = (details.savings_next || 0) - (details.savings_current || 0);
+        const savingsDiff = parseFloat(details.savings_next || 0) - parseFloat(details.savings_current || 0);
         const savingsDiffElement = $('#detail-savings-diff');
         savingsDiffElement.text(this.formatCurrencyWithSign(savingsDiff));
 
@@ -452,10 +452,37 @@ class EstimationManager {
         }
 
         // Calculation Results
-        $('#detail-estimated-expenses').text(this.formatCurrency(details.estimated_expenses || 0));
+        $('#detail-estimated-expenses').text(this.formatCurrency(parseFloat(details.estimated_expenses || 0)));
         $('#detail-actual-expenses').text(this.formatCurrency(combinedExpenses));
-        $('#detail-missing-expenses').text(this.formatCurrency(details.missing_expenses || 0));
-        $('#detail-missing-income').text(this.formatCurrency(details.missing_income || 0));
+        $('#detail-missing-expenses').text(this.formatCurrency(parseFloat(details.missing_expenses || 0)));
+        $('#detail-missing-income').text(this.formatCurrency(parseFloat(details.missing_income || 0)));
+
+        // Logic explanation for missing transactions
+        const logicExplanationElement = $('#logic-explanation');
+        const logicFormulaElement = $('#logic-formula');
+        logicExplanationElement.text('');
+        logicFormulaElement.text('');
+
+        const expectedExpenses = parseFloat(details.estimated_expenses || 0);
+        const missingExpenses = parseFloat(details.missing_expenses || 0);
+        const missingIncome = parseFloat(details.missing_income || 0);
+
+        const incomeText = this.formatCurrency(combinedIncome);
+        const savingsText = this.formatCurrency(Math.abs(savingsDiff));
+        const investmentText = this.formatCurrency(combinedInvestments);
+        const expectedText = this.formatCurrency(expectedExpenses);
+        const actualExpensesText = this.formatCurrency(combinedExpenses);
+
+        // Show formula for expected expenses
+        logicFormulaElement.text(`${incomeText} ${savingsDiff >= 0 ? '-' : '+'} ${savingsText} - ${investmentText} = ${expectedText}`);
+
+        if (missingExpenses > 0.01) {
+            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) are lower than expected (${expectedText}), resulting in missing expenses of ${this.formatCurrency(missingExpenses)}.`);
+        } else if (missingIncome > 0.01) {
+            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) exceed expected (${expectedText}), resulting in missing income of ${this.formatCurrency(missingIncome)}.`);
+        } else {
+            logicExplanationElement.text('Recorded and expected expenses match; no missing transactions detected.');
+        }
 
         // Logic explanation for missing transactions
         const logicExplanationElement = $('#logic-explanation');
