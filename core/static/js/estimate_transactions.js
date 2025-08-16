@@ -404,13 +404,6 @@ class EstimationManager {
         // Populate modal with details
         const details = summary.details;
 
-        if (summary.has_estimated_transaction) {
-            $('#existing-estimate-amount').text(this.formatCurrency(summary.estimated_amount));
-            $('#existing-estimate-banner').removeClass('d-none');
-        } else {
-            $('#existing-estimate-banner').addClass('d-none');
-        }
-
         // Set period title
         $('#modal-period-title').text(summary.period);
 

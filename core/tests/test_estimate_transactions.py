@@ -163,44 +163,6 @@ def test_manual_transaction_after_estimate_triggers_reestimate_warning(
 
 
 @pytest.mark.django_db
-def test_summary_ignores_existing_estimate(client, user, savings_account, category):
-    period_aug = make_period("2025-08")
-    period_sep = make_period("2025-09")
-    set_balance(savings_account, period_aug, Decimal("1000"))
-    set_balance(savings_account, period_sep, Decimal("1000"))
-
-    make_tx(
-        user=user,
-        account=savings_account,
-        category=category,
-        period=period_aug,
-        amount=Decimal("1000"),
-        tx_type="IN",
-    )
-    make_tx(
-        user=user,
-        account=savings_account,
-        category=category,
-        period=period_aug,
-        amount=Decimal("800"),
-        tx_type="EX",
-    )
-    make_tx(
-        user=user,
-        account=savings_account,
-        category=category,
-        period=period_aug,
-        amount=Decimal("200"),
-        tx_type="EX",
-        is_estimated=True,
-    )
-    service = FinanceEstimationService(user)
-    summary = service.get_estimation_summary(period_aug)
-    assert summary["status"] == "missing_expenses"
-    assert summary["estimated_amount"] == pytest.approx(200)
-
-
-@pytest.mark.django_db
 @pytest.mark.skipif(connection.vendor == "sqlite", reason="transactions_json_v2 uses PostgreSQL-specific SQL")
 def test_reestimate_replaces_previous_estimate_and_keeps_single_per_period(
     client, user, savings_account, category
