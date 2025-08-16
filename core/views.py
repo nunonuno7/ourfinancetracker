@@ -155,13 +155,24 @@ def _shift_period(period_yyyy_mm: str, delta_months: int) -> str:
 def build_kpis_for_period(tx):
     """Build basic KPI metrics for a single period.
 
-    Calculates total income, expenses, investments and the resulting net
-    amount for the provided queryset of transactions.
+    Calculates total income, expenses, investments and basic statistics for
+    the provided queryset of transactions using a single aggregate query to
+    minimise database round trips.
     """
     stats = tx.aggregate(
         income=Sum("amount", filter=Q(type=Transaction.Type.INCOME)),
         expenses=Sum("amount", filter=Q(type=Transaction.Type.EXPENSE)),
         investments=Sum("amount", filter=Q(type=Transaction.Type.INVESTMENT)),
+        expense_estimated=Sum(
+            "amount",
+            filter=Q(type=Transaction.Type.EXPENSE, is_estimated=True),
+        ),
+        expense_count=models.Count("id", filter=Q(type=Transaction.Type.EXPENSE)),
+        expense_estimated_count=models.Count(
+            "id",
+            filter=Q(type=Transaction.Type.EXPENSE, is_estimated=True),
+        ),
+        total_count=models.Count("id"),
     )
 
     income = stats["income"] or Decimal("0")
@@ -169,12 +180,22 @@ def build_kpis_for_period(tx):
     investments = stats["investments"] or Decimal("0")
     net = income - expenses  # Net Balance = Income - Expenses (investments don't count)
 
-    return {
+    kpis = {
         "income": float(income),
         "expenses": float(expenses),
         "investments": float(investments),
         "net": float(net),
+        "transaction_count": stats["total_count"] or 0,
     }
+
+    expense_stats = {
+        "total": stats["expenses"] or Decimal("0"),
+        "estimated": stats["expense_estimated"] or Decimal("0"),
+        "count": stats["expense_count"] or 0,
+        "estimated_count": stats["expense_estimated_count"] or 0,
+    }
+
+    return kpis, expense_stats
 
 
 def build_charts_for_period(tx):
@@ -236,16 +257,10 @@ def dashboard(request):
         tx = Transaction.objects.filter(
             user=request.user, period__year=year, period__month=month
         )
-        kpis = build_kpis_for_period(tx)
+        kpis, expense_stats = build_kpis_for_period(tx)
         charts = build_charts_for_period(tx)
-        
-        # Enhanced expense statistics
-        expense_stats = tx.filter(type="EX").aggregate(
-            total=Sum("amount"),
-            estimated=Sum("amount", filter=Q(is_estimated=True)),
-            count=models.Count("id"),
-            estimated_count=models.Count("id", filter=Q(is_estimated=True)),
-        )
+
+        # Enhanced expense statistics using values from single aggregate call
         total_expenses = abs(expense_stats["total"] or Decimal("0"))
         estimated_expenses = abs(expense_stats["estimated"] or Decimal("0"))
         verified_expenses_pct_dec = pct(
@@ -274,7 +289,6 @@ def dashboard(request):
             kpis["expense_ratio"] = 0
         
         # Transaction counts for insights
-        kpis["transaction_count"] = tx.count()
         kpis["expense_count"] = expense_stats["count"]
         kpis["estimated_count"] = expense_stats["estimated_count"]
         
@@ -367,7 +381,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 f"""
                 SELECT
                     {period_expr} as period,
-                    tx.type, tx.amount
+                    tx.type, tx.amount, tx.is_estimated
                 FROM core_transaction tx
                 INNER JOIN core_dateperiod dp ON tx.period_id = dp.id
                 WHERE tx.user_id = %s
@@ -395,7 +409,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             bal_rows = cursor.fetchall()
 
         # Converter para DataFrames para análise
-        df_tx = pd.DataFrame(tx_rows, columns=["period", "type", "amount"])
+        df_tx = pd.DataFrame(
+            tx_rows, columns=["period", "type", "amount", "is_estimated"]
+        )
         df_bal = pd.DataFrame(bal_rows, columns=["period", "reported_balance", "account_type"])
 
         # Aplicar filtros de período se especificados
@@ -441,26 +457,33 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "aumento_riqueza": f"{aumento_medio:,.0f} €",
             "poupanca_media": f"{poupanca_media:,.0f} €",
         }
-        expense_stats = Transaction.objects.filter(user=user, type="EX").aggregate(
-            total=Sum("amount"),
-            estimated=Sum("amount", filter=Q(is_estimated=True)),
-        )
-        total_expenses = abs(expense_stats["total"] or Decimal("0"))
-        estimated_expenses = abs(expense_stats["estimated"] or Decimal("0"))
+
+        # Compute expense verification statistics from loaded transactions
+        df_expenses = df_tx[df_tx["type"] == "EX"]
+        total_expenses_dec = Decimal(
+            str(abs(df_expenses["amount"].sum()))
+        ) if not df_expenses.empty else Decimal("0")
+        estimated_expenses_dec = Decimal(
+            str(
+                abs(
+                    df_expenses[df_expenses["is_estimated"]]["amount"].sum()
+                )
+            )
+        ) if not df_expenses.empty else Decimal("0")
+
         verified_expenses_pct_dec = pct(
-            total_expenses - estimated_expenses, total_expenses
+            total_expenses_dec - estimated_expenses_dec, total_expenses_dec
         )
         ctx["kpis"]["non_estimated_expenses_pct"] = round(
             float(verified_expenses_pct_dec)
         )
-        ctx["kpis"]["verified_expenses_pct"] = float(
-            verified_expenses_pct_dec
-        )
+        ctx["kpis"]["verified_expenses_pct"] = float(verified_expenses_pct_dec)
         ctx["kpis"]["verified_expenses_pct_str"] = f"{verified_expenses_pct_dec}%"
         ctx["kpis"]["verification_level"] = ctx["kpis"].get(
             "verification_level",
             "Moderate",
         )
+
         return ctx
 
 
