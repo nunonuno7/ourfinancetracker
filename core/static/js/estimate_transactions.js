@@ -460,8 +460,8 @@ class EstimationManager {
         // Logic explanation for missing transactions
         const logicExplanationElement = $('#logic-explanation');
         const logicFormulaElement = $('#logic-formula');
-        logicExplanationElement.text('');
-        logicFormulaElement.text('');
+        logicExplanationElement.empty();
+        logicFormulaElement.empty();
 
         const expectedExpenses = parseFloat(details.estimated_expenses || 0);
         const missingExpenses = parseFloat(details.missing_expenses || 0);
@@ -474,25 +474,25 @@ class EstimationManager {
         const actualExpensesText = this.formatCurrency(combinedExpenses);
 
         const expectedFormula = `${incomeText} ${savingsDiff >= 0 ? '-' : '+'} ${savingsText} - ${investmentText} = ${expectedText}`;
+        let explanation = '';
         let missingFormula = '';
 
         if (missingExpenses > 0.01) {
             const missingText = this.formatCurrency(missingExpenses);
-            logicExplanationElement.text(`Expected expenses (${expectedText}) - recorded expenses (${actualExpensesText}) = missing expenses of ${missingText}.`);
+            explanation = `Expected expenses (${expectedText}) - recorded expenses (${actualExpensesText}) = missing expenses of ${missingText}.`;
             missingFormula = `${expectedText} - ${actualExpensesText} = ${missingText}`;
         } else if (missingIncome > 0.01) {
             const missingText = this.formatCurrency(missingIncome);
-            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) - expected expenses (${expectedText}) = missing income of ${missingText}.`);
+            explanation = `Recorded expenses (${actualExpensesText}) - expected expenses (${expectedText}) = missing income of ${missingText}.`;
             missingFormula = `${actualExpensesText} - ${expectedText} = ${missingText}`;
         } else {
-            logicExplanationElement.text('Recorded and expected expenses match; no missing transactions detected.');
+            explanation = 'Recorded and expected expenses match; no missing transactions detected.';
         }
 
-        if (missingFormula) {
-            logicFormulaElement.html(`${expectedFormula}<br>${missingFormula}`);
-        } else {
-            logicFormulaElement.text(expectedFormula);
-        }
+        const formulas = [expectedFormula, missingFormula].filter(Boolean).join('<br>');
+        logicExplanationElement.html(`${explanation}<br>${formulas}`);
+        // Keep the formula element for backward compatibility but leave it empty
+        logicFormulaElement.text('');
 
         // Show modal
         $('#estimationDetailsModal').modal('show');
