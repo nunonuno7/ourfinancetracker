@@ -17,4 +17,4 @@ def test_home_view_redirects_authenticated_user(client, settings):
     client.force_login(user)
     response = client.get(reverse("home"))
     assert response.status_code == 302
-    assert response.url.rstrip("/") == reverse("dashboard").strip("/")
+    assert response.url == reverse("dashboard")
