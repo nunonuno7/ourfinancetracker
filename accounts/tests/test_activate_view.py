@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
-from accounts.tokens import generate_activation_token
+from accounts.tokens import activation_token_generator
 
 
 @pytest.mark.django_db
@@ -13,7 +13,7 @@ def test_activate_view_with_valid_token(client, settings):
     user = User.objects.create_user(
         username="newuser", email="new@example.com", password="pass", is_active=False
     )
-    token = generate_activation_token(user)
+    token = activation_token_generator.make_token(user)
     uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
 
     response = client.get(reverse("accounts:activate", kwargs={"uidb64": uidb64, "token": token}))

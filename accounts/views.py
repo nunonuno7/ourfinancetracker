@@ -18,13 +18,7 @@ from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
 from django.core.cache import cache
-from django.utils import timezone
-from datetime import timedelta
-from .tokens import (
-    generate_activation_token,
-    validate_activation_token,
-    revoke_activation_token,
-)
+from .tokens import activation_token_generator
 from .forms import SignupForm
 
 logger = logging.getLogger(__name__)
@@ -49,17 +43,19 @@ def signup(request):
             messages.error(request, "This username is already taken. Please choose another one.")
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
-        # Se já existir conta ativa com este email
+        # If an active account already exists with this email
         if User.objects.filter(email__iexact=email, is_active=True).exists():
-            messages.error(request, "An account with this email already exists. Try resetting your password.")
+            messages.error(
+                request,
+                "An account with this email already exists. Try resetting your password.",
+            )
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
-        # Se existir conta inativa com o mesmo email, reenvia ativação em vez de criar nova
+        # If an inactive account exists with the same email, resend activation instead of creating a new one
         existing_inactive = User.objects.filter(email__iexact=email, is_active=False).first()
         if existing_inactive:
             # Generate activation token for existing user
-            revoke_activation_token(existing_inactive)
-            token = generate_activation_token(existing_inactive)
+            token = activation_token_generator.make_token(existing_inactive)
             uid = urlsafe_base64_encode(force_bytes(existing_inactive.pk))
 
             # Send activation email
@@ -91,7 +87,6 @@ def signup(request):
                 )
             except (smtplib.SMTPException, BadHeaderError) as e:
                 logger.exception("Email sending failed: %s", e)
-                revoke_activation_token(existing_inactive)
                 messages.error(
                     request,
                     "There was an error sending the activation email. Please try again later.",
@@ -111,7 +106,7 @@ def signup(request):
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         # Generate activation token
-        token = generate_activation_token(user)
+        token = activation_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
 
         # Send activation email
@@ -143,7 +138,6 @@ def signup(request):
             )
         except (smtplib.SMTPException, BadHeaderError) as e:
             logger.exception("Email sending failed: %s", e)
-            revoke_activation_token(user)
             messages.error(
                 request,
                 "There was an error sending the activation email. Please try again later.",
@@ -172,8 +166,7 @@ def activate(request, uidb64, token):
     except Exception as exc:
         logger.warning("Activation: could not resolve user from uidb64=%s (%s)", uidb64, exc)
 
-    if user and validate_activation_token(user, token):
-        revoke_activation_token(user)
+    if user and activation_token_generator.check_token(user, token):
         if not user.is_active:
             user.is_active = True
             user.save(update_fields=["is_active"])
