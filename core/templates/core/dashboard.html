@@ -1503,4 +1503,5 @@ Dashboard{% endblock %} {% block extra_head %}
   });
 </script>
 <script type="module" src="{% static 'js/dashboard.js' %}" nonce="{{ request.csp_nonce }}"></script>
+<script nomodule src="{% static 'js/dashboard.legacy.js' %}" nonce="{{ request.csp_nonce }}"></script>
 {% endblock %}
