@@ -102,3 +102,14 @@ Distributed under the MIT licence. See the `LICENSE` file for more details.
 ```bash
 DATABASE_URL=sqlite:////tmp/testdb.sqlite3 pytest
 ```
+
+To ensure the test suite passes before code is pushed, install the
+`pre-commit` hook that runs tests on the `pre-push` stage:
+
+```bash
+pip install pre-commit
+pre-commit install --hook-type pre-push
+```
+
+With the hook installed, `pytest` is executed automatically and the push is
+blocked if any test fails.
