@@ -43,8 +43,10 @@ from django.http import (
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils.timezone import now
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.csrf import csrf_protect
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -4422,6 +4424,40 @@ def dashboard_insights_json(request):
             }]
         }, status=500)
 
+
+
+# KPI goal endpoints
+
+@login_required
+@require_GET
+def kpi_goals_get(request):
+    settings = request.user.settings
+    return JsonResponse({"kpi_goals": settings.kpi_goals or {}}, status=200)
+
+
+@login_required
+@require_POST
+@csrf_protect
+def kpi_goals_update(request):
+    key = request.POST.get("kpi_key")
+    goal = request.POST.get("goal")
+    mode = request.POST.get("mode", "closest")
+    if not key or goal is None:
+        return JsonResponse({"error": _("Invalid payload")}, status=400)
+    try:
+        g = float(goal)
+        if g <= 0:
+            raise ValueError()
+    except Exception:
+        return JsonResponse({"error": _("Goal must be a positive number")}, status=400)
+    if mode not in {"closest", "higher", "lower"}:
+        mode = "closest"
+    s = request.user.settings
+    data = s.kpi_goals or {}
+    data[key] = {"goal": g, "mode": mode}
+    s.kpi_goals = data
+    s.save(update_fields=["kpi_goals"])
+    return JsonResponse({"ok": True, "kpi_goals": data}, status=200)
 
 
 # Add clear cache view

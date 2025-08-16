@@ -37,6 +37,7 @@ from .views import (
     account_balances_pivot_json, dashboard_kpis_json,
     financial_analysis_json, sync_system_adjustments,
     clear_transaction_cache_view, dashboard_returns_json,
+    kpi_goals_get, kpi_goals_update,
     # Transaction Estimation
     estimate_transaction_view,
     get_estimation_summaries,
@@ -134,6 +135,8 @@ urlpatterns = [
     path("dashboard/insights/", views.dashboard_insights_json, name="dashboard_insights_json"),
     path('dashboard/spending-by-category/', views.dashboard_spending_by_category_json, name='dashboard_spending_by_category_json'),
     path('dashboard/returns/', views.dashboard_returns_json, name='dashboard_returns_json'),
+    path("kpi/goals/", kpi_goals_get, name="kpi_goals_get"),
+    path("kpi/goals/update/", kpi_goals_update, name="kpi_goals_update"),
     path("financial-analysis/json/", financial_analysis_json, name="financial_analysis_json"),
     path("api/sync-adjustments/", sync_system_adjustments, name="sync_system_adjustments"),
     path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
