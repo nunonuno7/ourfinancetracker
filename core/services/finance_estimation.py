@@ -242,17 +242,22 @@ class FinanceEstimationService:
                 investments=Sum('amount', filter=Q(type='IV')) or Decimal('0')
             )
 
+            # Combined totals for calculations
+            transactions = {
+                'income': (real_transactions['income'] or Decimal('0')) + (estimated_transactions['income'] or Decimal('0')),
+                'expenses': (real_transactions['expenses'] or Decimal('0')) + (estimated_transactions['expenses'] or Decimal('0')),
+                'investments': (real_transactions['investments'] or Decimal('0')) + (estimated_transactions['investments'] or Decimal('0'))
+            }
+
             # Calculate savings difference
             savings_current = current_balances.get('Savings', Decimal('0'))
             savings_next = next_balances.get('Savings', Decimal('0'))
             savings_diff = savings_next - savings_current
 
-            # Use only real transactions to compute what is missing.
-            # Estimated transactions are ignored so the preview reflects
-            # what a re-estimation would produce.
-            income_inserted = abs(real_transactions['income'] or Decimal('0'))
-            expense_inserted = abs(real_transactions['expenses'] or Decimal('0'))
-            investment_inserted = real_transactions['investments'] or Decimal('0')
+            # Estimate missing expenses based on savings change
+            income_inserted = abs(transactions['income'] or Decimal('0'))
+            expense_inserted = abs(transactions['expenses'] or Decimal('0'))
+            investment_inserted = transactions['investments'] or Decimal('0')
 
             # Calculate expected expenses
             estimated_expenses = income_inserted - savings_diff - investment_inserted
