@@ -242,22 +242,17 @@ class FinanceEstimationService:
                 investments=Sum('amount', filter=Q(type='IV')) or Decimal('0')
             )
 
-            # Combined totals for calculations
-            transactions = {
-                'income': (real_transactions['income'] or Decimal('0')) + (estimated_transactions['income'] or Decimal('0')),
-                'expenses': (real_transactions['expenses'] or Decimal('0')) + (estimated_transactions['expenses'] or Decimal('0')),
-                'investments': (real_transactions['investments'] or Decimal('0')) + (estimated_transactions['investments'] or Decimal('0'))
-            }
-
             # Calculate savings difference
             savings_current = current_balances.get('Savings', Decimal('0'))
             savings_next = next_balances.get('Savings', Decimal('0'))
             savings_diff = savings_next - savings_current
 
-            # Estimate missing expenses based on savings change
-            income_inserted = abs(transactions['income'] or Decimal('0'))
-            expense_inserted = abs(transactions['expenses'] or Decimal('0'))
-            investment_inserted = transactions['investments'] or Decimal('0')
+            # Use only real transactions to compute what is missing.
+            # Estimated transactions are ignored so the preview reflects
+            # what a re-estimation would produce.
+            income_inserted = abs(real_transactions['income'] or Decimal('0'))
+            expense_inserted = abs(real_transactions['expenses'] or Decimal('0'))
+            investment_inserted = real_transactions['investments'] or Decimal('0')
 
             # Calculate expected expenses
             estimated_expenses = income_inserted - savings_diff - investment_inserted
@@ -276,23 +271,38 @@ class FinanceEstimationService:
                 period=period,
                 is_estimated=True
             ).first()
+            current_estimate = estimated_tx.amount if estimated_tx else None
+
+            matches_existing = (
+                estimated_tx is not None
+                and (
+                    (missing_expenses > 0 and abs(current_estimate - missing_expenses) <= Decimal('0.01'))
+                    or (missing_income > 0 and abs(current_estimate - missing_income) <= Decimal('0.01'))
+                )
+            )
 
             # Determine status
             status = 'balanced'
             status_message = 'Period is balanced'
             estimated_type = None
             estimated_amount = Decimal('0')
+            will_replace = False
 
-            if missing_expenses > 10:  # Threshold for missing expenses
+            if matches_existing:
+                missing_expenses = Decimal('0')
+                missing_income = Decimal('0')
+            elif missing_expenses > 10:  # Threshold for missing expenses
                 status = 'missing_expenses'
                 status_message = f'Missing €{missing_expenses:.0f} in expenses'
                 estimated_type = 'EX'
                 estimated_amount = missing_expenses
+                will_replace = estimated_tx is not None
             elif missing_income > 10:  # Threshold for missing income
                 status = 'missing_income'
                 status_message = f'Missing €{missing_income:.0f} in income'
                 estimated_type = 'IN'
                 estimated_amount = missing_income
+                will_replace = estimated_tx is not None
 
             return {
                 'period_id': period.id,
@@ -302,6 +312,8 @@ class FinanceEstimationService:
                 'estimated_type': estimated_type,
                 'estimated_amount': float(estimated_amount),
                 'has_estimated_transaction': estimated_tx is not None,
+                'will_replace': will_replace,
+                'current_estimate': float(current_estimate) if current_estimate is not None else None,
                 'estimated_transaction_id': estimated_tx.id if estimated_tx else None,
                 'details': {
                     'income_inserted': float(income_inserted),

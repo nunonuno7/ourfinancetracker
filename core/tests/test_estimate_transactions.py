@@ -159,7 +159,48 @@ def test_manual_transaction_after_estimate_triggers_reestimate_warning(
     service = FinanceEstimationService(user)
     summary = service.get_estimation_summary(period_aug)
     assert summary["has_estimated_transaction"] is True
+    assert summary["will_replace"] is True
     assert summary["status"] != "balanced"
+
+
+@pytest.mark.django_db
+def test_summary_balanced_when_estimate_matches(client, user, savings_account, category):
+    period_aug = make_period("2025-08")
+    period_sep = make_period("2025-09")
+    set_balance(savings_account, period_aug, Decimal("1000"))
+    set_balance(savings_account, period_sep, Decimal("1000"))
+
+    make_tx(
+        user=user,
+        account=savings_account,
+        category=category,
+        period=period_aug,
+        amount=Decimal("1000"),
+        tx_type="IN",
+    )
+    make_tx(
+        user=user,
+        account=savings_account,
+        category=category,
+        period=period_aug,
+        amount=Decimal("800"),
+        tx_type="EX",
+    )
+    make_tx(
+        user=user,
+        account=savings_account,
+        category=category,
+        period=period_aug,
+        amount=Decimal("200"),
+        tx_type="EX",
+        is_estimated=True,
+    )
+    service = FinanceEstimationService(user)
+    summary = service.get_estimation_summary(period_aug)
+    assert summary["status"] == "balanced"
+    assert summary["estimated_amount"] == pytest.approx(0)
+    assert summary["will_replace"] is False
+    assert summary["has_estimated_transaction"] is True
 
 
 @pytest.mark.django_db

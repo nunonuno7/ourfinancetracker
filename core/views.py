@@ -31,7 +31,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import connection, models, transaction as db_transaction
+from django.db import connection, models, transaction as db_transaction, IntegrityError
 from django.db.models import Q, Sum
 from django.db.models.query import QuerySet
 from django.http import (
@@ -3384,7 +3384,7 @@ def account_balance_template_xlsx(request):
 # ==============================================================================
 
 @login_required
-def estimate_transaction_view(request):
+def estimate_transaction_page(request):
     """Transaction estimation management view."""
     # Get available periods with account balances, excluding the most recent period
     # because we need the next period's data to estimate transactions
@@ -3403,6 +3403,84 @@ def estimate_transaction_view(request):
     }
 
     return render(request, 'core/estimate_transactions.html', context)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def transaction_estimate(request):
+    """Preview or create estimated transaction for a scope."""
+
+    data = request.GET if request.method == "GET" else json.loads(request.body or "{}")
+    period_id = data.get("period_id")
+    tx_type = data.get("type")
+    category_id = data.get("category_id")
+    account_id = data.get("account_id")
+
+    if not period_id or not tx_type:
+        return JsonResponse({"error": "period_id and type are required"}, status=400)
+
+    filter_kwargs = {
+        "user": request.user,
+        "period_id": period_id,
+        "type": tx_type,
+    }
+    if category_id:
+        filter_kwargs["category_id"] = category_id
+    if account_id:
+        filter_kwargs["account_id"] = account_id
+
+    actual_total = (
+        Transaction.objects.filter(**filter_kwargs)
+        .exclude(is_estimated=True)
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    current_tx = Transaction.objects.filter(**filter_kwargs, is_estimated=True).first()
+    current_amount = current_tx.amount if current_tx else None
+    will_replace = (
+        current_tx is not None
+        and abs(current_amount - actual_total) > Decimal("0.01")
+    )
+
+    if request.method == "GET":
+        response = {
+            "estimated_amount": float(actual_total),
+            "current_estimate": float(current_amount) if current_amount is not None else None,
+            "will_replace": will_replace,
+        }
+        if will_replace:
+            response["message"] = "An existing estimate will be replaced."
+        return JsonResponse(response)
+
+    # POST - create new estimated transaction
+    period = DatePeriod.objects.get(id=period_id)
+    try:
+        with db_transaction.atomic():
+            Transaction.objects.filter(**filter_kwargs, is_estimated=True).delete()
+            tx = Transaction.objects.create(
+                user=request.user,
+                type=tx_type,
+                amount=actual_total,
+                period=period,
+                date=period.get_last_day(),
+                category_id=category_id,
+                account_id=account_id,
+                is_estimated=True,
+            )
+    except IntegrityError:
+        tx = Transaction.objects.filter(**filter_kwargs, is_estimated=True).first()
+
+    clear_tx_cache(request.user.id, force=True)
+    return JsonResponse(
+        {
+            "estimated_amount": float(actual_total),
+            "transaction_id": tx.id,
+            "current_estimate": float(actual_total),
+            "will_replace": False,
+        },
+        status=201,
+    )
 
 
 @require_POST
