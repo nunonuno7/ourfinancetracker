@@ -1026,6 +1026,10 @@ document.addEventListener("DOMContentLoaded", () => {
       new bootstrap.Tooltip(el);
     });
 
+    if (window.recomputeKPICards) {
+      window.recomputeKPICards();
+    }
+
   };
 
   // Helper function to generate enhanced KPI tooltips
