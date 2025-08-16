@@ -38,7 +38,8 @@ from .views import (
     financial_analysis_json, sync_system_adjustments,
     clear_transaction_cache_view, dashboard_returns_json,
     # Transaction Estimation
-    estimate_transaction_view,
+    estimate_transaction_page,
+    transaction_estimate,
     get_estimation_summaries,
     estimate_transaction_for_period,
     delete_estimated_transaction,
@@ -83,7 +84,8 @@ urlpatterns = [
     path('transactions/bulk-delete/', transaction_bulk_delete, name='transaction_bulk_delete'),
 
     # Estimation endpoints
-    path('transactions/estimate/', views.estimate_transaction_view, name='estimate_transaction'),
+    path('transactions/estimate/manage/', views.estimate_transaction_page, name='estimate_transaction'),
+    path('transactions/estimate/', views.transaction_estimate, name='transaction_estimate'),
     path('transactions/estimate/period/', views.estimate_transaction_for_period, name='estimate_transaction_for_period'),
     path('transactions/estimate/summaries/', views.get_estimation_summaries, name='get_estimation_summaries'),
     path('transactions/estimate/years/', views.get_available_years, name='get_available_years'),
