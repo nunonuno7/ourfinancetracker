@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -15,5 +16,8 @@ class SignupForm(forms.Form):
 
     def clean_password(self):
         password = self.cleaned_data["password"]
-        validate_password(password)
+        user_model = get_user_model()
+        temp_user = user_model(username=self.cleaned_data.get("username", ""))
+        # The user instance is not saved to the database
+        validate_password(password, user=temp_user)
         return password
