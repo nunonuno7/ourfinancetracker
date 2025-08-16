@@ -38,10 +38,9 @@ from django.http import (
     Http404,
     HttpResponse,
     HttpResponseForbidden,
-    HttpResponseRedirect as redirect,
     JsonResponse,
 )
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils.timezone import now
 from django.views import View
