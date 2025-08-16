@@ -1,4 +1,4 @@
-{% extends "base.html" %} {% load static filtros %} {% block title %}Advanced Financial
+{% extends "base.html" %} {% load static filtros kpi %} {% block title %}Advanced Financial
 Dashboard{% endblock %} {% block extra_head %}
 <!-- Mobile-specific optimizations -->
 <meta name="format-detection" content="telephone=no">
@@ -7,6 +7,41 @@ Dashboard{% endblock %} {% block extra_head %}
 <meta name="format-detection" content="email=no">
 {% endblock %} {% block content %}
 <div class="container-fluid">
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card kpi-card position-relative">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <h6 class="mb-1">Average Income</h6>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="avg_income" aria-label="Configure Average Income">⚙️</button>
+          </div>
+          <div class="h4 mb-1">{{ avg_income_value|default:0|floatformat:2 }}</div>
+          {% kpi_progress avg_income_value user.settings.kpi_goals.avg_income.goal 'closest' as pct_income %}
+          <div class="progress kpi-progress mt-2 progress-xthin">
+            <div class="progress-bar bg-success {{ pct_income|kpi_width_class }}" role="progressbar" aria-valuenow="{{ pct_income }}" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card kpi-card position-relative">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <h6 class="mb-1">Expenses</h6>
+            <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="expenses" aria-label="Configure Expenses">⚙️</button>
+          </div>
+          <div class="h4 mb-1">{{ expenses_value|default:0|floatformat:2 }}</div>
+          {% kpi_progress expenses_value user.settings.kpi_goals.expenses.goal 'closest' as pct_exp %}
+          <div class="progress kpi-progress mt-2 progress-xthin">
+            <div class="progress-bar bg-danger {{ pct_exp|kpi_width_class }}" role="progressbar" aria-valuenow="{{ pct_exp }}" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
     <div class="btn-group btn-group-sm" role="group">
       <button id="historyBtn" type="button" class="btn {% if mode != 'period' %}btn-primary{% else %}btn-outline-primary{% endif %}">
@@ -1492,9 +1527,10 @@ Dashboard{% endblock %} {% block extra_head %}
     window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(p)}`;
   });
 
-  document.getElementById('periodPicker')?.addEventListener('change', function () {
-    window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(this.value)}`;
-  });
-</script>
-<script type="module" src="{% static 'js/dashboard.js' %}" nonce="{{ request.csp_nonce }}"></script>
-{% endblock %}
+    document.getElementById('periodPicker')?.addEventListener('change', function () {
+      window.location.href = `/dashboard/?mode=period&period=${encodeURIComponent(this.value)}`;
+    });
+  </script>
+  {% include "core/partials/kpi_goals_modal.html" %}
+  <script type="module" src="{% static 'js/dashboard.js' %}" nonce="{{ request.csp_nonce }}"></script>
+  {% endblock %}
