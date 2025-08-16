@@ -1,0 +1,58 @@
+<h1 class="mt-3 mb-3">Made for the Lazy: Manage Your Money with 3 Simple Steps</h1>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <p class="mb-3">
+      This app is designed for busy (or lazy!) people who still want control over their finances with minimum effort.
+      If you only do three things each month, the app can compute the rest for you.
+    </p>
+
+    <h2 class="h5 mb-2">Only 3 things you must do every month</h2>
+    <ol class="mb-3">
+      <li><strong>Enter the balances of your accounts</strong> (bank and cash; investment accounts too if you track them).</li>
+      <li><strong>Enter all your incomes</strong> for the month.</li>
+      <li><strong>Record investment flows</strong> (money you move into investments and money you withdraw back).</li>
+    </ol>
+
+    <h2 class="h5 mb-2">No time to enter expenses? We’ll estimate them.</h2>
+    <p class="mb-2">
+      The app estimates your <strong>total monthly expenses</strong> from your balances and known cash flows.
+      It uses <em>only non-investment (cash/bank)</em> accounts for this calculation and treats investment flows explicitly.
+    </p>
+
+    <h3 class="h6 mb-1">Formula (expenses estimate)</h3>
+    <pre class="mb-3"><code>
+Let:
+  CashStart   = sum of non-investment (bank/cash) balances on the first day of the month
+  CashEnd     = sum of non-investment balances on the last day of the month
+  Incomes     = total Income recorded in the month
+  InvestOut   = total moved from cash → investments during the month
+  InvestIn    = total moved from investments → cash during the month
+
+EstimatedExpenses = CashStart + Incomes + InvestIn − InvestOut − CashEnd
+    </code></pre>
+
+    <p class="mb-3">
+      Intuition: starting cash plus money coming in (incomes and investment withdrawals),
+      minus money you set aside into investments, minus the cash you still have at month end,
+      equals the cash you must have spent.
+    </p>
+
+    <h3 class="h6 mb-1">If you add expenses manually</h3>
+    <p class="mb-3">
+      You can record expenses whenever you like. The app then shows the remaining estimate:
+      <code>EstimatedExpensesRemaining = max(0, EstimatedExpenses − Sum(EnteredExpenses))</code>.
+      As you add real expenses, the estimated amount shrinks accordingly.
+    </p>
+
+    <h2 class="h5 mb-2">Assumptions & tips</h2>
+    <ul class="mb-0">
+      <li>Use balances for <strong>non-investment</strong> accounts to drive the estimate (bank + wallet). Investment market changes are <em>not</em> treated as expenses.</li>
+      <li>Transfers between non-investment accounts net to zero and don’t affect the estimate.</li>
+      <li>Provide month-open and month-close balances (or consecutive monthly snapshots) so the math is consistent.</li>
+      <li>If you want full detail, add expenses; if not, the estimate still gives you a reliable monthly spend number.</li>
+    </ul>
+  </div>
+</div>
+
+{% comment %}Optional CTAs omitted: required URL names unavailable{% endcomment %}
