@@ -20,7 +20,7 @@ class RateLimitMiddleware(MiddlewareMixin):
 
         # Check if this path needs rate limiting
         for limited_path, limits in self.RATE_LIMITS.items():
-            if limited_path in path:
+            if path == limited_path:
                 cache_key = f"rate_limit:{request.user.id}:{limited_path}"
                 current_time = int(time.time())
                 window_start = current_time - limits['window']
@@ -41,5 +41,7 @@ class RateLimitMiddleware(MiddlewareMixin):
                 # Add current request
                 requests.append(current_time)
                 cache.set(cache_key, requests, limits['window'])
+
+                break
 
         return None
