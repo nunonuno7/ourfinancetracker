@@ -146,6 +146,22 @@ def test_estimated_transaction_is_visible_on_transactions_v2_page(
 
 
 @pytest.mark.django_db
+def test_estimate_marks_period_balanced_when_missing_covered(
+    client, user, savings_account
+):
+    period_aug = make_period("2025-08")
+    period_sep = make_period("2025-09")
+    set_balance(savings_account, period_aug, Decimal("1000"))
+    set_balance(savings_account, period_sep, Decimal("800"))
+
+    run_estimate_for(client, period_aug)
+    service = FinanceEstimationService(user)
+    summary = service.get_estimation_summary(period_aug)
+    assert summary["status"] == "balanced"
+    assert Decimal(str(summary["details"]["currently_estimating"])) == Decimal("200")
+
+
+@pytest.mark.django_db
 def test_manual_transaction_after_estimate_triggers_reestimate_warning(
     client, user, savings_account, category
 ):

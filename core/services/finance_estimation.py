@@ -251,38 +251,69 @@ class FinanceEstimationService:
             expense_inserted = abs(real_transactions["expenses"] or Decimal("0"))
             investment_inserted = real_transactions["investments"] or Decimal("0")
 
-            # Calculate expected expenses
+            # Calculate expected expenses based on real transactions
             estimated_expenses = income_inserted - savings_diff - investment_inserted
             missing_expenses = max(Decimal("0"), estimated_expenses - expense_inserted)
             # If the recorded expenses exceed the expected value we are actually
-            # missing income. Previously this branch only triggered when the
-            # estimated expenses were negative which caused periods with extra
-            # expenses (e.g. after adding a real transaction on top of an
-            # estimated one) to be reported as balanced.  Compare the inserted
-            # expenses against the expected amount to detect this situation.
+            # missing income. Compare the inserted expenses against the expected
+            # amount to detect this situation.
             missing_income = max(Decimal("0"), expense_inserted - estimated_expenses)
+
+            # Existing estimated transactions
+            estimated_expense_tx = abs(estimated_transactions["expenses"] or Decimal("0"))
+            estimated_income_tx = abs(estimated_transactions["income"] or Decimal("0"))
+
+            missing_expenses_after = max(
+                Decimal("0"), missing_expenses - estimated_expense_tx
+            )
+            missing_income_after = max(
+                Decimal("0"), missing_income - estimated_income_tx
+            )
 
             # Check if there's an estimated transaction
             estimated_tx = Transaction.objects.filter(
                 user=self.user, period=period, is_estimated=True
             ).first()
 
-            # Determine status
+            # Determine status based on remaining missing amounts
             status = "balanced"
             status_message = "Period is balanced"
             estimated_type = None
             estimated_amount = Decimal("0")
 
-            if missing_expenses > 10:  # Threshold for missing expenses
+            if missing_expenses > 10:
                 status = "missing_expenses"
                 status_message = f"Missing €{missing_expenses:.0f} in expenses"
                 estimated_type = "EX"
                 estimated_amount = missing_expenses
-            elif missing_income > 10:  # Threshold for missing income
+            elif missing_income > 10:
                 status = "missing_income"
                 status_message = f"Missing €{missing_income:.0f} in income"
                 estimated_type = "IN"
                 estimated_amount = missing_income
+
+            # If current estimate matches missing amounts, consider balanced
+            if (
+                status == "missing_expenses"
+                and estimated_expense_tx == missing_expenses
+                and missing_income <= 10
+            ) or (
+                status == "missing_income"
+                and estimated_income_tx == missing_income
+                and missing_expenses <= 10
+            ):
+                status = "balanced"
+                status_message = "Period is balanced"
+                estimated_type = None
+                estimated_amount = Decimal("0")
+
+            # Currently estimating value: existing estimate if present, otherwise amount still missing
+            existing_estimate_amount = (
+                estimated_expense_tx if estimated_expense_tx > 0 else estimated_income_tx
+            )
+            currently_estimating = (
+                existing_estimate_amount if existing_estimate_amount > 0 else estimated_amount
+            )
 
             return {
                 "period_id": period.id,
@@ -300,9 +331,9 @@ class FinanceEstimationService:
                     "savings_current": float(savings_current),
                     "savings_next": float(savings_next),
                     "estimated_expenses": float(estimated_expenses),
-                    "missing_expenses": float(missing_expenses),
-                    "missing_income": float(missing_income),
-                    "currently_estimating": float(estimated_amount),
+                    "missing_expenses": float(missing_expenses_after),
+                    "missing_income": float(missing_income_after),
+                    "currently_estimating": float(currently_estimating),
                     # Real vs Estimated breakdown
                     "real_income": float(
                         abs(real_transactions["income"] or Decimal("0"))
