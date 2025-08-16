@@ -3429,12 +3429,8 @@ def transaction_estimate(request):
     if account_id:
         filter_kwargs["account_id"] = account_id
 
-    actual_total = (
-        Transaction.objects.filter(**filter_kwargs)
-        .exclude(is_estimated=True)
-        .aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
+    base_qs = Transaction.objects.filter(**filter_kwargs).exclude(is_estimated=True)
+    estimated_amount = base_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     current_tx = Transaction.objects.filter(**filter_kwargs, is_estimated=True).first()
     current_amount = current_tx.amount if current_tx else None
@@ -3442,7 +3438,7 @@ def transaction_estimate(request):
 
     if request.method == "GET":
         response = {
-            "estimated_amount": float(actual_total),
+            "estimated_amount": float(estimated_amount),
             "current_estimate": float(current_amount) if current_amount is not None else None,
             "will_replace": will_replace,
         }
@@ -3454,11 +3450,15 @@ def transaction_estimate(request):
     period = DatePeriod.objects.get(id=period_id)
     try:
         with db_transaction.atomic():
-            Transaction.objects.filter(**filter_kwargs, is_estimated=True).delete()
+            existing = Transaction.objects.select_for_update().filter(
+                **filter_kwargs, is_estimated=True
+            )
+            if existing.exists():
+                existing.delete()
             tx = Transaction.objects.create(
                 user=request.user,
                 type=tx_type,
-                amount=actual_total,
+                amount=estimated_amount,
                 period=period,
                 date=period.get_last_day(),
                 category_id=category_id,
@@ -3471,9 +3471,9 @@ def transaction_estimate(request):
     clear_tx_cache(request.user.id, force=True)
     return JsonResponse(
         {
-            "estimated_amount": float(actual_total),
+            "estimated_amount": float(estimated_amount),
             "transaction_id": tx.id,
-            "current_estimate": float(actual_total),
+            "current_estimate": float(estimated_amount),
             "will_replace": False,
         },
         status=201,
