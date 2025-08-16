@@ -1,47 +1,56 @@
-import time
+"""Simple rate limiting middleware for selected endpoints."""
+
 from django.http import JsonResponse
 from django.core.cache import cache
 from django.utils.deprecation import MiddlewareMixin
 
+
 class RateLimitMiddleware(MiddlewareMixin):
-    """Rate limiting for heavy API endpoints"""
+    """Apply per-user/IP rate limits on selected paths."""
 
     RATE_LIMITS = {
-        '/transactions/totals-v2/': {'requests': 30, 'window': 60},  # 30 requests per minute
-        '/dashboard/kpis/': {'requests': 20, 'window': 60},          # 20 requests per minute
-        '/transactions/json': {'requests': 50, 'window': 60},        # 50 requests per minute
+        '/transactions/totals-v2/': {"requests": 30, "window": 60, "scope": "user"},
+        '/dashboard/kpis/': {"requests": 20, "window": 60, "scope": "user"},
+        '/transactions/json': {"requests": 50, "window": 60, "scope": "user"},
+        '/accounts/login/': {"requests": 5, "window": 60, "scope": "ip+username"},
+        '/accounts/signup/': {"requests": 5, "window": 60, "scope": "ip"},
     }
 
-    def process_request(self, request):
-        if not hasattr(request, 'user') or not request.user.is_authenticated:
-            return None
+    @staticmethod
+    def _get_client_ip(request):
+        """Return best-effort client IP."""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR', '')
 
+    def process_request(self, request):  # noqa: C901 - small middleware
         path = request.path
 
-        # Check if this path needs rate limiting
         for limited_path, limits in self.RATE_LIMITS.items():
-            if path == limited_path:
-                cache_key = f"rate_limit:{request.user.id}:{limited_path}"
-                current_time = int(time.time())
-                window_start = current_time - limits['window']
+            if path != limited_path:
+                continue
 
-                # Get current request timestamps
-                requests = cache.get(cache_key, [])
+            scope = limits.get('scope', 'user')
+            identifier = None
+            if scope == 'user':
+                if not getattr(request, 'user', None) or not request.user.is_authenticated:
+                    return None
+                identifier = request.user.id
+            elif scope == 'ip':
+                identifier = self._get_client_ip(request)
+            elif scope == 'ip+username':
+                identifier = f"{self._get_client_ip(request)}:{request.POST.get('username', '')}"
 
-                # Filter out old requests
-                requests = [req_time for req_time in requests if req_time > window_start]
+            if not identifier:
+                return None
 
-                # Check if limit exceeded
-                if len(requests) >= limits['requests']:
-                    return JsonResponse({
-                        'error': 'Rate limit exceeded',
-                        'detail': f"Maximum {limits['requests']} requests per {limits['window']} seconds"
-                    }, status=429)
-
-                # Add current request
-                requests.append(current_time)
-                cache.set(cache_key, requests, limits['window'])
-
-                break
+            cache_key = f"rate_limit:{identifier}:{limited_path}"
+            # Initialize key with timeout if absent, then increment atomically
+            cache.add(cache_key, 0, limits['window'])
+            count = cache.incr(cache_key)
+            if count > limits['requests']:
+                return JsonResponse({'detail': 'Too many requests'}, status=429)
+            break
 
         return None
