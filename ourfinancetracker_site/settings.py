@@ -312,12 +312,15 @@ else:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+    SECURE_CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp"
 
     # Cookies & CSRF
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_HTTPONLY = True
     CSRF_COOKIE_HTTPONLY = True  # muda para False se precisares de ler via JS
 
 
