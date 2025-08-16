@@ -3410,6 +3410,11 @@ def estimate_transaction_page(request):
 def transaction_estimate(request):
     """Preview or create estimated transaction for a scope."""
 
+    from .services.transaction_estimate import (
+        EstimationService,
+        MissingAmountService,
+    )
+
     data = request.GET if request.method == "GET" else json.loads(request.body or "{}")
     period_id = data.get("period_id")
     tx_type = data.get("type")
@@ -3430,16 +3435,41 @@ def transaction_estimate(request):
         filter_kwargs["account_id"] = account_id
 
     base_qs = Transaction.objects.filter(**filter_kwargs).exclude(is_estimated=True)
-    estimated_amount = base_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    actual_total = base_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-    current_tx = Transaction.objects.filter(**filter_kwargs, is_estimated=True).first()
-    current_amount = current_tx.amount if current_tx else None
-    will_replace = current_tx is not None
+    existing_estimate = (
+        Transaction.objects.filter(**filter_kwargs, is_estimated=True)
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    estimation_service = EstimationService()
+    missing_service = MissingAmountService()
+
+    scope = {
+        "period_id": period_id,
+        "type": tx_type,
+        "category_id": category_id,
+        "account_id": account_id,
+    }
+
+    preview_estimate = estimation_service.compute(scope, base_amount=actual_total)
+    missing_before = missing_service.compute(scope, ignore_estimates=True)
+    delta = preview_estimate - existing_estimate
+    missing_after = missing_before - delta
+    if missing_after < 0:
+        missing_after = Decimal("0")
+
+    will_replace = existing_estimate != 0
 
     if request.method == "GET":
         response = {
-            "estimated_amount": float(estimated_amount),
-            "current_estimate": float(current_amount) if current_amount is not None else None,
+            "currently_estimating": float(preview_estimate),
+            "current_estimate": float(existing_estimate)
+            if will_replace
+            else None,
+            "delta": float(delta),
+            "missing": float(missing_after),
             "will_replace": will_replace,
         }
         if will_replace:
@@ -3458,7 +3488,7 @@ def transaction_estimate(request):
             tx = Transaction.objects.create(
                 user=request.user,
                 type=tx_type,
-                amount=estimated_amount,
+                amount=preview_estimate,
                 period=period,
                 date=period.get_last_day(),
                 category_id=category_id,
@@ -3471,9 +3501,11 @@ def transaction_estimate(request):
     clear_tx_cache(request.user.id, force=True)
     return JsonResponse(
         {
-            "estimated_amount": float(estimated_amount),
+            "currently_estimating": float(preview_estimate),
             "transaction_id": tx.id,
-            "current_estimate": float(estimated_amount),
+            "current_estimate": float(preview_estimate),
+            "delta": 0.0,
+            "missing": float(missing_after),
             "will_replace": False,
         },
         status=201,
