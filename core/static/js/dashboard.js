@@ -2456,8 +2456,25 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Export functions
-  document.getElementById('export-excel')?.addEventListener('click', () => {
-    window.location.href = '/account-balance/export/';
+  const exportExcelBtn = document.getElementById('export-excel');
+  exportExcelBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const baseUrl = exportExcelBtn.getAttribute('href');
+    if (periodSlider?.noUiSlider) {
+      const [start, end] = periodSlider.noUiSlider.get();
+      const formatPeriodForApi = (period) => {
+        const [month, year] = period.split('/');
+        const fullYear = 2000 + parseInt(year);
+        const monthNum = getMonthNumberInt(month);
+        const monthString = monthNum.toString().padStart(2, '0');
+        return `${fullYear}-${monthString}`;
+      };
+      const startParam = formatPeriodForApi(start);
+      const endParam = formatPeriodForApi(end);
+      window.location.href = `${baseUrl}?start=${startParam}&end=${endParam}`;
+    } else {
+      window.location.href = baseUrl;
+    }
   });
 
   document.getElementById('export-pdf')?.addEventListener('click', () => {

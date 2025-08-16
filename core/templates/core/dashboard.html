@@ -1039,9 +1039,13 @@ Dashboard{% endblock %} {% block extra_head %}
             <i class="fas fa-table"></i> Detailed Monthly Analysis
           </h5>
           <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" id="export-excel">
+            <a
+              class="btn btn-outline-secondary"
+              id="export-excel"
+              href="{% url 'account_balance_export_xlsx' %}"
+            >
               <i class="fas fa-file-excel"></i> Excel
-            </button>
+            </a>
             <button class="btn btn-outline-secondary" id="export-pdf">
               <i class="fas fa-file-pdf"></i> PDF
             </button>
