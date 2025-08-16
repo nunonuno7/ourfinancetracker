@@ -9,8 +9,8 @@ class TestCSPHeaders(SimpleTestCase):
 
     def _get_ok_url(self):
         # Prefer a cheap endpoint that returns 200 without auth.
-        # Use /healthz/ if it exists; fallback to "/" otherwise.
-        for url in ("/healthz/", "/"):
+        # Use /healthz if it exists; fallback to "/" otherwise.
+        for url in ("/healthz", "/"):
             resp = self.client.get(url)
             if resp.status_code < 500:
                 return url
