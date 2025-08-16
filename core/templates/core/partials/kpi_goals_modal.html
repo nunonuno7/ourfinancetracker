@@ -1,0 +1,30 @@
+<div class="modal fade" id="kpiGoalsModal" tabindex="-1" aria-labelledby="kpiGoalsModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="kpiGoalsForm" method="post">
+      {% csrf_token %}
+      <div class="modal-header">
+        <h5 class="modal-title" id="kpiGoalsModalLabel">Configure KPI Goal</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="kpi_key" id="kpiKeyInput">
+        <div class="mb-3">
+          <label for="kpiGoalInput" class="form-label">Goal</label>
+          <input type="number" step="any" class="form-control" name="goal" id="kpiGoalInput">
+        </div>
+        <div class="mb-3">
+          <label for="kpiModeSelect" class="form-label">Mode</label>
+          <select class="form-select" name="mode" id="kpiModeSelect">
+            <option value="higher">Higher</option>
+            <option value="lower">Lower</option>
+            <option value="closest">Closest</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>

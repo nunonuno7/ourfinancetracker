@@ -385,6 +385,7 @@ class UserSettings(models.Model):
         default=1,
         help_text="Day of month considered the start for budgeting",
     )
+    kpi_goals = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"Settings for {self.user}"

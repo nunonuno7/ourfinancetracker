@@ -1026,12 +1026,6 @@ document.addEventListener("DOMContentLoaded", () => {
       new bootstrap.Tooltip(el);
     });
 
-    // Update progress bars and trends with error handling
-    try {
-      updateProgressBarsAndTrends(data);
-    } catch (error) {
-      console.warn('⚠️ Error updating progress bars:', error);
-    }
   };
 
   // Helper function to generate enhanced KPI tooltips
@@ -1093,60 +1087,6 @@ document.addEventListener("DOMContentLoaded", () => {
       default:
         return `<strong>${value}</strong><br><small>Financial metric</small>`;
     }
-  };
-
-  const updateProgressBarsAndTrends = (data) => {
-    // Extract numeric values for progress calculation
-    const income = parseFloat(data.receita_media?.replace(/[^\d.-]/g, '') || 0);
-    const expense = parseFloat(data.despesa_estimada_media?.replace(/[^\d.-]/g, '') || 0);
-    const invested = parseFloat(data.valor_investido_total?.replace(/[^\d.-]/g, '') || 0);
-    const netWorth = parseFloat(data.patrimonio_total?.replace(/[^\d.-]/g, '') || 0);
-    const savingsRate = income > 0 ? ((income - expense) / income * 100) : 0;
-
-    // Calculate progress percentages (normalized to reasonable ranges)
-    const verifiedPct = parseFloat(data.despesas_justificadas_pct) || 0;
-
-    const progressBars = {
-      'receita-progress': Math.min(100, (income / 3000) * 100),
-      'despesa-progress': Math.min(100, (expense / 2500) * 100),
-      'verified-progress': Math.min(100, verifiedPct),
-      'investido-progress': Math.min(100, (invested / 20000) * 100),
-      'patrimonio-progress': Math.min(100, (netWorth / 25000) * 100),
-      'poupanca-progress': Math.min(100, savingsRate * 2)
-    };
-
-    Object.entries(progressBars).forEach(([id, width]) => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.style.width = `${width}%`;
-        element.style.transition = 'width 0.5s ease';
-      }
-    });
-
-    // Add trend indicators (mock data for now)
-    const trends = {
-      'receita-change': '+5.2% vs previous month',
-      'despesa-change': '-2.1% vs previous month',
-      'verified-change':
-        verifiedPct >= 90
-          ? '✅ Mostly verified'
-          : verifiedPct >= 75
-            ? '👍 Low estimation'
-            : verifiedPct >= 50
-              ? 'ℹ️ Moderate verification'
-              : '⚠️ Many estimated expenses',
-      'investido-change': '+12.5% this year',
-      'patrimonio-change': '+8.7% vs previous month',
-      'poupanca-change': savingsRate >= 20 ? '🎯 Excellent' : '⚠️ Can improve'
-    };
-
-    Object.entries(trends).forEach(([id, text]) => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.textContent = text;
-        element.style.fontSize = '0.75rem';
-      }
-    });
   };
 
   const updateCharts = async () => {
