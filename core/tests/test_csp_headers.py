@@ -47,3 +47,10 @@ class TestCSPHeaders(SimpleTestCase):
         # Heuristic: count occurrences of 'default-src' or the final semicolon blocks
         assert csp.count("default-src") == 1, f"CSP appears duplicated: {csp}"
 
+
+    def test_csp_header_contains_script_src(self):
+        url = self._get_ok_url()
+        resp = self.client.get(url)
+        csp = resp.headers.get("Content-Security-Policy")
+        assert csp
+        assert "script-src" in csp
