@@ -473,40 +473,25 @@ class EstimationManager {
         const expectedText = this.formatCurrency(expectedExpenses);
         const actualExpensesText = this.formatCurrency(combinedExpenses);
 
-        // Show formula for expected expenses
-        logicFormulaElement.text(`${incomeText} ${savingsDiff >= 0 ? '-' : '+'} ${savingsText} - ${investmentText} = ${expectedText}`);
+        const expectedFormula = `${incomeText} ${savingsDiff >= 0 ? '-' : '+'} ${savingsText} - ${investmentText} = ${expectedText}`;
+        let missingFormula = '';
 
         if (missingExpenses > 0.01) {
-            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) are lower than expected (${expectedText}), resulting in missing expenses of ${this.formatCurrency(missingExpenses)}.`);
+            const missingText = this.formatCurrency(missingExpenses);
+            logicExplanationElement.text(`Expected expenses (${expectedText}) - recorded expenses (${actualExpensesText}) = missing expenses of ${missingText}.`);
+            missingFormula = `${expectedText} - ${actualExpensesText} = ${missingText}`;
         } else if (missingIncome > 0.01) {
-            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) exceed expected (${expectedText}), resulting in missing income of ${this.formatCurrency(missingIncome)}.`);
+            const missingText = this.formatCurrency(missingIncome);
+            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) - expected expenses (${expectedText}) = missing income of ${missingText}.`);
+            missingFormula = `${actualExpensesText} - ${expectedText} = ${missingText}`;
         } else {
             logicExplanationElement.text('Recorded and expected expenses match; no missing transactions detected.');
         }
 
-        // Logic explanation for missing transactions
-        const logicExplanationElement = $('#logic-explanation');
-        const logicFormulaElement = $('#logic-formula');
-
-        const expectedExpenses = details.estimated_expenses || 0;
-        const missingExpenses = details.missing_expenses || 0;
-        const missingIncome = details.missing_income || 0;
-
-        const incomeText = this.formatCurrency(combinedIncome);
-        const savingsText = this.formatCurrency(Math.abs(savingsDiff));
-        const investmentText = this.formatCurrency(combinedInvestments);
-        const expectedText = this.formatCurrency(expectedExpenses);
-        const actualExpensesText = this.formatCurrency(combinedExpenses);
-
-        // Show formula for expected expenses
-        logicFormulaElement.text(`${incomeText} ${savingsDiff >= 0 ? '-' : '+'} ${savingsText} - ${investmentText} = ${expectedText}`);
-
-        if (missingExpenses > 0.01) {
-            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) are lower than expected (${expectedText}), resulting in missing expenses of ${this.formatCurrency(missingExpenses)}.`);
-        } else if (missingIncome > 0.01) {
-            logicExplanationElement.text(`Recorded expenses (${actualExpensesText}) exceed expected (${expectedText}), resulting in missing income of ${this.formatCurrency(missingIncome)}.`);
+        if (missingFormula) {
+            logicFormulaElement.html(`${expectedFormula}<br>${missingFormula}`);
         } else {
-            logicExplanationElement.text('Recorded and expected expenses match; no missing transactions detected.');
+            logicFormulaElement.text(expectedFormula);
         }
 
         // Show modal
