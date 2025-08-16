@@ -13,6 +13,7 @@ This repository contains the source code for **ourfinancetracker**, a Django app
 - Automatic expense estimates based on balance
 - Multi-currency with support for different account types
 - Reports based on monthly periods
+- KPI progress bars tied to user-configurable goals
 - Responsive interface with dynamic forms
 
 ## 🏗️ Tech stack
