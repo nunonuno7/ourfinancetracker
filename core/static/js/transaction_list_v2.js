@@ -60,6 +60,9 @@ class TransactionManager {
     this.bulkMode = false;
     this.maxPageSize = 1000; // Maximum safety limit
 
+    this.groupBy = 'none';
+    this.lastData = null;
+
     // Sorting state
     this.sortField = "date";
     this.sortDirection = "desc"; // 'asc' or 'desc'
@@ -89,6 +92,11 @@ class TransactionManager {
 
     this.bindEvents();
     console.log("🔗 [init] Event listeners connected");
+
+    if (window.innerWidth < 992) {
+      this.groupBy = 'category';
+      $('#group-by-selector').val('category');
+    }
 
     this.loadTransactions();
     this.loadTotals();
@@ -151,6 +159,13 @@ class TransactionManager {
     $("#page-size-selector").on("change", (e) =>
       this.changePageSize(e.target.value),
     );
+
+    $("#group-by-selector").on("change", (e) => {
+      this.groupBy = e.target.value;
+      if (this.lastData) {
+        this.renderTransactions(this.lastData);
+      }
+    });
 
     // Buttons
     $("#apply-filters-btn").on("click", () => this.loadTransactions());
@@ -576,6 +591,7 @@ class TransactionManager {
 
       const data = await response.json();
       console.log("📊 [loadTransactions] Full response data:", data);
+      this.lastData = data;
 
       if (!data.transactions) {
         console.log("⚠️ [loadTransactions] No transactions key in response");
@@ -670,6 +686,8 @@ class TransactionManager {
     console.group("🎨 [renderTransactions] RENDERING STARTED");
     console.log("Timestamp:", new Date().toISOString());
 
+    this.lastData = data;
+
     console.log("📋 DATA VALIDATION:");
     console.table({
       hasData: !!data,
@@ -707,9 +725,43 @@ class TransactionManager {
 
     console.log("✏️ CREATING", data.transactions.length, "TABLE ROWS");
 
+    const transactions = data.transactions.slice();
+
+    if (this.groupBy && this.groupBy !== 'none') {
+      const groups = new Map();
+      transactions.forEach((tx) => {
+        const key = this.getGroupKey(tx);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tx);
+      });
+
+      const sorted = Array.from(groups.entries()).sort((a, b) =>
+        a[0].localeCompare(b[0])
+      );
+
+      sorted.forEach(([key, items]) => {
+        const total = items.reduce(
+          (sum, t) => sum + parseFloat(t.amount),
+          0
+        );
+        const header = this.createGroupHeader(key, items.length, total);
+        tbody.append(header);
+        items.forEach((tx, idx) => {
+          try {
+            const row = this.createTransactionRow(tx, idx);
+            tbody.append(row);
+          } catch (error) {
+            console.error(`❌ Error creating row:`, error);
+          }
+        });
+      });
+
+      this.finishRendering(data);
+      return;
+    }
+
     // Performance optimization for large datasets
     const batchSize = 50;
-    const transactions = data.transactions;
 
     if (transactions.length > batchSize) {
       // Render in batches for better performance
@@ -946,6 +998,34 @@ class TransactionManager {
     const row = template.content.firstElementChild;
     row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
     return row;
+  }
+
+  createGroupHeader(name, count, total) {
+    const template = document.createElement('template');
+    const totalFormatted = total.toFixed(2);
+    template.innerHTML = `
+      <tr class="group-header d-lg-none">
+        <td colspan="9">
+          <div class="group-header-content">
+            <span>${escapeHtml(name)}</span>
+            <span>${count} tx · € ${totalFormatted}</span>
+          </div>
+        </td>
+      </tr>`;
+    return template.content.firstElementChild;
+  }
+
+  getGroupKey(tx) {
+    if (this.groupBy === 'category') {
+      return tx.category || 'Uncategorized';
+    }
+    if (this.groupBy === 'month') {
+      return tx.date ? tx.date.slice(0, 7) : 'Unknown';
+    }
+    if (this.groupBy === 'account') {
+      return tx.account || 'No account';
+    }
+    return '';
   }
 
   getTypeIcon(type) {
