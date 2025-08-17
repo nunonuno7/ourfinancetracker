@@ -80,16 +80,17 @@
 
         <!-- INVESTMENT FLOW -->
         <div class="mb-3 d-none" id="investment-flow">
-          <label class="form-label">Investment Flow</label>
+          <label class="form-label">{{ form.direction.label }}</label>
           <div class="btn-group w-100" role="group">
-            <input type="radio" class="btn-check" name="direction" id="dir_in" value="IN"
-                   {% if form.initial.direction != "OUT" %}checked{% endif %}>
+            <input type="radio" class="btn-check" name="{{ form.direction.name }}" id="dir_in" value="IN"
+                   {% if form.direction.value != "OUT" %}checked{% endif %}>
             <label class="btn btn-outline-success" for="dir_in">Reinforcement</label>
 
-            <input type="radio" class="btn-check" name="direction" id="dir_out" value="OUT"
-                   {% if form.initial.direction == "OUT" %}checked{% endif %}>
+            <input type="radio" class="btn-check" name="{{ form.direction.name }}" id="dir_out" value="OUT"
+                   {% if form.direction.value == "OUT" %}checked{% endif %}>
             <label class="btn btn-outline-danger" for="dir_out">Withdrawal</label>
           </div>
+          {% if form.direction.errors %}<div class="text-danger small">{{ form.direction.errors.0 }}</div>{% endif %}
         </div>
 
         <!-- CATEGORY -->

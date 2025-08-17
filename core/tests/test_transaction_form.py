@@ -55,6 +55,39 @@ def test_direction_applies_sign_for_investment():
 
 
 @pytest.mark.django_db
+def test_investment_requires_direction():
+    user = User.objects.create_user('u7')
+    data = {
+        'date': '2024-01-10',
+        'type': Transaction.Type.INVESTMENT,
+        'amount': '100',
+        'period': '2024-01',
+        'category': 'Invest',
+    }
+    form = TransactionForm(data=data, user=user)
+    assert not form.is_valid()
+    assert 'direction' in form.errors
+
+
+@pytest.mark.django_db
+def test_edit_form_preselects_direction():
+    user = User.objects.create_user('u8')
+    data = {
+        'date': '2024-01-10',
+        'type': Transaction.Type.INVESTMENT,
+        'amount': '50',
+        'direction': 'OUT',
+        'period': '2024-01',
+        'category': 'Invest',
+    }
+    form = TransactionForm(data=data, user=user)
+    assert form.is_valid(), form.errors
+    tx = form.save()
+    edit_form = TransactionForm(user=user, instance=tx)
+    assert edit_form['direction'].value() == 'OUT'
+
+
+@pytest.mark.django_db
 def test_invalid_and_valid_period():
     user = User.objects.create_user('u5')
     data = {

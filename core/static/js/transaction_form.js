@@ -227,12 +227,18 @@ function initTransactionForm() {
   }
 
   const flowDiv = document.getElementById("investment-flow");
+  const typeSelect = document.getElementById("id_type");
   const typeRadios = document.querySelectorAll('input[name="type"]');
-  if (flowDiv && typeRadios.length) {
-    function toggleFlow() {
+  if (flowDiv) {
+    const getTypeValue = () => {
+      if (typeSelect) return typeSelect.value;
       const selected = document.querySelector('input[name="type"]:checked');
-      flowDiv.classList.toggle("d-none", selected?.value !== "IV");
+      return selected ? selected.value : null;
+    };
+    function toggleFlow() {
+      flowDiv.classList.toggle("d-none", getTypeValue() !== "IV");
     }
+    typeSelect?.addEventListener("change", toggleFlow);
     typeRadios.forEach(r => r.addEventListener("change", toggleFlow));
     toggleFlow();
   }

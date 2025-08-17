@@ -84,6 +84,15 @@ class TransactionForm(forms.ModelForm):
         }),
     )
 
+    direction = forms.ChoiceField(
+        label=_("Investment Flow"),
+        required=False,
+        choices=(
+            ("IN", _("Reinforcement")),
+            ("OUT", _("Withdrawal")),
+        ),
+    )
+
     class Meta:
         model = Transaction
         fields = ["date", "type", "amount", "account", "category", "tags_input", "notes"]
@@ -145,6 +154,8 @@ class TransactionForm(forms.ModelForm):
             if "amount" not in self.initial and not self.data:
                 self.initial["amount"] = ""
 
+        self.fields["direction"].initial = self.initial.get("direction", "IN")
+
     def clean_amount(self) -> Decimal:
         raw = (self.data.get("amount") or "").strip()
         if raw == "":
@@ -167,9 +178,13 @@ class TransactionForm(forms.ModelForm):
         cleaned_data = super().clean()
         amount = cleaned_data.get("amount")
         type_ = cleaned_data.get("type")
+        direction = cleaned_data.get("direction")
 
         if amount is not None and type_ != Transaction.Type.INVESTMENT and amount < 0:
             self.add_error("amount", _("Negative amounts are not allowed."))
+
+        if type_ == Transaction.Type.INVESTMENT and direction not in {"IN", "OUT"}:
+            self.add_error("direction", _("Investment flow is required."))
 
     def clean_category(self):
         name = (self.cleaned_data.get("category") or "").strip()
@@ -198,7 +213,7 @@ class TransactionForm(forms.ModelForm):
 
         # Apply amount sign for investments
         if instance.type == Transaction.Type.INVESTMENT:
-            direction = self.data.get("direction", "IN")
+            direction = self.cleaned_data.get("direction", "IN")
             if direction == "OUT":
                 instance.amount = -abs(instance.amount)
             else:
