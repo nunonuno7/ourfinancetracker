@@ -1,41 +1,93 @@
-// transaction_form.js (versão final com tags com lista visível)
-
 function initTransactionForm() {
   const dateInput = document.getElementById("id_date");
   const periodInput = document.getElementById("id_period");
-  const monthSelector = document.getElementById("period-selector");
+  const monthSelector = document.getElementById("id_period");
   const prevBtn = document.getElementById("prev-month");
   const nextBtn = document.getElementById("next-month");
 
   if (!dateInput || !periodInput || !monthSelector) return;
 
-  // Inicializar data com hoje se estiver vazia
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
-const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
+  const isNewTransaction = window.location.pathname.endsWith("/transactions/new/");
 
-if (isNewTransaction) {
-  console.log("📅 Forçar data de hoje via JS:", todayStr);
-  dateInput.value = todayStr;
-}
+  if (isNewTransaction && !dateInput.value) {
+    dateInput.value = todayStr;
+  }
 
-  // Flatpickr com sincronização
+  // Função para sincronizar período com base na data
+  function syncPeriodFromDate() {
+    if (!dateInput.value) return;
+
+    let date;
+    
+    // Tentar diferentes formatos de data
+    if (dateInput.value.includes('/')) {
+      // Formato DD/MM/YYYY ou MM/DD/YYYY
+      const parts = dateInput.value.split('/');
+      if (parts.length === 3) {
+        // Assumir DD/MM/YYYY (formato português)
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]);
+        const year = parseInt(parts[2]);
+        date = new Date(year, month - 1, day); // month é 0-indexed no JavaScript
+      }
+    } else {
+      // Formato YYYY-MM-DD (ISO)
+      date = new Date(dateInput.value);
+    }
+
+    if (!date || isNaN(date.getTime())) return;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const periodValue = `${year}-${month}`;
+
+    monthSelector.value = periodValue;
+    periodInput.value = periodValue;
+
+    console.log(`📅 Sincronização: Data ${dateInput.value} → Período ${periodValue} (${year}/${month})`);
+  }
+
+  // Flatpickr com sincronização corrigida
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
-  flatpickr(dateInput, {
-    dateFormat: "Y-m-d",
-    defaultDate: dateInput.value,
-    altInput: true,
-    altFormat: "d/m/Y",
-    allowInput: true,
-    onChange: function (selectedDates) {
-      const selected = selectedDates[0];
-      if (!selected) return;
-      const year = selected.getFullYear();
-      const month = String(selected.getMonth() + 1).padStart(2, "0");
-      monthSelector.value = `${year}-${month}`;
-      periodInput.value = `${year}-${month}`;
-    },
-  });
+  
+  // Converter valor inicial se necessário
+  let initialDate = dateInput.value;
+  if (initialDate && initialDate.includes('/')) {
+    const parts = initialDate.split('/');
+    if (parts.length === 3) {
+      // Converter DD/MM/YYYY para YYYY-MM-DD
+      initialDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      dateInput.value = initialDate; // Atualizar o input com formato correto
+    }
+  }
+  
+  // ✅ Guard against missing Flatpickr (e.g. offline or CDN failure)
+  if (typeof flatpickr === "function") {
+    flatpickr(dateInput, {
+      dateFormat: "Y-m-d",
+      defaultDate: initialDate,
+      altInput: true,
+      altFormat: "d/m/Y",
+      allowInput: true,
+      onChange: function (selectedDates) {
+        if (selectedDates.length > 0) {
+          syncPeriodFromDate();
+        }
+      },
+      onReady: function () {
+        // Sincronizar período ao carregar
+        syncPeriodFromDate();
+      }
+    });
+  } else {
+    console.warn("⏭️ Flatpickr not loaded; skipping date picker init");
+  }
+
+  // Event listener para mudanças manuais na data
+  dateInput.addEventListener('change', syncPeriodFromDate);
+  dateInput.addEventListener('blur', syncPeriodFromDate);
 
   monthSelector.addEventListener("change", () => {
     const [year, month] = monthSelector.value.split("-");
@@ -45,7 +97,12 @@ if (isNewTransaction) {
     if (dateInput._flatpickr) {
       dateInput._flatpickr.setDate(newDate, true);
     }
+
+    console.log(`📅 Month selector change: Período ${monthSelector.value} → Data ${newDate}`);
   });
+
+  // Sincronização inicial
+  syncPeriodFromDate();
 
   prevBtn?.addEventListener("click", () => changeMonth(-1));
   nextBtn?.addEventListener("click", () => changeMonth(1));
@@ -65,7 +122,6 @@ if (isNewTransaction) {
     }
   }
 
-  // Tom Select Categoria
   const categoryInput = document.getElementById("id_category");
   if (categoryInput) {
     if (categoryInput.tomselect) categoryInput.tomselect.destroy();
@@ -73,17 +129,20 @@ if (isNewTransaction) {
     const rawList = categoryInput.dataset.categoryList || "";
     const options = rawList.split(",").map(name => ({ value: name.trim(), text: name.trim() }));
 
-    new TomSelect(categoryInput, {
-      create: true,
-      persist: false,
-      maxItems: 1,
-      options,
-      items: categoryInput.value ? [categoryInput.value] : [],
-      sortField: { field: "text", direction: "asc" },
-    });
+    if (typeof TomSelect === "function") {
+      new TomSelect(categoryInput, {
+        create: true,
+        persist: false,
+        maxItems: 1,
+        options,
+        items: categoryInput.value ? [categoryInput.value] : [],
+        sortField: { field: "text", direction: "asc" },
+      });
+    } else {
+      console.warn("⏭️ TomSelect not loaded; skipping category selector");
+    }
   }
 
-  // Tom Select Tags (agora com lista visível)
   const tagsInput = document.getElementById("id_tags_input");
   if (tagsInput) {
     if (tagsInput.tomselect) tagsInput.tomselect.destroy();
@@ -95,67 +154,104 @@ if (isNewTransaction) {
 
     const allTags = initialTags.map(name => ({ name }));
 
-    fetch("/tags/autocomplete/?q=")
-      .then(res => res.json())
-      .then(data => {
-        const tagOptions = [...new Set([...allTags, ...data])];
+    if (typeof TomSelect === "function") {
+      fetch("/tags/autocomplete/?q=")
+        .then(res => res.json())
+        .then(data => {
+          const tagOptions = [...new Set([...allTags, ...data])];
 
-        new TomSelect(tagsInput, {
-          plugins: ["remove_button"],
-          delimiter: ",",
-          persist: false,
-          create: true,
-          placeholder: "Add tags...",
-          valueField: "name",
-          labelField: "name",
-          searchField: "name",
-          preload: true,
-          options: tagOptions,
-          items: initialTags,
+          new TomSelect(tagsInput, {
+            plugins: ["remove_button"],
+            delimiter: ",",
+            persist: false,
+            create: true,
+            placeholder: "Add tags...",
+            valueField: "name",
+            labelField: "name",
+            searchField: "name",
+            preload: true,
+            options: tagOptions,
+            items: initialTags,
+          });
         });
-      });
+    } else {
+      console.warn("⏭️ TomSelect not loaded; skipping tags selector");
+    }
   }
 
-  // Format amount
   const amountInput = document.getElementById("id_amount");
   if (amountInput) {
     const formatNumber = (value) => {
-      if (value.endsWith(",") || value.endsWith(".")) return value;
-      const clean = value.replace(/[^\d,.-]/g, "").replace(",", ".");
-      const num = parseFloat(clean);
-      if (isNaN(num)) return value;
-      return num.toLocaleString("pt-PT", {
+      if (!value) return "";
+      const raw = value.trim().replace(/\s/g, "").replace("\u00A0", "");
+
+      let numeric;
+      if (raw.includes(",") && raw.includes(".")) {
+        numeric = parseFloat(raw.replace(/\./g, "").replace(",", "."));
+      } else if (raw.includes(",")) {
+        numeric = parseFloat(raw.replace(",", "."));
+      } else {
+        numeric = parseFloat(raw);
+      }
+
+      if (isNaN(numeric)) return value;
+
+      return numeric.toLocaleString("pt-PT", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
     };
 
     amountInput.addEventListener("blur", () => {
-      amountInput.value = formatNumber(amountInput.value);
+      const raw = amountInput.value.trim().replace(/\s/g, "").replace("\u00A0", "");
+      if (raw.startsWith("-")) return;  // ⛔ do not auto-format negative input
+      const formatted = formatNumber(raw);
+      if (formatted !== "") {
+        amountInput.value = formatted;
+      }
     });
 
     const form = document.getElementById("transaction-form");
-    form.addEventListener("submit", () => {
-      amountInput.value = amountInput.value
-        .replace(/\s/g, "")
-        .replace(/\./g, "")
-        .replace(",", ".");
+    form?.addEventListener("submit", () => {
+      const raw = amountInput.value.trim().replace(/\s/g, "").replace("\u00A0", "");
+      let numeric;
+      if (raw.includes(",") && raw.includes(".")) {
+        numeric = raw.replace(/\./g, "").replace(",", ".");
+      } else if (raw.includes(",")) {
+        numeric = raw.replace(",", ".");
+      } else {
+        numeric = raw;
+      }
+      amountInput.value = numeric;
     });
+  }
+
+  const flowDiv = document.getElementById("investment-flow");
+  const typeSelect = document.getElementById("id_type");
+  const typeRadios = document.querySelectorAll('input[name="type"]');
+  if (flowDiv) {
+    const getTypeValue = () => {
+      if (typeSelect) return typeSelect.value;
+      const selected = document.querySelector('input[name="type"]:checked');
+      return selected ? selected.value : null;
+    };
+    function toggleFlow() {
+      flowDiv.classList.toggle("d-none", getTypeValue() !== "IV");
+    }
+    typeSelect?.addEventListener("change", toggleFlow);
+    typeRadios.forEach(r => r.addEventListener("change", toggleFlow));
+    toggleFlow();
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  initTransactionForm();
-});
+document.addEventListener("DOMContentLoaded", initTransactionForm);
 
-// ⚡ Atualiza tabela após o formulário ser trocado por HTMX (criação bem-sucedida)
 document.body.addEventListener("htmx:afterSwap", function (event) {
-  initTransactionForm();
-
   const targetId = event.detail?.target?.id;
-  if (targetId === "transaction-form" && window.transactionTable) {
-    console.log("🔄 Reload da DataTable após HTMX swap do formulário de transação");
-    window.transactionTable.ajax.reload(null, false);
+  if (targetId === "transaction-form") {
+    initTransactionForm();
+    if (window.transactionTable) {
+      window.transactionTable.ajax.reload(null, false);
+    }
   }
 });
-
