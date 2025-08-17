@@ -86,16 +86,7 @@ class TransactionForm(forms.ModelForm):
 
     class Meta:
         model = Transaction
-        fields = [
-            "date",
-            "type",
-            "amount",
-            "account",
-            "category",
-            "tags_input",
-            "notes",
-            "investment_flow",
-        ]
+        fields = ["date", "type", "amount", "account", "category", "tags_input", "notes"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "type": forms.Select(attrs={"class": "form-select"}),
@@ -121,8 +112,6 @@ class TransactionForm(forms.ModelForm):
         ]
         self.fields["type"].required = True
 
-        self.fields["investment_flow"].required = False
-
         if self._user:
             self.fields["account"].queryset = Account.objects.filter(user=self._user).only("name")
         else:
@@ -143,10 +132,7 @@ class TransactionForm(forms.ModelForm):
             if self.instance.amount is not None:
                 if self.instance.type == Transaction.Type.INVESTMENT:
                     amount = self.instance.amount or Decimal("0.00")
-                    self.initial["investment_flow"] = (
-                        self.instance.investment_flow
-                        or ("OUT" if amount < 0 else "IN")
-                    )
+                    self.initial["direction"] = "OUT" if amount < 0 else "IN"
                     self.initial["amount"] = abs(amount)
                 else:
                     self.initial["amount"] = self.instance.amount
@@ -181,15 +167,9 @@ class TransactionForm(forms.ModelForm):
         cleaned_data = super().clean()
         amount = cleaned_data.get("amount")
         type_ = cleaned_data.get("type")
-        flow = cleaned_data.get("investment_flow")
 
         if amount is not None and type_ != Transaction.Type.INVESTMENT and amount < 0:
             self.add_error("amount", _("Negative amounts are not allowed."))
-
-        if type_ == Transaction.Type.INVESTMENT and not flow:
-            self.add_error("investment_flow", _("This field is required."))
-        if type_ != Transaction.Type.INVESTMENT:
-            cleaned_data["investment_flow"] = None
 
     def clean_category(self):
         name = (self.cleaned_data.get("category") or "").strip()
@@ -216,19 +196,13 @@ class TransactionForm(forms.ModelForm):
         if not self.cleaned_data.get("account"):
             instance.account = None
 
-        # Apply amount sign and flow for investments
+        # Apply amount sign for investments
         if instance.type == Transaction.Type.INVESTMENT:
-            flow = (
-                self.cleaned_data.get("investment_flow")
-                or Transaction.InvestmentFlow.REINFORCEMENT
-            )
-            instance.investment_flow = flow
-            if flow == Transaction.InvestmentFlow.WITHDRAWAL:
+            direction = self.data.get("direction", "IN")
+            if direction == "OUT":
                 instance.amount = -abs(instance.amount)
             else:
                 instance.amount = abs(instance.amount)
-        else:
-            instance.investment_flow = None
 
         if commit:
             instance.save()
