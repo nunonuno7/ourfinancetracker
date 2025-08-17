@@ -279,7 +279,7 @@ CONTENT_SECURITY_POLICY = {
         "style-src": (
             "'self'",
             NONCE,
-            "'unsafe-inline'",
+            "'unsafe-inline'",  # runtime styles from Bootstrap/DataTables
             "https://cdn.jsdelivr.net",
             "https://cdn.datatables.net",
             "https://cdnjs.cloudflare.com",
