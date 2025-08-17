@@ -18,12 +18,9 @@ from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
 from django.core.cache import cache
-from django.utils import timezone
-from datetime import timedelta
 from .tokens import (
     generate_activation_token,
     validate_activation_token,
-    revoke_activation_token,
 )
 from .forms import SignupForm
 
@@ -52,15 +49,14 @@ def signup(request):
             messages.error(request, "Invalid data")
             return render(request, "accounts/signup.html", {"form": form}, status=400)
 
-        # If an inactive account exists with the same email, resend activation instead of creating a new one
+        # If an inactive account already exists for this email, resend the activation link instead of creating a new account
         existing_inactive = User.objects.filter(email__iexact=email, is_active=False).first()
         if existing_inactive:
-            # Generate activation token for existing user
-            revoke_activation_token(existing_inactive)
+            # Generate a new activation token for the existing user
             token = generate_activation_token(existing_inactive)
             uid = urlsafe_base64_encode(force_bytes(existing_inactive.pk))
 
-            # Send activation email
+            # Send activation email with the fresh token
             activation_link = request.build_absolute_uri(
                 reverse('accounts:activate', kwargs={'uidb64': uid, 'token': token})
             )
@@ -89,7 +85,6 @@ def signup(request):
                 )
             except (smtplib.SMTPException, BadHeaderError) as e:
                 logger.exception("Email sending failed: %s", e)
-                revoke_activation_token(existing_inactive)
                 messages.error(
                     request,
                     "There was an error sending the activation email. Please try again later.",
@@ -112,7 +107,7 @@ def signup(request):
         token = generate_activation_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-        # Send activation email
+        # Send activation email with the fresh token
         activation_link = request.build_absolute_uri(
             reverse('accounts:activate', kwargs={'uidb64': uid, 'token': token})
         )
@@ -141,7 +136,6 @@ def signup(request):
             )
         except (smtplib.SMTPException, BadHeaderError) as e:
             logger.exception("Email sending failed: %s", e)
-            revoke_activation_token(user)
             messages.error(
                 request,
                 "There was an error sending the activation email. Please try again later.",
@@ -171,7 +165,6 @@ def activate(request, uidb64, token):
         logger.warning("Activation: could not resolve user from uidb64=%s (%s)", uidb64, exc)
 
     if user and validate_activation_token(user, token):
-        revoke_activation_token(user)
         if not user.is_active:
             user.is_active = True
             user.save(update_fields=["is_active"])
