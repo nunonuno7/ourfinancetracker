@@ -1,3 +1,9 @@
+import os
+
+# Provide a deterministic secret key so tests can run without requiring an
+# external environment configuration.  This key is suitable only for tests.
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+
 from .settings import *  # inherit base settings
 
 # --- Database: SQLite for tests (no Supabase, no Pooler) ---
