@@ -9,6 +9,7 @@ import warnings
 from pathlib import Path
 from dotenv import load_dotenv
 from csp.constants import NONCE
+import structlog
 
 try:
     import dj_database_url  # type: ignore
@@ -21,6 +22,7 @@ except ImportError:  # pragma: no cover
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 ENV = os.getenv
+ENVIRONMENT = ENV("ENVIRONMENT", "development")
 
 def env_bool(key: str, default: str = "false") -> bool:
     return ENV(key, default).lower() in {"1", "true", "yes", "on"}
@@ -102,6 +104,7 @@ INSTALLED_APPS = [
     "axes",
     "anymail",
     "django_celery_beat",
+    "django_structlog",
     # Project
     "accounts",
     "core",
@@ -121,6 +124,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_structlog.middlewares.RequestMiddleware",
     "core.middleware.log_filter.SuppressJsonLogMiddleware",
 ]
 if DEBUG:
@@ -349,29 +353,45 @@ AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_LOCKOUT_CALLABLE = None
 
 # ────────────────────────────────────────────────────
-# Logging (simple and sufficient)
+# Logging (structured JSON with request correlation)
 # ────────────────────────────────────────────────────
+
+def add_environment(logger, method_name, event_dict):
+    event_dict["environment"] = ENVIRONMENT
+    return event_dict
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "()": structlog.stdlib.ProcessorFormatter,
+            "processor": structlog.processors.JSONRenderer(),
+            "foreign_pre_chain": [
+                structlog.contextvars.merge_contextvars,
+                add_environment,
+                structlog.processors.TimeStamper(fmt="iso"),
+                structlog.stdlib.add_log_level,
+            ],
+        },
+    },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "level": "DEBUG"},
-        "null": {"class": "logging.NullHandler"},
+        "console": {"class": "logging.StreamHandler", "formatter": "json"},
     },
-    "root": {"handlers": ["console"] if DEBUG else ["null"], "level": "DEBUG" if DEBUG else "INFO"},
-    "loggers": {
-        "django.server": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-        "django.request": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-    },
+    "root": {"handlers": ["console"], "level": "DEBUG" if DEBUG else "INFO"},
 }
+
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        add_environment,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
 
 # ────────────────────────────────────────────────────
 # Supabase (if needed in code)
