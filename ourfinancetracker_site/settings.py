@@ -279,13 +279,11 @@ CONTENT_SECURITY_POLICY = {
         "style-src": (
             "'self'",
             NONCE,
+            "'unsafe-inline'",
             "https://cdn.jsdelivr.net",
             "https://cdn.datatables.net",
             "https://cdnjs.cloudflare.com",
             "https://code.jquery.com",
-        ),
-        "style-src-attr": (
-            "'unsafe-inline'",
         ),
         "img-src": ("'self'", "data:"),
         "connect-src": ("'self'", "https://*.ingest.sentry.io"),
