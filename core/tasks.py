@@ -1,5 +1,5 @@
-from django.utils import timezone
 from celery import shared_task
+from django.utils import timezone
 
 from .models import RecurringTransaction, Transaction
 
@@ -9,7 +9,8 @@ def process_recurring_transactions():
     """Create transactions for due recurring definitions."""
     now = timezone.now()
     qs = RecurringTransaction.objects.filter(active=True, next_run_at__lte=now)
-    for rt in qs.select_related("account", "category").prefetch_related("tags"):
+    qs = qs.select_related("account", "category").prefetch_related("tags")
+    for rt in qs:
         tx, created = Transaction.objects.get_or_create(
             user=rt.user,
             date=rt.next_run_at.date(),
@@ -27,20 +28,24 @@ def process_recurring_transactions():
 @shared_task
 def import_transactions_task(user_id, file_path):
     """Import transactions from an uploaded Excel file."""
-    from django.contrib.auth import get_user_model
-    import pandas as pd
     from pathlib import Path
-    from .utils.import_helpers import BulkTransactionImporter
+
+    import pandas as pd
+    from django.contrib.auth import get_user_model
+
     from .utils.cache_helpers import clear_tx_cache
+    from .utils.import_helpers import BulkTransactionImporter
 
     User = get_user_model()
     user = User.objects.get(pk=user_id)
-    df = pd.read_excel(file_path)
-    importer = BulkTransactionImporter(user, batch_size=5000)
-    result = importer.import_dataframe(df)
-    clear_tx_cache(user.id, force=True)
-    Path(file_path).unlink(missing_ok=True)
-    return result
+    try:
+        df = pd.read_excel(file_path)
+        importer = BulkTransactionImporter(user, batch_size=5000)
+        result = importer.import_dataframe(df)
+        clear_tx_cache(user.id, force=True)
+        return result
+    finally:
+        Path(file_path).unlink(missing_ok=True)
 
 
 @shared_task
