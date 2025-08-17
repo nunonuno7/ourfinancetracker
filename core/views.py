@@ -3188,12 +3188,12 @@ def account_balance_import_xlsx(request):
 
 @login_required
 def account_balance_template_xlsx(request):
-    """Download template for account balance import using Savings and Investments accounts."""
+    """Download template for account balance import with a single example row."""
     data = {
-        'Year': [2025, 2025],
-        'Month': [1, 1],
-        'Account': ['Savings', 'Investments'],
-        'Balance': [1000.00, 5000.00]
+        "Year": [2025],
+        "Month": [6],
+        "Account": ["Bpi"],
+        "Balance": [1234.56],
     }
     df = pd.DataFrame(data)
 

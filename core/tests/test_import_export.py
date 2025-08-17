@@ -84,9 +84,9 @@ def test_account_balance_import_and_template(client):
     file = SimpleUploadedFile('balances.xlsx', output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     client.post(reverse('account_balance_import_xlsx'), {'file': file}, follow=True)
     assert AccountBalance.objects.filter(account__user=user, reported_balance=Decimal('100')).exists()
-    response = client.get(reverse('account_balance_template_xlsx'))
+    response = client.get(reverse("account_balance_template_xlsx"))
     wb = pd.read_excel(BytesIO(response.content))
-    assert 'Savings' in wb['Account'].tolist()
+    assert "Bpi" in wb["Account"].tolist()
 
 @pytest.mark.django_db
 def test_account_balance_import_missing_columns(client):
