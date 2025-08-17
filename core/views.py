@@ -92,6 +92,26 @@ class HomeView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        
+        # Add KPI statistics for homepage
+        from django.db.models import Count
+        
+        # Total users (rounded to tens)
+        total_users = User.objects.count()
+        context['total_users'] = total_users // 10
+        
+        # Total transactions (rounded to thousands)
+        total_transactions = Transaction.objects.count()
+        context['total_transactions'] = total_transactions // 1000
+        
+        # Total accounts (rounded to tens)
+        total_accounts = Account.objects.count()
+        context['total_accounts'] = total_accounts // 10
+        
+        # Total categories (rounded to tens)
+        total_categories = Category.objects.count()
+        context['total_categories'] = total_categories // 10
+        
         return context
 
 

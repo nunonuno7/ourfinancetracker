@@ -1,9 +1,835 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Home{% endblock %}
+{% block title %}OurFinanceTracker - Simple Financial Management for Busy People{% endblock %}
+
+{% block extra_head %}
+<style nonce="{{ request.csp_nonce }}">
+  /* Hero Section */
+  .hero-section {
+    background: linear-gradient(135deg, #3AB49E 0%, #2E9A84 100%);
+    color: white;
+    padding: 40px 0;
+    text-align: center;
+  }
+
+  .hero-title {
+    font-size: 2.8rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .hero-subtitle {
+    font-size: 1.3rem;
+    font-weight: 300;
+    margin-bottom: 1.5rem;
+    opacity: 0.9;
+  }
+
+  .beta-badge {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    display: inline-block;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+
+  .hero-cta {
+    margin-top: 1.5rem;
+  }
+
+  .hero-cta .btn {
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    margin: 0 10px;
+    border-radius: 50px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Example Images */
+  .example-images {
+    padding: 60px 0;
+    background-color: #f8f9fa;
+  }
+
+  .example-card {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    height: 100%;
+    border: none;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    transition: transform 0.3s ease;
+  }
+
+  .example-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .example-card img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    box-shadow: 0 3px 15px rgba(0,0,0,0.1);
+  }
+
+  /* Features Section */
+  .features-section {
+    padding: 80px 0;
+    background-color: white;
+  }
+
+  .feature-card {
+    background: white;
+    border-radius: 15px;
+    padding: 40px 30px;
+    text-align: center;
+    height: 100%;
+    border: none;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+  }
+
+  .feature-icon {
+    font-size: 3rem;
+    color: #3AB49E;
+    margin-bottom: 20px;
+  }
+
+  .feature-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #24282C;
+  }
+
+  .feature-description {
+    color: #6c757d;
+    line-height: 1.6;
+  }
+
+  /* How it Works Section */
+  .how-it-works {
+    padding: 80px 0;
+    background-color: #f8f9fa;
+  }
+
+  .step-card {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .step-number {
+    width: 60px;
+    height: 60px;
+    background: #3AB49E;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 auto 20px;
+  }
+
+  .step-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #24282C;
+  }
+
+  .step-description {
+    color: #6c757d;
+    line-height: 1.6;
+  }
+
+  /* Formula Section */
+  .formula-section {
+    padding: 80px 0;
+    background: linear-gradient(45deg, #24282C 0%, #3AB49E 100%);
+    color: white;
+  }
+
+  .formula-box {
+    background: rgba(255,255,255,0.1);
+    border-radius: 15px;
+    padding: 30px;
+    margin: 30px 0;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .formula-text {
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    line-height: 1.8;
+    text-align: center;
+  }
+
+  /* FAQ Section */
+  .faq-section {
+    padding: 80px 0;
+    background-color: white;
+  }
+
+  .accordion-button {
+    background-color: #f8f9fa;
+    border: none;
+    font-weight: 600;
+    color: #24282C;
+  }
+
+  .accordion-button:not(.collapsed) {
+    background-color: #3AB49E;
+    color: white;
+  }
+
+  /* Contact & Privacy Section */
+  .contact-section {
+    padding: 80px 0;
+    background-color: #f8f9fa;
+  }
+
+  .contact-card {
+    background: white;
+    border-radius: 15px;
+    padding: 40px;
+    text-align: center;
+    border: none;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    margin-bottom: 30px;
+  }
+
+  .contact-icon {
+    font-size: 2.5rem;
+    color: #3AB49E;
+    margin-bottom: 20px;
+  }
+
+  /* CTA Section */
+  .cta-section {
+    padding: 80px 0;
+    background: linear-gradient(135deg, #3AB49E 0%, #2E9A84 100%);
+    color: white;
+    text-align: center;
+  }
+
+  .section-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+
+  .section-subtitle {
+    font-size: 1.2rem;
+    color: #6c757d;
+    margin-bottom: 3rem;
+    text-align: center;
+  }
+
+  /* KPI Stats Section */
+  .kpi-stats-section {
+    padding: 4rem 0;
+    background-color: #f8f9fa;
+  }
+
+  .kpi-stats-section .kpi-stat {
+    background: white;
+    border-radius: 15px;
+    padding: 2rem 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border: none;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .kpi-stats-section .kpi-stat:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  }
+
+  .kpi-stats-section .kpi-stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3AB49E, #2E9A84);
+  }
+
+  .kpi-stats-section .kpi-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+  }
+
+  .kpi-stats-section .kpi-number {
+    font-size: 2.8rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .kpi-stats-section .kpi-label {
+    font-size: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-bottom: 0;
+  }
+
+
+  @media (max-width: 768px) {
+    .hero-section {
+      padding: 30px 0;
+    }
+
+    .hero-title {
+      font-size: 2.2rem;
+    }
+
+    .hero-subtitle {
+      font-size: 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .feature-card {
+      margin-bottom: 30px;
+    }
+
+    .kpi-stats-section .kpi-stat {
+      padding: 1.5rem 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .kpi-stats-section .kpi-icon {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .kpi-stats-section .kpi-number {
+      font-size: 2.2rem;
+    }
+
+    .kpi-stats-section .kpi-label {
+      font-size: 0.9rem;
+    }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-{% include "core/partials/lazy_instructions.html" %}
-{% include "core/partials/contact.html" %}
-{% include "core/partials/login_prompt.html" %}
+
+<!-- Hero Section -->
+<section class="hero-section">
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8 mx-auto">
+        <div class="beta-badge">
+          <i class="bi bi-flask me-1"></i>
+          Beta Version - Completely Free
+        </div>
+        <h1 class="hero-title">💰 OurFinanceTracker</h1>
+        <p class="hero-subtitle">
+          Financial control for busy (or lazy!) people with minimum effort
+        </p>
+        <div class="hero-cta">
+          <a href="{% url 'accounts:signup' %}" class="btn btn-light btn-lg">
+            <i class="bi bi-person-plus me-2"></i>
+            Start For Free
+          </a>
+          <a href="{% url 'accounts:login' %}" class="btn btn-outline-light btn-lg">
+            <i class="bi bi-box-arrow-in-right me-2"></i>
+            Sign In
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Example Images Section -->
+<section class="example-images">
+  <div class="container">
+    <div class="row text-center mb-5">
+      <div class="col-lg-8 mx-auto">
+        <h2 class="section-title">See It In Action</h2>
+        <p class="section-subtitle">
+          Professional dashboards and intelligent transaction management
+        </p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-6 mb-4">
+        <div class="card example-card">
+          <img src="{% static 'images/dashboard-example.png' %}" alt="Intelligent Financial Dashboard" class="img-fluid">
+          <h3 class="h5 mb-3">Intelligent Financial Dashboard</h3>
+          <p class="text-muted">
+            Complete analysis of your spending and investments with KPIs, charts, and historical data.
+            Track your financial health with verified expenses, savings rate, and portfolio returns.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-6 mb-4">
+        <div class="card example-card">
+          <img src="{% static 'images/transactions-example.png' %}" alt="Advanced Transaction Management" class="img-fluid">
+          <h3 class="h5 mb-3">Advanced Transaction Management</h3>
+          <p class="text-muted">
+            Professional transaction interface with Excel-style filters, bulk operations,
+            and import/export capabilities. Smart categorisation and tag system included.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it Works Section -->
+<section class="how-it-works">
+  <div class="container">
+    <div class="row text-center mb-5">
+      <div class="col-lg-8 mx-auto">
+        <h2 class="section-title">Only 3 Things You Must Do Each Month</h2>
+        <p class="section-subtitle">
+          We'll estimate your expenses automatically from your account balances and cash flows
+        </p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-4">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3 class="step-title">Enter Account Balances</h3>
+          <p class="step-description">
+            Record the balances of your bank accounts, cash, and investment accounts
+            at the start and end of each month.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3 class="step-title">Record All Income</h3>
+          <p class="step-description">
+            Enter your salary, freelance payments, dividends, or any other
+            money that comes into your accounts during the month.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3 class="step-title">Track Investment Flows</h3>
+          <p class="step-description">
+            Record money you move into investments and any withdrawals
+            back to your cash accounts.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Formula Section -->
+<section class="formula-section">
+  <div class="container">
+    <div class="row text-center mb-4">
+      <div class="col-lg-10 mx-auto">
+        <h2 class="section-title text-white">No Time to Enter Expenses? We'll Estimate Them</h2>
+        <p class="lead text-white-50 mb-4">
+          The app calculates your total monthly expenses using a simple but effective formula
+        </p>
+      </div>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="formula-box">
+          <div class="formula-text">
+            <strong>Estimated Expenses =</strong><br>
+            Cash at Start + Income + Investment Withdrawals<br>
+            − Investment Deposits − Cash at End
+          </div>
+        </div>
+        <p class="text-center text-white-50">
+          <strong>Intuition:</strong> Starting cash plus money coming in, minus money you set aside
+          into investments, minus the cash you still have at month end, equals the cash you must have spent.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- KPI Stats Section -->
+  <section class="kpi-stats-section py-5 bg-light">
+    <div class="container">
+      <div class="row text-center mb-4">
+        <div class="col-lg-8 mx-auto">
+          <h2 class="section-title">Trusted by Growing Community</h2>
+          <p class="section-subtitle text-muted">
+            Join thousands of users who have simplified their financial management
+          </p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="kpi-stat text-center">
+            <div class="kpi-icon" style="color: #3AB49E;">
+              <i class="bi bi-people-fill"></i>
+            </div>
+            <div class="kpi-number fw-bold" style="color: #3AB49E;">+{{ total_users }}0</div>
+            <div class="kpi-label">Users Registered</div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="kpi-stat text-center">
+            <div class="kpi-icon" style="color: #2E9A84;">
+              <i class="bi bi-graph-up-arrow"></i>
+            </div>
+            <div class="kpi-number fw-bold" style="color: #2E9A84;">{{ total_transactions }}k+</div>
+            <div class="kpi-label">Transactions Tracked</div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="kpi-stat text-center">
+            <div class="kpi-icon" style="color: #24282C;">
+              <i class="bi bi-bank"></i>
+            </div>
+            <div class="kpi-number fw-bold" style="color: #24282C;">+{{ total_accounts }}0</div>
+            <div class="kpi-label">Active Accounts</div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="kpi-stat text-center">
+            <div class="kpi-icon" style="color: #A0A4A8;">
+              <i class="bi bi-tags-fill"></i>
+            </div>
+            <div class="kpi-number fw-bold" style="color: #A0A4A8;">{{ total_categories }}0+</div>
+            <div class="kpi-label">Categories Created</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+<section class="features-section">
+  <div class="container">
+    <div class="row text-center mb-5">
+      <div class="col-lg-8 mx-auto">
+        <h2 class="section-title">What You Get</h2>
+        <p class="section-subtitle">
+          Professional financial management tools with advanced analytics
+        </p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-graph-up-arrow"></i>
+          </div>
+          <h3 class="feature-title">Historical Analysis & Period Dashboard</h3>
+          <p class="feature-description">
+            Not just monthly dashboards - comprehensive historical analysis with period comparisons,
+            trends, and KPI tracking across multiple months and years.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-arrow-down-up"></i>
+          </div>
+          <h3 class="feature-title">Excel Import/Export for Everything</h3>
+          <p class="feature-description">
+            Import and export both transactions and account balances.
+            Bulk operations, professional templates, and seamless Excel integration
+            for maximum flexibility.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-graph-up"></i>
+          </div>
+          <h3 class="feature-title">Investment Returns Calculation</h3>
+          <p class="feature-description">
+            Automatic calculation of monthly portfolio returns based on balance changes and investment flows.
+            Track your investment performance with professional metrics.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-calculator-fill"></i>
+          </div>
+          <h3 class="feature-title">Automatic Expense Estimation</h3>
+          <p class="feature-description">
+            Based on your account balances and cash flows, we calculate
+            how much you've spent without manual expense entry.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-bank"></i>
+          </div>
+          <h3 class="feature-title">Multiple Account Types</h3>
+          <p class="feature-description">
+            Track bank accounts, cash, and investment accounts separately.
+            The system handles transfers and investment flows correctly.
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-shield-check"></i>
+          </div>
+          <h3 class="feature-title">No Bank Connection Required</h3>
+          <p class="feature-description">
+            Your financial data stays private. No need to connect bank accounts
+            or share sensitive login credentials.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Contact & Privacy Section -->
+<section class="contact-section">
+  <div class="container">
+    <div class="row text-center mb-5">
+      <div class="col-lg-8 mx-auto">
+        <h2 class="section-title">Contact & Data Protection</h2>
+        <p class="section-subtitle">
+          Your privacy and data security are our top priorities
+        </p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-4 mb-4">
+        <div class="card contact-card">
+          <div class="contact-icon">
+            <i class="bi bi-envelope"></i>
+          </div>
+          <h3 class="h5 mb-3">Contact Us</h3>
+          <p class="mb-3">
+            Questions or support needed? We're here to help with your financial tracking journey.
+          </p>
+          <p class="text-muted small">
+            <strong>Email:</strong> support@ourfinancetracker.com<br>
+            Support available during beta phase
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 mb-4">
+        <div class="card contact-card">
+          <div class="contact-icon">
+            <i class="bi bi-shield-lock"></i>
+          </div>
+          <h3 class="h5 mb-3">Data Protection</h3>
+          <p class="mb-3">
+            Your financial data is encrypted and stored securely. We never share your information
+            with third parties or advertising companies.
+          </p>
+          <p class="text-muted small">
+            GDPR compliant · SSL encrypted · No data mining
+          </p>
+        </div>
+      </div>
+
+      <div class="col-lg-4 mb-4">
+        <div class="card contact-card">
+          <div class="contact-icon">
+            <i class="bi bi-trash"></i>
+          </div>
+          <h3 class="h5 mb-3">Data Deletion</h3>
+          <p class="mb-3">
+            You can delete your account and all associated data at any time.
+            Complete data removal is immediate upon request.
+          </p>
+          <p class="text-muted small">
+            Right to be forgotten · No data retention after deletion
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+</section>
+
+<!-- FAQ Section -->
+<section class="faq-section">
+  <div class="container">
+    <div class="row text-center mb-5">
+      <div class="col-lg-8 mx-auto">
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p class="section-subtitle">
+          Common questions about how the system works
+        </p>
+      </div>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="accordion" id="faqAccordion">
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="headingOne">
+              <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                How accurate are the expense estimates?
+              </button>
+            </h2>
+            <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">
+                The estimates are quite reliable if you provide accurate balances for non-investment accounts.
+                The system accounts for all money flows, so it knows where your cash went based on simple maths.
+              </div>
+            </div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="headingTwo">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                How are investment returns calculated?
+              </button>
+            </h2>
+            <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">
+                Returns are calculated using the formula: (End Balance - Start Balance - Net Investments) / (Start Balance + Net Investments) × 100.
+                This gives you the pure investment performance excluding your contributions.
+              </div>
+            </div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="headingThree">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                Can I import data from Excel or my bank?
+              </button>
+            </h2>
+            <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">
+                Yes! You can import both transactions and account balances via Excel files.
+                We provide templates and support bulk operations for easy data management.
+              </div>
+            </div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="headingFour">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFour" aria-expanded="false" aria-controls="collapseFour">
+                Is this really free during beta?
+              </button>
+            </h2>
+            <div id="collapseFour" class="accordion-collapse collapse" aria-labelledby="headingFour" data-bs-parent="#faqAccordion">
+              <div class="accordion-body">
+                Yes, the beta version is completely free with no hidden costs.
+                We're still developing features and want users to test the system.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA Section -->
+<section class="cta-section">
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8 mx-auto text-center">
+        <h2 class="h1 mb-4">Ready to Simplify Your Finances?</h2>
+        <p class="lead mb-4">
+          Join the beta and experience professional financial tracking with minimal effort.
+          Advanced analytics, investment tracking, and expense estimation included.
+        </p>
+        <div class="hero-cta">
+          <a href="{% url 'accounts:signup' %}" class="btn btn-light btn-lg">
+            <i class="bi bi-rocket-takeoff me-2"></i>
+            Start Your Free Beta
+          </a>
+          <a href="#features" class="btn btn-outline-light btn-lg">
+            <i class="bi bi-info-circle me-2"></i>
+            Learn More
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ request.csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+  // Smooth scrolling for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({
+          behavior: 'smooth'
+        });
+      }
+    });
+  });
+
+  // Add loading states for buttons
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      if (this.href && !this.href.includes('#')) {
+        this.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Loading...';
+      }
+    });
+  });
+});
+</script>
 {% endblock %}

@@ -73,6 +73,8 @@ ALLOWED_HOSTS = [
     ".ourfinancetracker.com",
     ".onrender.com",
     ".replit.dev",
+    ".riker.replit.dev",
+    "98b987c2-efd3-4289-a8a5-45cacedf5eaa-00-2urxof032vq30.riker.replit.dev",
     "localhost",
     "127.0.0.1",
 ]
@@ -83,6 +85,11 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000", "http://localhost:8001",
     "http://127.0.0.1:8000", "http://127.0.0.1:8001",
     "http://localhost:3000", "http://127.0.0.1:3000",
+    "http://localhost:5000", "http://127.0.0.1:5000",
+    "https://98b987c2-efd3-4289-a8a5-45cacedf5eaa-00-2urxof032vq30.riker.replit.dev:5000",
+    "http://98b987c2-efd3-4289-a8a5-45cacedf5eaa-00-2urxof032vq30.riker.replit.dev:5000",
+    "https://98b987c2-efd3-4289-a8a5-45cacedf5eaa-00-2urxof032vq30.riker.replit.dev",
+    "http://98b987c2-efd3-4289-a8a5-45cacedf5eaa-00-2urxof032vq30.riker.replit.dev",
 ]
 
 def _extend_from_env_list(env_key: str, target_list: list[str], require_scheme: bool = False) -> None:
@@ -98,6 +105,8 @@ if ENV("REPLIT_DEV_DOMAIN"):
     dom = ENV("REPLIT_DEV_DOMAIN")
     ALLOWED_HOSTS.append(dom)
     CSRF_TRUSTED_ORIGINS += [f"https://{dom}", f"http://{dom}"]
+
+# Replit domain configuration handled above in ALLOWED_HOSTS and CSRF_TRUSTED_ORIGINS
 
 _extend_from_env_list("EXTRA_ALLOWED_HOSTS", ALLOWED_HOSTS, require_scheme=False)
 _extend_from_env_list("EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True)
