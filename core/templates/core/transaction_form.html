@@ -82,13 +82,13 @@
         <div class="mb-3 d-none" id="investment-flow">
           <label class="form-label">Investment Flow</label>
           <div class="btn-group w-100" role="group">
-            <input type="radio" class="btn-check" name="direction" id="dir_in" value="IN"
-                   {% if form.initial.direction != "OUT" %}checked{% endif %}>
-            <label class="btn btn-outline-success" for="dir_in">Reinforcement</label>
+            <input type="radio" class="btn-check" name="investment_flow" id="flow_in" value="IN"
+                   {% if form.initial.investment_flow != "OUT" %}checked{% endif %}>
+            <label class="btn btn-outline-success" for="flow_in">Reinforcement</label>
 
-            <input type="radio" class="btn-check" name="direction" id="dir_out" value="OUT"
-                   {% if form.initial.direction == "OUT" %}checked{% endif %}>
-            <label class="btn btn-outline-danger" for="dir_out">Withdrawal</label>
+            <input type="radio" class="btn-check" name="investment_flow" id="flow_out" value="OUT"
+                   {% if form.initial.investment_flow == "OUT" %}checked{% endif %}>
+            <label class="btn btn-outline-danger" for="flow_out">Withdrawal</label>
           </div>
         </div>
 
