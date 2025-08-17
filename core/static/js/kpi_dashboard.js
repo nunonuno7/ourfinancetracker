@@ -18,16 +18,18 @@
     el.classList.add(`w-${pct}`);
     el.setAttribute("aria-valuenow", String(pct));
   }
-  function formatFooter(actual, goal, mode, pct){
+  function formatFooter(actual, goal, mode, pct, isPercent=false){
     const overPct = goal>0 ? clamp(Math.max(0, ((actual-goal)/goal)*100)) : 0;
     const remaining = Math.max(0, goal - actual);
-    const a = currency.format(actual);
-    const g = currency.format(goal);
+    const formatValue = isPercent ? v => `${Math.round(v)}%` : v => currency.format(v);
+    const formatRemaining = isPercent ? v => `${Math.round(v)}%` : v => currencyFixed.format(v);
+    const a = formatValue(actual);
+    const g = formatValue(goal);
     if (mode === "lower" && actual > goal){
       return `${pct}% of goal — ${overPct}% over (spent ${a} / goal ${g})`;
     }
     if (mode === "higher" && actual < goal){
-      const rem = currencyFixed.format(remaining);
+      const rem = formatRemaining(remaining);
       return `${pct}% of goal — ${rem} to goal (${a} / ${g})`;
     }
     return `${pct}% of goal (${a} / ${g})`;
@@ -54,9 +56,10 @@
     if (!actualEl || !progressEl || !footerEl) return;
     const actual = parseNumberLike(actualEl.textContent);
     const pct = pctFor(actual, goal, mode);
-    actualEl.textContent = currency.format(actual);
+    const isSavingsRate = key === "savings_rate";
+    actualEl.textContent = isSavingsRate ? `${Math.round(actual)}%` : currency.format(actual);
     setWidthClass(progressEl, pct);
-    footerEl.textContent = formatFooter(actual, goal, mode, pct);
+    footerEl.textContent = formatFooter(actual, goal, mode, pct, isSavingsRate);
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
