@@ -154,7 +154,8 @@ class TransactionForm(forms.ModelForm):
             if "amount" not in self.initial and not self.data:
                 self.initial["amount"] = ""
 
-        self.fields["direction"].initial = self.initial.get("direction", "IN")
+        # Default investment flow to "Withdrawal" so users explicitly opt-in to reinforcement
+        self.fields["direction"].initial = self.initial.get("direction", "OUT")
 
     def clean_amount(self) -> Decimal:
         raw = (self.data.get("amount") or "").strip()
