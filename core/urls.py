@@ -75,6 +75,7 @@ urlpatterns = [
     path("data/export-excel/", export_data_xlsx, name="data_export_xlsx"),
     path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
+    path("tasks/status/<str:task_id>/", views.task_status, name="task_status"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("transactions/clear-session-flag/", clear_session_flag, name="clear_session_flag"),
 
