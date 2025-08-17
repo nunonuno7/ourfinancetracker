@@ -9,6 +9,8 @@ import warnings
 from pathlib import Path
 from dotenv import load_dotenv
 from csp.constants import NONCE
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
 
 try:
     import dj_database_url  # type: ignore
@@ -49,6 +51,20 @@ if not SECRET_KEY:
 
 if not DEBUG:
     warnings.filterwarnings("ignore")
+
+# ────────────────────────────────────────────────────
+# Sentry (error monitoring)
+# ────────────────────────────────────────────────────
+SENTRY_DSN = ENV("SENTRY_DSN", "")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=float(ENV("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+        profiles_sample_rate=float(ENV("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
+        sample_rate=float(ENV("SENTRY_SAMPLE_RATE", "0.1")),
+        send_default_pii=True,
+    )
 
 # ────────────────────────────────────────────────────
 # Hosts & CSRF trusted origins
@@ -153,6 +169,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context_processors.sentry_dsn",
             ],
         },
     }
@@ -257,6 +274,7 @@ CONTENT_SECURITY_POLICY = {
             "https://cdn.datatables.net",
             "https://cdnjs.cloudflare.com",
             "https://code.jquery.com",
+            "https://browser.sentry-cdn.com",
         ),
         "style-src": (
             "'self'",
@@ -267,7 +285,7 @@ CONTENT_SECURITY_POLICY = {
             "https://code.jquery.com",
         ),
         "img-src": ("'self'", "data:"),
-        "connect-src": ("'self'",),
+        "connect-src": ("'self'", "https://*.ingest.sentry.io"),
         "font-src": (
             "'self'",
             "https://cdn.jsdelivr.net",

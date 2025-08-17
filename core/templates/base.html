@@ -187,6 +187,16 @@
     <script nonce="{{ request.csp_nonce }}">
       window.CSP_NONCE = "{{ request.csp_nonce }}";
     </script>
+    {% if SENTRY_DSN %}
+    <script src="https://browser.sentry-cdn.com/7.114.0/bundle.tracing.min.js" crossorigin="anonymous"></script>
+    <script nonce="{{ request.csp_nonce }}">
+      Sentry.init({
+        dsn: "{{ SENTRY_DSN }}",
+        sampleRate: 0.1,
+        tracesSampleRate: 0.0,
+      });
+    </script>
+    {% endif %}
 </head>
 <body class="bg-light">
 
