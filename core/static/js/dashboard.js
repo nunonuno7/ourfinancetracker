@@ -77,8 +77,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Enhanced chart initialization
   const initCharts = () => {
-    const ctx1 = document.getElementById('evolution-chart').getContext('2d');
-    const ctx2 = document.getElementById('allocation-chart').getContext('2d');
+    const evolutionCanvas = document.getElementById('evolution-chart');
+    const allocationCanvas = document.getElementById('allocation-chart');
+    const returnsCanvas = document.getElementById('returns-chart');
+
+    if (!evolutionCanvas || !allocationCanvas || !returnsCanvas) {
+      console.warn('⚠️ Chart canvases not found. Skipping chart initialization.');
+      return;
+    }
+
+    const ctx1 = evolutionCanvas.getContext('2d');
+    const ctx2 = allocationCanvas.getContext('2d');
 
     // Evolution Chart with enhanced features
     charts.evolution = new Chart(ctx1, {
@@ -247,7 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const flowsCanvas = document.createElement('canvas');
     flowsCanvas.id = 'flows-chart';
     flowsCanvas.style.display = 'none';
-    document.getElementById('evolution-chart').parentNode.appendChild(flowsCanvas);
+    evolutionCanvas.parentNode.appendChild(flowsCanvas);
 
     charts.flows = new Chart(flowsCanvas.getContext('2d'), {
       type: 'bar',
@@ -323,7 +332,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Create returns chart (initially hidden)
-    const returnsCanvas = document.getElementById('returns-chart');
     returnsCanvas.style.display = 'none';
 
     charts.returns = new Chart(returnsCanvas.getContext('2d'), {
@@ -414,7 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const expensesCanvas = document.createElement('canvas');
     expensesCanvas.id = 'expenses-chart';
     expensesCanvas.style.display = 'none';
-    document.getElementById('evolution-chart').parentNode.appendChild(expensesCanvas);
+    evolutionCanvas.parentNode.appendChild(expensesCanvas);
 
     charts.expenses = new Chart(expensesCanvas.getContext('2d'), {
       type: 'doughnut',
