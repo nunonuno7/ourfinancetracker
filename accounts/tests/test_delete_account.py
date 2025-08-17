@@ -31,3 +31,15 @@ def test_delete_account_view_invalid_referer(client, settings):
     )
     assert response.status_code == 302
     assert response.url == reverse("home") + "?delete_error=1"
+
+
+@pytest.mark.django_db
+def test_delete_account_requires_login(client, settings):
+    settings.SECURE_SSL_REDIRECT = False
+    response = client.post(
+        reverse("accounts:delete_account"),
+        {"password": "secret", "confirmation": "DELETE"},
+    )
+    assert response.status_code == 302
+    login_url = f"{reverse('accounts:login')}?next={reverse('accounts:delete_account')}"
+    assert response.url == login_url
