@@ -828,7 +828,6 @@ def transactions_json(request):
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                       tx.investment_flow,
                        COALESCE(cat.name, '') AS category,
                        COALESCE(acc.name, 'No account') AS account,
                        COALESCE(curr.symbol, '') AS currency,
@@ -842,13 +841,13 @@ def transactions_json(request):
                 LEFT JOIN core_tag tag ON tt.tag_id = tag.id
                 WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
                 GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                         tx.investment_flow, cat.name, acc.name, curr.symbol
+                         cat.name, acc.name, curr.symbol
                 ORDER BY tx.id
             """, [user_id, start_date, end_date])
             rows = cursor.fetchall()
 
         df = pd.DataFrame(rows, columns=[
-            "id", "date", "year", "month", "type", "amount", "investment_flow",
+            "id", "date", "year", "month", "type", "amount",
             "category", "account", "currency", "tags"
         ])
         last_modified = Transaction.objects.filter(
@@ -863,13 +862,11 @@ def transactions_json(request):
     df["amount_float"] = df["amount"].astype(float)
 
     # Add investment direction for display with line break
-    df["type_display"] = df.apply(
-        lambda row: (
-            f"Investment<br>({'Withdrawal' if row['investment_flow'] == 'OUT' else 'Reinforcement'})"
-            if row["type"] == "Investment"
-            else row["type"]
-        ),
-        axis=1,
+    df["type_display"] = df.apply(lambda row: 
+        f"Investment<br>({'Withdrawal' if row['amount_float'] < 0 else 'Reinforcement'})" 
+        if row['type'] == 'Investment' 
+        else row['type'], 
+        axis=1
     )
 
     # Filtros GET

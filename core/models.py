@@ -265,21 +265,10 @@ class Transaction(models.Model):
         TRANSFER = "TR", "Transfer"
         ADJUSTMENT = "AJ", "Adjustment"
 
-    class InvestmentFlow(models.TextChoices):
-        REINFORCEMENT = "IN", "Reinforcement"
-        WITHDRAWAL = "OUT", "Withdrawal"
-
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
     date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     type = models.CharField(max_length=2, choices=Type.choices)
-    investment_flow = models.CharField(
-        max_length=3,
-        choices=InvestmentFlow.choices,
-        null=True,
-        blank=True,
-        help_text="Direction of investment cash flow",
-    )
 
     period = models.ForeignKey(
         "DatePeriod",
@@ -368,9 +357,6 @@ class Transaction(models.Model):
         # Tipo default
         if not self.type:
             self.type = self.Type.EXPENSE
-
-        if self.type != self.Type.INVESTMENT:
-            self.investment_flow = None
 
         # Note: Adjustment transactions are now created as normal Income/Expense transactions
         # with is_system=True and category="adjustments"

@@ -38,13 +38,13 @@ def test_negative_amount_not_allowed_for_expense():
 
 
 @pytest.mark.django_db
-def test_investment_flow_applies_sign():
+def test_direction_applies_sign_for_investment():
     user = User.objects.create_user('u4')
     data = {
         'date': '2024-01-10',
         'type': Transaction.Type.INVESTMENT,
         'amount': '100',
-        'investment_flow': 'OUT',
+        'direction': 'OUT',
         'period': '2024-01',
         'category': 'Invest',
     }
@@ -52,7 +52,6 @@ def test_investment_flow_applies_sign():
     assert form.is_valid(), form.errors
     tx = form.save()
     assert tx.amount == Decimal('-100')
-    assert tx.investment_flow == Transaction.InvestmentFlow.WITHDRAWAL
 
 
 @pytest.mark.django_db
