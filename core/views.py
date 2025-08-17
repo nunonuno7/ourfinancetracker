@@ -32,7 +32,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection, models, transaction as db_transaction, IntegrityError
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Max
 from django.db.models.query import QuerySet
 from django.http import (
     Http404,
@@ -44,6 +44,7 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils.http import http_date
 from django.utils.timezone import now
+from django.utils.http import http_date, parse_http_date_safe
 from django.views import View
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.generic import (
@@ -808,10 +809,15 @@ def transactions_json(request):
         return JsonResponse({"error": "Invalid date format"}, status=400)
 
     cache_key = _cache_key(user_id, start_date, end_date)
-    cached_df = cache.get(cache_key)
+    cached = cache.get(cache_key)
 
-    if cached_df is not None:
-        df = cached_df.copy()
+    if cached is not None:
+        if isinstance(cached, dict):
+            df = cached["df"].copy()
+            last_modified = cached.get("last_modified", now())
+        else:
+            df = cached.copy()
+            last_modified = now()
     else:
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -838,7 +844,10 @@ def transactions_json(request):
             "id", "date", "year", "month", "type", "amount",
             "category", "account", "currency", "tags"
         ])
-        cache.set(cache_key, df.copy(), timeout=300)
+        last_modified = Transaction.objects.filter(
+            user_id=user_id, date__range=(start_date, end_date)
+        ).aggregate(Max("updated_at"))['updated_at__max'] or now()
+        cache.set(cache_key, {"df": df.copy(), "last_modified": last_modified}, timeout=300)
 
     # Transformações e formatação
     df["date"] = df["date"].astype(str)
@@ -994,7 +1003,7 @@ def transactions_json(request):
     length = int(request.GET.get("length", 10))
     page_df = df.iloc[start : start + length]
 
-    return JsonResponse({
+    response_data = {
         "draw": draw,
         "recordsTotal": len(df),
         "recordsFiltered": len(df),
@@ -1005,7 +1014,24 @@ def transactions_json(request):
             "accounts": available_accounts,
             "periods": available_periods,
         },
-    })
+    }
+
+    response_json = json.dumps(response_data, sort_keys=True)
+    etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
+
+    if request.headers.get("If-None-Match") == etag:
+        return HttpResponse(status=304)
+
+    ims = request.headers.get("If-Modified-Since")
+    if ims:
+        ims_ts = parse_http_date_safe(ims)
+        if ims_ts is not None and int(last_modified.timestamp()) <= ims_ts:
+            return HttpResponse(status=304)
+
+    response = JsonResponse(response_data)
+    response["ETag"] = etag
+    response["Last-Modified"] = http_date(last_modified.timestamp())
+    return response
 
 
 
@@ -2146,7 +2172,7 @@ def transactions_totals_v2(request):
     with connection.cursor() as cursor:
         # Simplified query to avoid duplication from tag JOINs
         query = f"""
-            SELECT 
+            SELECT
                 tx.type,
                 SUM(tx.amount) as total
             FROM core_transaction tx
@@ -2160,6 +2186,20 @@ def transactions_totals_v2(request):
         logger.debug(f"📝 [transactions_totals_v2] SQL Query: {query}")
         cursor.execute(query, params)
         rows = cursor.fetchall()
+        cursor.execute(
+            f"""
+            SELECT MAX(tx.updated_at)
+            FROM core_transaction tx
+            LEFT JOIN core_category cat ON tx.category_id = cat.id
+            LEFT JOIN core_account acc ON tx.account_id = acc.id
+            LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
+            WHERE {where_clause}
+            """,
+            params,
+        )
+        last_modified = cursor.fetchone()[0] or now()
+        if isinstance(last_modified, str):
+            last_modified = datetime.fromisoformat(last_modified)
 
     logger.debug(f"📊 [transactions_totals_v2] Raw results: {rows}")
 
@@ -2214,7 +2254,22 @@ def transactions_totals_v2(request):
     # Convert Decimals to floats rounded to 2 decimal places for JSON serialization
     totals = {k: float(v.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) for k, v in totals.items()}
 
-    return JsonResponse(totals)
+    response_json = json.dumps(totals, sort_keys=True)
+    etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
+
+    if request.headers.get("If-None-Match") == etag:
+        return HttpResponse(status=304)
+
+    ims = request.headers.get("If-Modified-Since")
+    if ims:
+        ims_ts = parse_http_date_safe(ims)
+        if ims_ts is not None and int(last_modified.timestamp()) <= ims_ts:
+            return HttpResponse(status=304)
+
+    response = JsonResponse(totals)
+    response["ETag"] = etag
+    response["Last-Modified"] = http_date(last_modified.timestamp())
+    return response
 
 
 # ==============================================================================
