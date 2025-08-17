@@ -1,5 +1,7 @@
 (function(){
   let goals = {};
+  const currency = new Intl.NumberFormat(undefined,{style:"currency",currency:"EUR",minimumFractionDigits:0,maximumFractionDigits:2});
+  const currencyFixed = new Intl.NumberFormat(undefined,{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:2});
   function clamp(x){ return Math.max(0, Math.min(100, Math.round(x))); }
   function parseNumberLike(text){
     // strip out currency symbols and thousands separators, keep decimal point
@@ -19,14 +21,13 @@
   function formatFooter(actual, goal, mode, pct){
     const overPct = goal>0 ? clamp(Math.max(0, ((actual-goal)/goal)*100)) : 0;
     const remaining = Math.max(0, goal - actual);
-    const fmt = new Intl.NumberFormat(undefined,{style:"currency",currency:"EUR"});
-    const a = fmt.format(actual);
-    const g = fmt.format(goal);
+    const a = currency.format(actual);
+    const g = currency.format(goal);
     if (mode === "lower" && actual > goal){
       return `${pct}% of goal — ${overPct}% over (spent ${a} / goal ${g})`;
     }
     if (mode === "higher" && actual < goal){
-      const rem = fmt.format(remaining);
+      const rem = currencyFixed.format(remaining);
       return `${pct}% of goal — ${rem} to goal (${a} / ${g})`;
     }
     return `${pct}% of goal (${a} / ${g})`;
@@ -53,6 +54,7 @@
     if (!actualEl || !progressEl || !footerEl) return;
     const actual = parseNumberLike(actualEl.textContent);
     const pct = pctFor(actual, goal, mode);
+    actualEl.textContent = currency.format(actual);
     setWidthClass(progressEl, pct);
     footerEl.textContent = formatFooter(actual, goal, mode, pct);
   }
