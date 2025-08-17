@@ -697,7 +697,9 @@ button:hover,
   .table-responsive {
     font-size: 0.8rem;
     border-radius: 8px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 
   .table th,
