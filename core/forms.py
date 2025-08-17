@@ -171,12 +171,6 @@ class TransactionForm(forms.ModelForm):
         if amount is not None and type_ != Transaction.Type.INVESTMENT and amount < 0:
             self.add_error("amount", _("Negative amounts are not allowed."))
 
-        direction = self.data.get("direction")
-        if type_ == Transaction.Type.INVESTMENT and not direction:
-            self.add_error("direction", _("Select Reinforcement or Withdrawal."))
-
-        return cleaned_data
-
     def clean_category(self):
         name = (self.cleaned_data.get("category") or "").strip()
         if not name:

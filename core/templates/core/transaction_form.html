@@ -7,12 +7,6 @@
 {% if form.instance.pk %}Edit Transaction{% else %}New Transaction{% endif %} - OurFinanceTracker
 {% endblock %}
 
-{% block extra_head %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
-<link rel="stylesheet" href="{% static 'css/transaction_form.css' %}">
-{% endblock %}
-
 {% block content %}
 <div class="container mt-4">
   <div class="row justify-content-center">
@@ -59,21 +53,42 @@
 
         <!-- TYPE -->
         <div class="mb-3">
-          {{ form.type.label_tag }}
-          {{ form.type|add_class:"form-select" }}
+          <label class="form-label">Transaction Type</label>
+          <div class="row row-cols-2 row-cols-md-4 g-1">
+            {% for value, label in form.type.field.choices %}
+              {% if value != 'AJ' %}
+              <div class="col">
+                <input type="radio" class="btn-check" name="{{ form.type.name }}" id="type-{{ value }}"
+                       value="{{ value }}"
+                       {% if form.type.value == value %}checked{% elif not form.type.value and value == 'EX' %}checked{% endif %}>
+                <label class="btn btn-sm w-100 py-1 text-center border rounded-2
+                              btn-outline-{% if value == 'EX' %}danger{% elif value == 'IN' %}success{% elif value == 'IV' %}warning{% elif value == 'TR' %}secondary{% else %}dark{% endif %}"
+                       for="type-{{ value }}"
+                       data-bs-toggle="tooltip"
+                       data-bs-placement="top"
+                       title="{% if value == 'EX' %}Expense (e.g. shopping, bills, etc.){% elif value == 'IN' %}Income (salary, bonuses, etc.){% elif value == 'IV' %}Investment (shares, funds, etc.){% elif value == 'TR' %}Transfer between your accounts{% endif %}">
+                  <div class="fs-6">
+                    {% if value == 'EX' %}💸{% elif value == 'IN' %}💰{% elif value == 'IV' %}📈{% elif value == 'TR' %}🔁{% endif %}
+                  </div>
+                  <div class="small">{{ label }}</div>
+                </label>
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
         </div>
 
         <!-- INVESTMENT FLOW -->
         <div class="mb-3 d-none" id="investment-flow">
           <label class="form-label">Investment Flow</label>
-          <div class="form-text mb-2">Choose whether this investment adds funds or withdraws them.</div>
-          <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" name="direction" id="direction_in" value="IN" {% if form.initial.direction == "IN" %}checked{% endif %}>
-            <label class="form-check-label" for="direction_in">Reinforcement</label>
-          </div>
-          <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" name="direction" id="direction_out" value="OUT" {% if form.initial.direction == "OUT" %}checked{% endif %}>
-            <label class="form-check-label" for="direction_out">Withdrawal</label>
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="direction" id="dir_in" value="IN"
+                   {% if form.initial.direction != "OUT" %}checked{% endif %}>
+            <label class="btn btn-outline-success" for="dir_in">Reinforcement</label>
+
+            <input type="radio" class="btn-check" name="direction" id="dir_out" value="OUT"
+                   {% if form.initial.direction == "OUT" %}checked{% endif %}>
+            <label class="btn btn-outline-danger" for="dir_out">Withdrawal</label>
           </div>
         </div>
 
@@ -128,10 +143,10 @@
   </div>
 </div>
 
-{% endblock %}
-
-{% block extra_js %}
+<!-- Flatpickr + Tom Select -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr" nonce="{{ request.csp_nonce }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js" nonce="{{ request.csp_nonce }}"></script>
-<script src="{% static 'js/transaction_form.js' %}" nonce="{{ request.csp_nonce }}" defer></script>
+<script src="{% static 'js/transaction_form.js' %}" nonce="{{ request.csp_nonce }}"></script>
 {% endblock %}
