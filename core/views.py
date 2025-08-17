@@ -188,6 +188,7 @@ def json_response(data: dict, status: int = 200) -> JsonResponse:
     response = JsonResponse(data, status=status)
     response["ETag"] = hashlib.md5(response.content).hexdigest()
     response["Last-Modified"] = http_date(now().timestamp())
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
     return response
 
 
@@ -1120,6 +1121,7 @@ def transactions_json(request):
     response = JsonResponse(response_data)
     response["ETag"] = etag
     response["Last-Modified"] = http_date(last_modified.timestamp())
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
     return response
 
 
@@ -2105,6 +2107,7 @@ def transactions_json_v2(request):
     response = JsonResponse(response_data)
     response["ETag"] = etag
     response["Last-Modified"] = http_date(last_modified.timestamp())
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
     return response
 
 
@@ -2341,6 +2344,7 @@ def transactions_totals_v2(request):
     response = JsonResponse(totals)
     response["ETag"] = etag
     response["Last-Modified"] = http_date(last_modified.timestamp())
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
     return response
 
 
