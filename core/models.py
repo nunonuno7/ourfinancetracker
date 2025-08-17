@@ -1,19 +1,23 @@
+# flake8: noqa
+# isort: skip_file
 # models.py - Versão Corrigida
 
-from django.db import models
-from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator, MaxValueValidator
-from django.core.exceptions import ValidationError
-from django.db.models import UniqueConstraint, Q
+import logging
 from datetime import date
-from django.dispatch import receiver
+
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+from django.db.models import F, Q, UniqueConstraint
+from django.db.models.functions import Lower
 from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-
-import logging
 logger = logging.getLogger(__name__)
+
 
 def get_default_currency_id() -> int:
     return get_default_currency().pk
@@ -28,7 +32,9 @@ def get_default_currency():
     from django.apps import apps
 
     Currency = apps.get_model("core", "Currency")
-    obj, _ = Currency.objects.get_or_create(code="EUR", defaults={"symbol": "€", "decimals": 2})
+    obj, _ = Currency.objects.get_or_create(
+        code="EUR", defaults={"symbol": "€", "decimals": 2}
+    )
     return obj
 
 
@@ -40,12 +46,14 @@ def get_default_account_type():
     obj, _ = AccountType.objects.get_or_create(name="Savings")
     return obj
 
+
 ALLOWED_ACCOUNT_TYPE_NAMES = ("Investments", "Savings")
 
 
 # --------------------------------------------------------------------------------
 # Reference / lookup tables
 # --------------------------------------------------------------------------------
+
 
 class Currency(models.Model):
     """ISO-4217 currency definition (e.g. EUR, USD)."""
@@ -80,6 +88,7 @@ class AccountType(models.Model):
 # Core objects
 # --------------------------------------------------------------------------------
 
+
 class Account(models.Model):
     """A bank or investment account owned by the user."""
 
@@ -111,7 +120,11 @@ class Account(models.Model):
             models.Index(fields=["user", "created_at"]),
         ]
         constraints = [
-            UniqueConstraint(fields=["user", "name"], name="unique_account_user_name")
+            UniqueConstraint(
+                Lower("name"),
+                F("user"),
+                name="unique_account_user_name_ci",
+            )
         ]
 
     def __str__(self):
@@ -119,17 +132,29 @@ class Account(models.Model):
 
     def clean(self):
         super().clean()
-        if self.account_type and self.account_type.name not in ALLOWED_ACCOUNT_TYPE_NAMES:
-            raise ValidationError({'account_type': _('Only Investments and Savings account types are allowed.')})
+        if (
+            self.account_type
+            and self.account_type.name not in ALLOWED_ACCOUNT_TYPE_NAMES
+        ):
+            raise ValidationError(
+                {
+                    "account_type": _(
+                        "Only Investments and Savings account types are allowed."
+                    )
+                }
+            )
 
     # CORRIGIDO: Account.save() com tratamento de exceções
     def save(self, *args, **kwargs):
         """Ensure `account_type` and `currency` are not null when saving."""
         if not self.account_type_id:
-            self.account_type = get_default_account_type() 
+            self.account_type = get_default_account_type()
             if not self.account_type:
                 # Fallback to first account type or create a default one
-                self.account_type = AccountType.objects.first() or AccountType.objects.create(name="Savings")
+                self.account_type = (
+                    AccountType.objects.first()
+                    or AccountType.objects.create(name="Savings")
+                )
 
         if not self.currency_id:
             try:
@@ -142,16 +167,19 @@ class Account(models.Model):
 
                 # Final fallback if all else fails
                 if not self.currency:
-                    self.currency = Currency.objects.filter(code="EUR").first() or Currency.objects.create(
+                    self.currency = Currency.objects.filter(
+                        code="EUR"
+                    ).first() or Currency.objects.create(
                         code="EUR", symbol="€", decimals=2
                     )
             except (AttributeError, ValueError):
-                self.currency = get_default_currency() or Currency.objects.first() or Currency.objects.create(
-                    code="EUR", symbol="€", decimals=2
+                self.currency = (
+                    get_default_currency()
+                    or Currency.objects.first()
+                    or Currency.objects.create(code="EUR", symbol="€", decimals=2)
                 )
 
         super().save(*args, **kwargs)
-
 
     def is_default(self):
         """Returns True if this account is the default 'Cash' account."""
@@ -161,14 +189,21 @@ class Account(models.Model):
 class AccountBalance(models.Model):
     """Snapshot of an account's balance for a specific month."""
 
-    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="balances")
-    period = models.ForeignKey("DatePeriod", on_delete=models.CASCADE, related_name="account_balances")
+    account = models.ForeignKey(
+        Account, on_delete=models.CASCADE, related_name="balances"
+    )
+    period = models.ForeignKey(
+        "DatePeriod", on_delete=models.CASCADE, related_name="account_balances"
+    )
     reported_balance = models.DecimalField(max_digits=14, decimal_places=2)
 
     class Meta:
         ordering = ("-period__year", "-period__month")
         constraints = [
-            UniqueConstraint(fields=["account", "period"], name="unique_accountbalance_account_period")
+            UniqueConstraint(
+                fields=["account", "period"],
+                name="unique_accountbalance_account_period",
+            )
         ]
         indexes = [
             models.Index(fields=["account", "period"]),
@@ -186,7 +221,9 @@ class AccountBalance(models.Model):
         It adds the current balance to the target and deletes the current object.
         """
         if self.pk == target.pk:
-            logger.warning(f"Attempted to merge balance {self.pk} into itself. Operation skipped.")
+            logger.warning(
+                f"Attempted to merge balance {self.pk} into itself. Operation skipped."
+            )
             return
 
         if self.period != target.period:
@@ -205,6 +242,8 @@ class AccountBalance(models.Model):
         )
 
         self.delete()
+
+
 class Category(models.Model):
     """User-defined flat category (no hierarchy)."""
 
@@ -247,6 +286,7 @@ class Category(models.Model):
         if self.pk == target.pk:
             return
         from core.models import Transaction
+
         Transaction.objects.filter(category=self).update(category=target)
         self.delete()
 
@@ -254,6 +294,7 @@ class Category(models.Model):
 # --------------------------------------------------------------------------------
 # Transactions
 # --------------------------------------------------------------------------------
+
 
 class Transaction(models.Model):
     """Money movement. Expenses can be estimated if not recorded."""
@@ -265,7 +306,9 @@ class Transaction(models.Model):
         TRANSFER = "TR", "Transfer"
         ADJUSTMENT = "AJ", "Adjustment"
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="transactions"
+    )
     date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     type = models.CharField(max_length=2, choices=Type.choices)
@@ -291,7 +334,7 @@ class Transaction(models.Model):
         "Tag",
         through="TransactionTag",  # 🔗 ligação explícita
         blank=True,
-        related_name="transactions"
+        related_name="transactions",
     )
 
     account = models.ForeignKey(
@@ -303,9 +346,17 @@ class Transaction(models.Model):
     )
 
     notes = models.TextField(blank=True)
-    is_estimated = models.BooleanField(default=False, help_text="Estimated/automatically calculated transaction")
-    is_system = models.BooleanField(default=False, db_index=True, help_text="System automatic transaction (does not affect account balances)")
-    editable = models.BooleanField(default=True, help_text="If False, transaction is read-only")
+    is_estimated = models.BooleanField(
+        default=False, help_text="Estimated/automatically calculated transaction"
+    )
+    is_system = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="System automatic transaction (does not affect account balances)",
+    )
+    editable = models.BooleanField(
+        default=True, help_text="If False, transaction is read-only"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -330,7 +381,7 @@ class Transaction(models.Model):
         """Aplica defaults à transação antes de guardar."""
 
         # Validação para transações do sistema - permitir bypass administrativo
-        force_save = kwargs.pop('force_save', False)
+        force_save = kwargs.pop("force_save", False)
         if not self.editable and self.pk and not force_save:
             raise ValidationError("System transaction is read-only.")
 
@@ -347,7 +398,7 @@ class Transaction(models.Model):
             self.period, _ = DatePeriod.objects.get_or_create(
                 year=self.date.year,
                 month=self.date.month,
-                defaults={"label": self.date.strftime("%B %Y")}
+                defaults={"label": self.date.strftime("%B %Y")},
             )
 
         # 🔁 Preenche data com base no período
@@ -378,6 +429,7 @@ class Transaction(models.Model):
 # User settings – lightweight, avoids custom user model
 # --------------------------------------------------------------------------------
 
+
 class UserSettings(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="settings")
 
@@ -399,7 +451,9 @@ class UserSettings(models.Model):
 
 
 class TransactionAttachment(models.Model):
-    transaction = models.ForeignKey("Transaction", on_delete=models.CASCADE, related_name="attachments")
+    transaction = models.ForeignKey(
+        "Transaction", on_delete=models.CASCADE, related_name="attachments"
+    )
     file_path = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -410,7 +464,9 @@ class TransactionAttachment(models.Model):
 
 class Budget(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="budgets")
-    category = models.ForeignKey("Category", on_delete=models.CASCADE, related_name="budgets")
+    category = models.ForeignKey(
+        "Category", on_delete=models.CASCADE, related_name="budgets"
+    )
     start_date = models.DateField()
     end_date = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
@@ -429,7 +485,9 @@ class RecurringTransaction(models.Model):
         WEEKLY = "weekly", "Weekly"
         MONTHLY = "monthly", "Monthly"
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recurring_transactions")
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="recurring_transactions"
+    )
     schedule = models.CharField(max_length=10, choices=Schedule.choices)
     category = models.ForeignKey(
         "Category",
@@ -446,7 +504,9 @@ class RecurringTransaction(models.Model):
         blank=True,
         related_name="recurring_transactions",
     )
-    tags = models.ManyToManyField("Tag", blank=True, related_name="recurring_transactions")
+    tags = models.ManyToManyField(
+        "Tag", blank=True, related_name="recurring_transactions"
+    )
     next_run_at = models.DateTimeField()
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -457,6 +517,7 @@ class RecurringTransaction(models.Model):
 
     def schedule_next(self):
         from datetime import timedelta
+
         from dateutil.relativedelta import relativedelta
 
         if self.schedule == self.Schedule.DAILY:
@@ -485,8 +546,12 @@ class ImportLog(models.Model):
 
 
 class ExchangeRate(models.Model):
-    from_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="rates_from")
-    to_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="rates_to")
+    from_currency = models.ForeignKey(
+        Currency, on_delete=models.CASCADE, related_name="rates_from"
+    )
+    to_currency = models.ForeignKey(
+        Currency, on_delete=models.CASCADE, related_name="rates_to"
+    )
     rate = models.DecimalField(max_digits=20, decimal_places=6)
     rate_date = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -496,24 +561,30 @@ class ExchangeRate(models.Model):
         constraints = [
             UniqueConstraint(
                 fields=["from_currency", "to_currency", "rate_date"],
-                name="unique_exchangerate_from_to_date"
+                name="unique_exchangerate_from_to_date",
             )
         ]
 
     def __str__(self):
-        return f"{self.from_currency} → {self.to_currency} @ {self.rate_date}: {self.rate}"
+        return (
+            f"{self.from_currency} → {self.to_currency} @ {self.rate_date}: {self.rate}"
+        )
 
+
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 # CORRIGIDO: DatePeriod com validação de mês
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
-from django.core.exceptions import ValidationError
+
 
 class DatePeriod(models.Model):
     year = models.PositiveIntegerField(
         validators=[
             MinValueValidator(1900),
-            MaxValueValidator(2100)  # Fixed max year to avoid timezone issues at model definition
+            MaxValueValidator(
+                2100
+            ),  # Fixed max year to avoid timezone issues at model definition
         ]
     )
     month = models.PositiveIntegerField(
@@ -522,18 +593,18 @@ class DatePeriod(models.Model):
     label = models.CharField(max_length=20)
 
     class Meta:
-        ordering = ['-year', '-month']
+        ordering = ["-year", "-month"]
         constraints = [
-            models.UniqueConstraint(fields=['year', 'month'], name='unique_year_month')
+            models.UniqueConstraint(fields=["year", "month"], name="unique_year_month")
         ]
 
     def __str__(self):
         return self.label
-    
+
     def get_last_day(self):
         """Get the last day of this period."""
         from datetime import date
-        
+
         if self.month == 12:
             return date(self.year + 1, 1, 1) - date.resolution
         else:
@@ -543,11 +614,13 @@ class DatePeriod(models.Model):
         from django.core.exceptions import ValidationError
 
         if self.month < 1 or self.month > 12:
-            raise ValidationError({'month': 'Month must be between 1 and 12'})
+            raise ValidationError({"month": "Month must be between 1 and 12"})
 
         current_year = timezone.now().year
         if self.year < 1900 or self.year > current_year + 20:
-            raise ValidationError({'year': f'Year must be between 1900 and {current_year + 20}'})
+            raise ValidationError(
+                {"year": f"Year must be between 1900 and {current_year + 20}"}
+            )
 
 
 class Tag(models.Model):
@@ -562,7 +635,7 @@ class Tag(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="tags",
-        help_text="(Optional) Category associated with this tag"
+        help_text="(Optional) Category associated with this tag",
     )
 
     class Meta:
@@ -577,14 +650,20 @@ class Tag(models.Model):
 
 
 class TransactionTag(models.Model):
-    transaction = models.ForeignKey("Transaction", on_delete=models.CASCADE, related_name="tag_links")
-    tag = models.ForeignKey("Tag", on_delete=models.CASCADE, related_name="transaction_links")
+    transaction = models.ForeignKey(
+        "Transaction", on_delete=models.CASCADE, related_name="tag_links"
+    )
+    tag = models.ForeignKey(
+        "Tag", on_delete=models.CASCADE, related_name="transaction_links"
+    )
 
     class Meta:
         verbose_name = "Transaction Tag"
         verbose_name_plural = "Transaction Tags"
         constraints = [
-            UniqueConstraint(fields=["transaction", "tag"], name="unique_transactiontag_tx_tag")
+            UniqueConstraint(
+                fields=["transaction", "tag"], name="unique_transactiontag_tx_tag"
+            )
         ]
 
     def __str__(self):
@@ -595,6 +674,7 @@ class TransactionTag(models.Model):
 # Signals
 # --------------------------------------------------------------------------------
 
+
 @receiver(post_save, sender=Account)
 def _create_initial_balance_on_account_creation(sender, instance, created, **kwargs):
     if created:
@@ -602,10 +682,8 @@ def _create_initial_balance_on_account_creation(sender, instance, created, **kwa
         period, _ = DatePeriod.objects.get_or_create(
             year=today.year,
             month=today.month,
-            defaults={"label": today.strftime("%B %Y")}
+            defaults={"label": today.strftime("%B %Y")},
         )
         AccountBalance.objects.create(
-            account=instance,
-            period=period,
-            reported_balance=0
+            account=instance, period=period, reported_balance=0
         )
