@@ -34,6 +34,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, connection, models
 from django.db import transaction as db_transaction
 from django.db.models import Max, Q, Sum
@@ -1104,7 +1105,7 @@ def transactions_json(request):
         },
     }
 
-    response_json = json.dumps(response_data, sort_keys=True)
+    response_json = json.dumps(response_data, sort_keys=True, cls=DjangoJSONEncoder)
     etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
 
     if request.headers.get("If-None-Match") == etag:
@@ -2089,7 +2090,7 @@ def transactions_json_v2(request):
             f"⚠️ [transactions_json_v2] No transactions returned for user {user_id} in date range {start_date}-{end_date}, but user has {total_tx_count} total transactions"
         )
 
-    response_json = json.dumps(response_data, sort_keys=True)
+    response_json = json.dumps(response_data, sort_keys=True, cls=DjangoJSONEncoder)
     etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
 
     if request.headers.get("If-None-Match") == etag:
@@ -2325,7 +2326,7 @@ def transactions_totals_v2(request):
         for k, v in totals.items()
     }
 
-    response_json = json.dumps(totals, sort_keys=True)
+    response_json = json.dumps(totals, sort_keys=True, cls=DjangoJSONEncoder)
     etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
 
     if request.headers.get("If-None-Match") == etag:
