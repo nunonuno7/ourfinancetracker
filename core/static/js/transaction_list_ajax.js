@@ -17,6 +17,10 @@
         if (n) {
             script.setAttribute('nonce', n);
         }
+        // Log when the full implementation is ready (includes actions column)
+        script.onload = function() {
+            console.log('transaction_list_v2.js loaded with actions column support');
+        };
         document.body.appendChild(script);
     }
 })();

@@ -993,14 +993,15 @@ def transactions_json(request):
         axis=1
     )
 
-    # ✅ CORREÇÃO: criar ações como string HTML
+    # ✅ CORREÇÃO: criar ações como string HTML com ícones e texto
     df["actions"] = df.apply(
-        lambda r: f"""
-        <div class='btn-group'>
-          <a href='/transactions/{r["id"]}/edit/' class='btn btn-sm btn-outline-primary'>✏️</a>
-          <a href='/transactions/{r["id"]}/delete/' class='btn btn-sm btn-outline-danger'>🗑️</a>
-        </div>
-        """, axis=1
+        lambda r: (
+            f"<div class='btn-group'>"
+            f"<a href='/transactions/{r['id']}/edit/' class='btn btn-sm btn-outline-primary'>✏️ Edit</a>"
+            f"<a href='/transactions/{r['id']}/delete/' class='btn btn-sm btn-outline-danger'>🗑️ Delete</a>"
+            f"</div>"
+        ),
+        axis=1
     )
 
     # Paginação (DataTables)
