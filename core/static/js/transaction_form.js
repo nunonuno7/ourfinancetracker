@@ -218,7 +218,7 @@ function initTransactionForm() {
   if (flowDiv && typeRadios.length) {
     function toggleFlow() {
       const selected = document.querySelector('input[name="type"]:checked');
-      flowDiv.style.display = (selected?.value === "IV") ? "" : "none";
+      flowDiv.classList.toggle("d-none", selected?.value !== "IV");
     }
     typeRadios.forEach(r => r.addEventListener("change", toggleFlow));
     toggleFlow();
