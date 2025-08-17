@@ -4354,6 +4354,7 @@ def dashboard_kpis_json(request):
         # Calculate averages
         receita_media = total_income / max(num_months, 1)
         despesa_media = total_expenses / max(num_months, 1)
+        investimento_medio = total_investments / max(num_months, 1)
 
         # Calculate savings rate
         savings_rate = (
@@ -4437,7 +4438,7 @@ def dashboard_kpis_json(request):
                 "patrimonio_total": f"{patrimonio_total:,.0f} €",
                 "receita_media": f"{receita_media:,.0f} €",
                 "despesa_estimada_media": f"{despesa_media:,.0f} €",
-                "valor_investido_total": f"{total_investments:,.0f} €",
+                "valor_investido_medio": f"{investimento_medio:,.0f} €",
                 "despesas_justificadas_pct": non_estimated_expense_pct,
                 "despesas_justificadas_pct_str": f"{non_estimated_expense_pct_dec}%",
                 "taxa_poupanca": f"{savings_rate:.1f}%",
@@ -4485,7 +4486,7 @@ def dashboard_kpis_json(request):
                 "patrimonio_total": "0 €",
                 "receita_media": "0 €",
                 "despesa_estimada_media": "0 €",
-                "valor_investido_total": "0 €",
+                "valor_investido_medio": "0 €",
                 "despesas_justificadas_pct": 0.0,
                 "despesas_justificadas_pct_str": "0%",
                 "taxa_poupanca": "0.0%",

@@ -841,11 +841,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const estimatedExpenses = Math.max(200, estimatedIncome * 0.3); // Conservative estimate
       const savingsRate = estimatedIncome > 0 ? ((estimatedIncome - estimatedExpenses) / estimatedIncome * 100) : 0;
 
+      const months = Math.max(allPeriods.length, 1);
       return {
         patrimonio_total: `${totalPatrimonio.toLocaleString('en-GB')} €`,
         receita_media: `${Math.round(estimatedIncome).toLocaleString('en-GB')} €`,
         despesa_estimada_media: `${Math.round(estimatedExpenses).toLocaleString('en-GB')} €`,
-        valor_investido_total: `${totalInvestments.toLocaleString('en-GB')} €`,
+        valor_investido_medio: `${Math.round(totalInvestments / months).toLocaleString('en-GB')} €`,
         despesas_justificadas_pct: "95%", // Optimistic estimate
         taxa_poupanca: `${savingsRate.toFixed(1)}%`,
         wealth_growth: `${wealthGrowth >= 0 ? '+' : ''}${wealthGrowth.toFixed(1)}%`,
@@ -863,7 +864,7 @@ document.addEventListener("DOMContentLoaded", () => {
       patrimonio_total: "12,500 €",
       receita_media: "2,500 €",
       despesa_estimada_media: "1,800 €",
-      valor_investido_total: "8,500 €",
+      valor_investido_medio: "8,500 €",
       despesas_justificadas_pct: "85%",
       rentabilidade_mensal_media: "+2.5%",
       status: 'mock_data'
@@ -986,7 +987,7 @@ document.addEventListener("DOMContentLoaded", () => {
       'receita-media': data.receita_media || data.patrimonio_total || '0 €',
       'despesa-estimada': data.despesa_estimada_media || data.receita_media || '0 €',
       'verified-expenses': data.despesas_justificadas_pct_str || '0%',
-      'valor-investido': data.valor_investido_total || '0 €',
+      'valor-investido': data.valor_investido_medio || '0 €',
       'patrimonio-total': data.patrimonio_total || '0 €'
     };
 
@@ -1050,7 +1051,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const generateKPITooltip = (id, value, data) => {
     const receita = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
     const despesa = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const investido = parseFloat((data.valor_investido_total || '0').replace(/[^\d.-]/g, '')) || 0;
+    const investido = parseFloat((data.valor_investido_medio || '0').replace(/[^\d.-]/g, '')) || 0;
     const patrimonio = parseFloat((data.patrimonio_total || '0').replace(/[^\d.-]/g, '')) || 0;
 
     switch(id) {
@@ -1084,13 +1085,13 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `;
       case 'valor-investido':
-        const investmentRatio = patrimonio > 0 ? (investido / patrimonio * 100).toFixed(1) : 0;
+        const investmentRatio = receita > 0 ? (investido / receita * 100).toFixed(1) : 0;
         return `
           <div class="text-start">
-            <strong>📈 Total Invested</strong><br>
+            <strong>📈 Average Investement</strong><br>
             Amount: <span class="text-primary">${value}</span><br>
-            <small>📊 ${investmentRatio}% of net worth</small><br>
-            <small>💡 ${investmentRatio > 60 ? 'High growth focus' : investmentRatio > 30 ? 'Balanced approach' : 'Conservative strategy'}</small>
+            <small>📊 ${investmentRatio}% of income</small><br>
+            <small>💡 ${investmentRatio > 20 ? 'Strong investing habit' : investmentRatio > 10 ? 'Good progress' : 'Could invest more'}</small>
           </div>
         `;
       case 'patrimonio-total':

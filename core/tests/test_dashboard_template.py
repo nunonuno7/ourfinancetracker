@@ -31,6 +31,21 @@ class TestDashboardTemplate(TestCase):
         self.assertIn("Verification:", html)
         self.assertNotIn("{% include", html)
 
+    @patch(
+        "core.views.DashboardView.get_context_data",
+        return_value={
+            "periods": [],
+            "kpis": {"verified_expenses_pct": 0, "verification_level": "Moderate"},
+        },
+    )
+    def test_average_investment_card_renders(self, mocked_ctx):
+        url = reverse("dashboard")
+        resp = self.client.get(url, secure=True)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn("Average Investement", html)
+        self.assertIn('id="valor-investido"', html)
+
     def test_dashboard_template_snapshot(self):
         factory = RequestFactory()
         request = factory.get("/")
