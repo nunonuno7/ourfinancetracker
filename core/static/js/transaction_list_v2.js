@@ -1002,17 +1002,19 @@ class TransactionManager {
 
   createGroupHeader(name, count, total) {
     const template = document.createElement('template');
-    const totalFormatted = total.toFixed(2);
+    const totalFormatted = parseFloat(total).toFixed(2);
     template.innerHTML = `
       <tr class="group-header d-lg-none">
         <td colspan="9">
           <div class="group-header-content">
-            <span>${escapeHtml(name)}</span>
-            <span>${count} tx · € ${totalFormatted}</span>
+            <span class="group-header-name">${escapeHtml(name)}</span>
+            <span class="group-header-meta">${count} transactions · € ${totalFormatted}</span>
           </div>
         </td>
       </tr>`;
-    return template.content.firstElementChild;
+    const row = template.content.firstElementChild;
+    row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+    return row;
   }
 
   getGroupKey(tx) {
