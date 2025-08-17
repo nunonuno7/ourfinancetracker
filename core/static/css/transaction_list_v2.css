@@ -506,4 +506,10 @@
     justify-content: space-between;
     width: 100%;
   }
+  .group-header-name {
+    font-weight: 600;
+  }
+  .group-header-meta {
+    color: #6c757d;
+  }
 }
