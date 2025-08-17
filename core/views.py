@@ -20,6 +20,8 @@ import json
 import logging
 import re
 import uuid
+import os
+import requests
 from calendar import monthrange
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -60,6 +62,7 @@ from .models import (Account, AccountBalance, AccountType, Category, Currency,
                      UserSettings)
 from .tasks import import_transactions_task
 from .utils.cache_helpers import clear_tx_cache
+from .utils.supabase_jwt import generate_supabase_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -1617,483 +1620,115 @@ def transaction_list_v2(request):
 
 @login_required
 def transactions_json_v2(request):
-    """Enhanced JSON API for transactions v2 with Excel-style cascading filters."""
+    """JSON API for the transactions grid backed by PostgREST."""
     user_id = request.user.id
-    logger.debug(
-        f"🔍 [transactions_json_v2] Request from user {user_id}: {request.method}"
-    )
+    logger.debug(f"🔍 [transactions_json_v2] Request from user {user_id}: {request.method}")
 
-    # Parse request data (handles both GET and POST)
     if request.method == "POST":
         try:
-            data = json.loads(request.body)
-        except:
+            data = json.loads(request.body.decode("utf-8"))
+        except Exception:
             data = {}
     else:
         data = request.GET.dict()
-
     logger.debug(f"📋 [transactions_json_v2] Request data: {data}")
 
-    # Datas - use wider default range if no dates provided
-    raw_start = data.get("date_start", request.GET.get("date_start"))
-    raw_end = data.get("date_end", request.GET.get("date_end"))
-
-    # If no dates provided, use a very wide range to catch all transactions
-    if not raw_start and not raw_end:
-        start_date = date(2020, 1, 1)  # Much wider range
-        end_date = date(2030, 12, 31)
-        logger.debug(
-            f"📅 [transactions_json_v2] No dates provided, using wide range: {start_date} to {end_date}"
-        )
-    else:
-        start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
-        end_date = parse_safe_date(raw_end, date.today())
-
-    logger.debug(f"📅 [transactions_json_v2] Date range: {start_date} to {end_date}")
-
-    # Page settings
     current_page = int(data.get("page", 1))
     page_size = int(data.get("page_size", 25))
+    offset = (current_page - 1) * page_size
 
-    # Sorting
     sort_field = data.get("sort_field", "date")
     sort_direction = data.get("sort_direction", "desc")
+    order = f"{sort_field}.{sort_direction}"
 
-    if not start_date or not end_date:
-        logger.error(
-            f"❌ [transactions_json_v2] Invalid date format: start={raw_start}, end={raw_end}"
+    selected_period = data.get("period") or None
+
+    try:
+        rest_url = os.environ["SUPABASE_REST_URL"]
+        api_key = os.environ["SUPABASE_API_KEY"]
+    except KeyError as e:
+        logger.error(f"❌ Missing environment variable: {e}")
+        return JsonResponse({"error": "Server misconfiguration"}, status=500)
+
+    token = generate_supabase_jwt(user_id=user_id)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "apikey": api_key,
+        "Accept": "application/json",
+        "Prefer": "count=exact",
+    }
+
+    params = {
+        "user_id": f"eq.{user_id}",
+        "order": order,
+        "limit": page_size,
+        "offset": offset,
+        "select": "id,date,type,amount,category:category_id(name),account:account_id(name),period,description,tags,is_system,editable,is_estimated",
+    }
+    if selected_period:
+        params["period"] = f"eq.{selected_period}"
+    tx_type = data.get("type")
+    if tx_type:
+        params["type"] = f"eq.{tx_type}"
+    category_id = data.get("category_id") or data.get("category")
+    if category_id:
+        params["category_id"] = f"eq.{category_id}"
+    account_id = data.get("account_id") or data.get("account")
+    if account_id:
+        params["account_id"] = f"eq.{account_id}"
+    search = data.get("search")
+    if search:
+        term = search.strip()
+        params["or"] = f"(description.ilike.*{term}*,tags.ilike.*{term}*)"
+
+    try:
+        r = requests.get(f"{rest_url}/transactions", headers=headers, params=params, timeout=10)
+        r.raise_for_status()
+        rows = r.json()
+        content_range = r.headers.get("Content-Range", "0/0")
+        total_count = int(content_range.split("/")[-1])
+    except requests.RequestException as exc:
+        logger.error(f"❌ [transactions_json_v2] PostgREST error: {exc}")
+        return JsonResponse({"error": "Upstream service unavailable"}, status=502)
+
+    type_map = {
+        "IN": "Income",
+        "EX": "Expense",
+        "IV": "Investment",
+        "TR": "Transfer",
+        "AJ": "Adjustment",
+    }
+    for tx in rows:
+        if "type" in tx:
+            tx["type"] = type_map.get(tx["type"], tx["type"])
+
+    try:
+        rpc_payload = {"_user": str(user_id), "_period": selected_period}
+        f_resp = requests.post(
+            f"{rest_url}/rpc/tx_filters", headers=headers, json=rpc_payload, timeout=10
         )
-        return JsonResponse({"error": "Invalid date format"}, status=400)
+        f_resp.raise_for_status()
+        filters = f_resp.json() or {}
+    except requests.RequestException as exc:
+        logger.error(f"❌ [transactions_json_v2] tx_filters RPC error: {exc}")
+        filters = {"types": [], "categories": [], "accounts": [], "periods": []}
 
-    cache_key = f"tx_v2_{user_id}_{start_date}_{end_date}_{sort_field}_{sort_direction}"
-    force_refresh = str(data.get("force", "")).lower() in ["1", "true", "yes"]
-    cached = None if force_refresh else cache.get(cache_key)
-
-    if cached is not None:
-        if isinstance(cached, dict):
-            df = cached.get("df", pd.DataFrame()).copy()
-            last_modified = cached.get("last_modified", now())
-        else:
-            df = cached.copy()
-            last_modified = now()
-        logger.debug(f"✅ [transactions_json_v2] Using cached data, {len(df)} rows")
-    else:
-        if force_refresh:
-            logger.debug(
-                "🔄 [transactions_json_v2] Force refresh requested, bypassing cache"
-            )
-        else:
-            logger.debug(f"🔄 [transactions_json_v2] Querying database...")
-
-        # SQL query with sorting
-        order_clause = f"tx.date {'DESC' if sort_direction == 'desc' else 'ASC'}"
-        if sort_field == "amount":
-            order_clause = f"tx.amount {'DESC' if sort_direction == 'desc' else 'ASC'}"
-        elif sort_field == "type":
-            order_clause = f"tx.type {'DESC' if sort_direction == 'desc' else 'ASC'}"
-
-        with connection.cursor() as cursor:
-            query = f"""
-                SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                       COALESCE(cat.name, '') AS category,
-                       COALESCE(acc.name, 'No account') AS account,
-                       COALESCE(curr.symbol, '€') AS currency,
-                       COALESCE(STRING_AGG(tag.name, ', '), '') AS tags,
-                       tx.is_system, tx.editable, tx.is_estimated,
-                       CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) AS period
-                FROM core_transaction tx
-                LEFT JOIN core_category cat ON tx.category_id = cat.id
-                LEFT JOIN core_account acc ON tx.account_id = acc.id
-                LEFT JOIN core_currency curr ON acc.currency_id = curr.id
-                LEFT JOIN core_dateperiod dp ON tx.period_id = dp.id
-                LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
-                LEFT JOIN core_tag tag ON tt.tag_id = tag.id
-                WHERE tx.user_id = %s
-                AND tx.date BETWEEN %s AND %s
-                GROUP BY tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
-                         cat.name, acc.name, curr.symbol, tx.is_system, tx.editable, tx.is_estimated
-                ORDER BY {order_clause}
-            """
-            logger.debug(f"📝 [transactions_json_v2] SQL Query: {query}")
-            logger.debug(
-                f"📝 [transactions_json_v2] Query params: [{user_id}, {start_date}, {end_date}]"
-            )
-
-            cursor.execute(query, [user_id, start_date, end_date])
-            rows = cursor.fetchall()
-
-            logger.debug(
-                f"📊 [transactions_json_v2] Raw query returned {len(rows)} rows"
-            )
-
-        df = pd.DataFrame(
-            rows,
-            columns=[
-                "id",
-                "date",
-                "year",
-                "month",
-                "type",
-                "amount",
-                "category",
-                "account",
-                "currency",
-                "tags",
-                "is_system",
-                "editable",
-                "is_estimated",
-                "period",
-            ],
-        )
-        logger.debug(f"📋 [transactions_json_v2] DataFrame created with {len(df)} rows")
-        last_modified = (
-            Transaction.objects.filter(
-                user_id=user_id, date__range=(start_date, end_date)
-            ).aggregate(Max("updated_at"))["updated_at__max"]
-            or now()
-        )
-        cache.set(
-            cache_key, {"df": df.copy(), "last_modified": last_modified}, timeout=300
-        )
-
-    # ✅ EXCEL-STYLE CASCADING FILTERS IMPLEMENTATION
-    # Store original data for calculating available filter options
-    df_original = df.copy()
-
-    # Parse filters from request - convert empty strings to None
-    active_filters = {}
-    if data.get("type", "").strip():
-        active_filters["type"] = data.get("type").strip()
-    if data.get("category", "").strip():
-        active_filters["category"] = data.get("category").strip()
-    if data.get("account", "").strip():
-        active_filters["account"] = data.get("account").strip()
-    if data.get("period", "").strip():
-        active_filters["period"] = data.get("period").strip()
-    if data.get("search", "").strip():
-        active_filters["search"] = data.get("search").strip()
-    if data.get("amount_min", "").strip():
-        active_filters["amount_min"] = data.get("amount_min").strip()
-    if data.get("amount_max", "").strip():
-        active_filters["amount_max"] = data.get("amount_max").strip()
-    if data.get("tags", "").strip():
-        active_filters["tags"] = data.get("tags").strip()
-
-    include_system = data.get("include_system", False)
-
-    logger.debug(f"📋 [Excel Filters] Active filters: {active_filters}")
-
-    # Apply filters in cascade - each filter operates on the result of previous filters
-    df_filtered = df.copy()
-
-    # System filter first (if not included)
-    if not include_system:
-        df_filtered = df_filtered[df_filtered["is_system"] != True]
-        logger.debug(
-            f"🔽 [Excel Filter] System filter applied, remaining rows: {len(df_filtered)}"
-        )
-
-    # Apply each filter sequentially (Excel-style)
-    filter_order = [
-        "type",
-        "category",
-        "account",
-        "period",
-        "search",
-        "amount_min",
-        "amount_max",
-        "tags",
-    ]
-
-    for filter_name in filter_order:
-        if filter_name in active_filters:
-            filter_value = active_filters[filter_name]
-            df_before = len(df_filtered)
-
-            if filter_name == "type":
-                # Filter by the raw type from database (IN, EX, IV, TR, AJ)
-                df_filtered = df_filtered[df_filtered["type"] == filter_value]
-
-            elif filter_name == "category":
-                df_filtered = df_filtered[
-                    df_filtered["category"].str.contains(
-                        filter_value, case=False, na=False
-                    )
-                ]
-
-            elif filter_name == "account":
-                df_filtered = df_filtered[
-                    df_filtered["account"].str.contains(
-                        filter_value, case=False, na=False
-                    )
-                ]
-
-            elif filter_name == "period":
-                df_filtered = df_filtered[df_filtered["period"] == filter_value]
-
-            elif filter_name == "search":
-                # Create mapped type column for search
-                df_search = df_filtered.copy()
-                df_search["type_display"] = (
-                    df_search["type"]
-                    .map(
-                        {
-                            "IN": "Income",
-                            "EX": "Expense",
-                            "IV": "Investment",
-                            "TR": "Transfer",
-                            "AJ": "Adjustment",
-                        }
-                    )
-                    .fillna(df_search["type"])
-                )
-
-                search_mask = (
-                    df_search["category"].str.contains(
-                        filter_value, case=False, na=False
-                    )
-                    | df_search["account"].str.contains(
-                        filter_value, case=False, na=False
-                    )
-                    | df_search["type_display"].str.contains(
-                        filter_value, case=False, na=False
-                    )
-                    | df_search["tags"].str.contains(filter_value, case=False, na=False)
-                )
-                df_filtered = df_filtered[search_mask]
-
-            elif filter_name == "amount_min":
-                try:
-                    min_val = float(filter_value)
-                    df_filtered = df_filtered[df_filtered["amount"] >= min_val]
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid amount_min value: {filter_value}")
-
-            elif filter_name == "amount_max":
-                try:
-                    max_val = float(filter_value)
-                    df_filtered = df_filtered[df_filtered["amount"] <= max_val]
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid amount_max value: {filter_value}")
-
-            elif filter_name == "tags":
-                tag_list = [
-                    t.strip().lower() for t in filter_value.split(",") if t.strip()
-                ]
-                if tag_list:
-                    tag_pattern = "|".join(tag_list)
-                    df_filtered = df_filtered[
-                        df_filtered["tags"].str.contains(
-                            tag_pattern, case=False, na=False
-                        )
-                    ]
-
-            logger.debug(
-                f"🔽 [Excel Filter] {filter_name}='{filter_value}' applied: {df_before} → {len(df_filtered)} rows"
-            )
-
-    # 📊 CALCULATE AVAILABLE FILTER OPTIONS (Excel-style)
-    # For each filter, calculate what values are available based on OTHER active filters
-
-    def get_available_options_for_filter(target_filter):
-        """Get available options for a specific filter based on other active filters."""
-        temp_df = df.copy()
-
-        # System filter first (if not included)
-        if not include_system:
-            temp_df = temp_df[temp_df["is_system"] != True]
-
-        # Apply all OTHER filters (not the target filter)
-        for filter_name in filter_order:
-            if filter_name != target_filter and filter_name in active_filters:
-                filter_value = active_filters[filter_name]
-
-                if filter_name == "type":
-                    temp_df = temp_df[temp_df["type"] == filter_value]
-                elif filter_name == "category":
-                    temp_df = temp_df[
-                        temp_df["category"].str.contains(
-                            filter_value, case=False, na=False
-                        )
-                    ]
-                elif filter_name == "account":
-                    temp_df = temp_df[
-                        temp_df["account"].str.contains(
-                            filter_value, case=False, na=False
-                        )
-                    ]
-                elif filter_name == "period":
-                    temp_df = temp_df[temp_df["period"] == filter_value]
-                elif filter_name == "search":
-                    temp_search = temp_df.copy()
-                    temp_search["type_display"] = (
-                        temp_search["type"]
-                        .map(
-                            {
-                                "IN": "Income",
-                                "EX": "Expense",
-                                "IV": "Investment",
-                                "TR": "Transfer",
-                                "AJ": "Adjustment",
-                            }
-                        )
-                        .fillna(temp_search["type"])
-                    )
-
-                    search_mask = (
-                        temp_search["category"].str.contains(
-                            filter_value, case=False, na=False
-                        )
-                        | temp_search["account"].str.contains(
-                            filter_value, case=False, na=False
-                        )
-                        | temp_search["type_display"].str.contains(
-                            filter_value, case=False, na=False
-                        )
-                        | temp_search["tags"].str.contains(
-                            filter_value, case=False, na=False
-                        )
-                    )
-                    temp_df = temp_df[search_mask]
-                elif filter_name == "amount_min":
-                    try:
-                        min_val = float(filter_value)
-                        temp_df = temp_df[temp_df["amount"] >= min_val]
-                    except (ValueError, TypeError) as e:
-                        logger.warning(
-                            f"Invalid amount_min filter value '{filter_value}': {e}"
-                        )
-                elif filter_name == "amount_max":
-                    try:
-                        max_val = float(filter_value)
-                        temp_df = temp_df[temp_df["amount"] <= max_val]
-                    except (ValueError, TypeError) as e:
-                        logger.warning(
-                            f"Invalid amount_max filter value '{filter_value}': {e}"
-                        )
-                elif filter_name == "tags":
-                    tag_list = [
-                        t.strip().lower() for t in filter_value.split(",") if t.strip()
-                    ]
-                    if tag_list:
-                        tag_pattern = "|".join(tag_list)
-                        temp_df = temp_df[
-                            temp_df["tags"].str.contains(
-                                tag_pattern, case=False, na=False
-                            )
-                        ]
-
-        return temp_df
-
-    # Calculate available options for each filter
-    available_types = []
-    available_categories = []
-    available_accounts = []
-    available_periods = []
-
-    # Types
-    type_df = get_available_options_for_filter("type")
-    available_types = sorted(
-        type_df["type"]
-        .map(
-            {
-                "IN": "Income",
-                "EX": "Expense",
-                "IV": "Investment",
-                "TR": "Transfer",
-                "AJ": "Adjustment",
-            }
-        )
-        .dropna()
-        .unique()
-    )
-
-    # Categories
-    category_df = get_available_options_for_filter("category")
-    available_categories = sorted(
-        [c for c in category_df["category"].dropna().unique() if c]
-    )
-
-    # Accounts
-    account_df = get_available_options_for_filter("account")
-    available_accounts = sorted(
-        [a for a in account_df["account"].dropna().unique() if a]
-    )
-
-    # Periods
-    period_df = get_available_options_for_filter("period")
-    available_periods = sorted(period_df["period"].dropna().unique(), reverse=True)
-
-    logger.debug(f"📊 [Excel Filters] Available options calculated:")
-    logger.debug(f"  Types: {len(available_types)} options")
-    logger.debug(f"  Categories: {len(available_categories)} options")
-    logger.debug(f"  Accounts: {len(available_accounts)} options")
-    logger.debug(f"  Periods: {len(available_periods)} options")
-
-    # Use filtered data for pagination and response
-    df = df_filtered
-
-    # Pagination
-    total_count = len(df)
-    start_idx = (current_page - 1) * page_size
-    end_idx = start_idx + page_size
-    page_df = df.iloc[start_idx:end_idx].copy()
-
-    # Format data for frontend
-    page_df["date"] = page_df["date"].astype(str)
-    page_df["type"] = (
-        page_df["type"]
-        .map(
-            {
-                "IN": "Income",
-                "EX": "Expense",
-                "IV": "Investment",
-                "TR": "Transfer",
-                "AJ": "Adjustment",
-            }
-        )
-        .fillna(page_df["type"])
-    )
-
-    # Format amounts
-    page_df["amount_formatted"] = page_df.apply(
-        lambda r: f"€ {abs(r['amount']):,.2f}".replace(",", "X")
-        .replace(".", ",")
-        .replace("X", ".")
-        + f" {r['currency']}",
-        axis=1,
-    )
-
-    # Build response with Excel-style filtered options
     response_data = {
-        "transactions": page_df.to_dict(orient="records"),
+        "transactions": rows,
         "total_count": total_count,
         "current_page": current_page,
         "page_size": page_size,
         "filters": {
-            "types": available_types,
-            "categories": available_categories,
-            "accounts": available_accounts,
-            "periods": available_periods,
+            "types": filters.get("types", []),
+            "categories": filters.get("categories", []),
+            "accounts": filters.get("accounts", []),
+            "periods": filters.get("periods", []),
         },
     }
 
-    logger.debug(
-        f"📤 [transactions_json_v2] Final response: {len(response_data['transactions'])} transactions, total_count: {total_count}"
-    )
-    logger.debug(
-        f"✅ [Excel Filters] Filter options returned based on visible data only"
-    )
-
-    # Log if no transactions found
-    if total_count == 0:
-        total_tx_count = Transaction.objects.filter(user_id=user_id).count()
-        logger.warning(
-            f"⚠️ [transactions_json_v2] No transactions returned for user {user_id} in date range {start_date}-{end_date}, but user has {total_tx_count} total transactions"
-        )
-
     response_json = json.dumps(response_data, sort_keys=True, cls=DjangoJSONEncoder)
     etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
+    last_modified = now()
 
     if request.headers.get("If-None-Match") == etag:
         return HttpResponse(status=304)
