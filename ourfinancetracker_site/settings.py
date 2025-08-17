@@ -4,12 +4,14 @@ CSP (django-csp), WhiteNoise, optional Redis, Debug Toolbar, and django-axes.
 """
 
 from __future__ import annotations
+
 import os
 import warnings
 from pathlib import Path
-from dotenv import load_dotenv
-from csp.constants import NONCE
+
 import sentry_sdk
+from csp.constants import NONCE
+from dotenv import load_dotenv
 from sentry_sdk.integrations.django import DjangoIntegration
 
 try:
@@ -24,6 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 ENV = os.getenv
 
+
 def env_bool(key: str, default: str = "false") -> bool:
     return ENV(key, default).lower() in {"1", "true", "yes", "on"}
 
@@ -35,6 +38,7 @@ def strtobool(val: str) -> bool:
     if val in {"n", "no", "f", "false", "off", "0"}:
         return False
     raise ValueError(f"invalid truth value {val}")
+
 
 # ────────────────────────────────────────────────────
 # Core flags & secret
@@ -80,19 +84,28 @@ ALLOWED_HOSTS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://ourfinancetracker.com",
     "https://www.ourfinancetracker.com",
-    "http://localhost:8000", "http://localhost:8001",
-    "http://127.0.0.1:8000", "http://127.0.0.1:8001",
-    "http://localhost:3000", "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
-def _extend_from_env_list(env_key: str, target_list: list[str], require_scheme: bool = False) -> None:
+
+def _extend_from_env_list(
+    env_key: str, target_list: list[str], require_scheme: bool = False
+) -> None:
     raw = ENV(env_key, "") or ""
     if not raw:
         return
     for item in [x.strip() for x in raw.split(",") if x.strip()]:
-        if require_scheme and not (item.startswith("http://") or item.startswith("https://")):
+        if require_scheme and not (
+            item.startswith("http://") or item.startswith("https://")
+        ):
             continue
         target_list.append(item)
+
 
 if ENV("REPLIT_DEV_DOMAIN"):
     dom = ENV("REPLIT_DEV_DOMAIN")
@@ -100,15 +113,21 @@ if ENV("REPLIT_DEV_DOMAIN"):
     CSRF_TRUSTED_ORIGINS += [f"https://{dom}", f"http://{dom}"]
 
 _extend_from_env_list("EXTRA_ALLOWED_HOSTS", ALLOWED_HOSTS, require_scheme=False)
-_extend_from_env_list("EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True)
+_extend_from_env_list(
+    "EXTRA_CSRF_TRUSTED_ORIGINS", CSRF_TRUSTED_ORIGINS, require_scheme=True
+)
 
 # ────────────────────────────────────────────────────
 # Apps & Middleware
 # ────────────────────────────────────────────────────
 INSTALLED_APPS = [
     # Django
-    "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
-    "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     "django.contrib.sites",
     # Third-party
     "whitenoise.runserver_nostatic",
@@ -137,6 +156,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.permissions_policy.PermissionsPolicyMiddleware",
     "core.middleware.log_filter.SuppressJsonLogMiddleware",
 ]
 if DEBUG:
@@ -195,7 +215,10 @@ if SUPA_URL and dj_database_url:
     }
 else:
     DATABASES = {
-        "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
 
 # ────────────────────────────────────────────────────
@@ -212,7 +235,12 @@ if ENV("REDIS_URL"):
         }
     }
 else:
-    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "ourft-cache"}}
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ourft-cache",
+        }
+    }
 
 # ────────────────────────────────────────────────────
 # I18N
@@ -229,7 +257,8 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "core" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = (
-    "django.contrib.staticfiles.storage.StaticFilesStorage" if DEBUG
+    "django.contrib.staticfiles.storage.StaticFilesStorage"
+    if DEBUG
     else "whitenoise.storage.CompressedManifestStaticFilesStorage"
 )
 WHITENOISE_USE_FINDERS = True
@@ -254,8 +283,13 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -316,9 +350,12 @@ if DEBUG:
 
     # Trusted origins (HTTP + ports)
     CSRF_TRUSTED_ORIGINS += [
-        "http://127.0.0.1:8000", "http://127.0.0.1:8001",
-        "http://localhost:8000", "http://localhost:8001",
-        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://localhost:8000",
+        "http://localhost:8001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ]
 
 else:
@@ -376,7 +413,10 @@ LOGGING = {
         "console": {"class": "logging.StreamHandler", "level": "DEBUG"},
         "null": {"class": "logging.NullHandler"},
     },
-    "root": {"handlers": ["console"] if DEBUG else ["null"], "level": "DEBUG" if DEBUG else "INFO"},
+    "root": {
+        "handlers": ["console"] if DEBUG else ["null"],
+        "level": "DEBUG" if DEBUG else "INFO",
+    },
     "loggers": {
         "django.server": {
             "handlers": ["console"] if DEBUG else ["null"],
