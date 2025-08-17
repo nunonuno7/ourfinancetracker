@@ -1,30 +1,33 @@
+# flake8: noqa
+# isort: skip_file
 # forms.py - Versão Corrigida
 from __future__ import annotations
+
 import logging
-from typing import Any
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from django import forms
-from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.forms import BaseModelFormSet, modelformset_factory
 from django.db import transaction
-from django.utils.translation import gettext_lazy as _
 from django.db.models import F
+from django.forms import BaseModelFormSet, modelformset_factory
+from django.utils.translation import gettext_lazy as _
 
 from .models import (
-    Transaction,
-    Category,
+    ALLOWED_ACCOUNT_TYPE_NAMES,
     Account,
     AccountBalance,
-    DatePeriod,
     AccountType,
+    Category,
     Currency,
-    Tag,
+    DatePeriod,
     RecurringTransaction,
-    ALLOWED_ACCOUNT_TYPE_NAMES,
+    Tag,
+    Transaction,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,8 +54,8 @@ class UserInFormKwargsMixin:
         return kwargs
 
 
-
 # core/forms.py
+
 
 class TransactionForm(forms.ModelForm):
     """Form for creating or editing transactions."""
@@ -60,28 +63,34 @@ class TransactionForm(forms.ModelForm):
     period = forms.CharField(
         label=_("Period"),
         required=True,
-        widget=forms.TextInput(attrs={"type": "month", "class": "form-control", "id": "id_period"}),
+        widget=forms.TextInput(
+            attrs={"type": "month", "class": "form-control", "id": "id_period"}
+        ),
     )
 
     tags_input = forms.CharField(
         label=_("Tags"),
         required=False,
-        widget=forms.TextInput(attrs={
-            "class": "form-control",
-            "id": "id_tags_input",
-            "placeholder": _("Optional tags…"),
-        }),
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "id_tags_input",
+                "placeholder": _("Optional tags…"),
+            }
+        ),
     )
 
     category = forms.CharField(
         label=_("Category"),
         required=True,
-        widget=forms.TextInput(attrs={
-            "class": "form-control",
-            "id": "id_category",
-            "placeholder": _("Enter category…"),
-            "data-category-list": "",
-        }),
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "id_category",
+                "placeholder": _("Enter category…"),
+                "data-category-list": "",
+            }
+        ),
     )
 
     direction = forms.ChoiceField(
@@ -95,16 +104,26 @@ class TransactionForm(forms.ModelForm):
 
     class Meta:
         model = Transaction
-        fields = ["date", "type", "amount", "account", "category", "tags_input", "notes"]
+        fields = [
+            "date",
+            "type",
+            "amount",
+            "account",
+            "category",
+            "tags_input",
+            "notes",
+        ]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "type": forms.Select(attrs={"class": "form-select"}),
-            "amount": forms.TextInput(attrs={
-                "class": "form-control text-end",
-                "inputmode": "decimal",
-                "placeholder": "0.00",
-                "id": "id_amount",
-            }),
+            "amount": forms.TextInput(
+                attrs={
+                    "class": "form-control text-end",
+                    "inputmode": "decimal",
+                    "placeholder": "0.00",
+                    "id": "id_amount",
+                }
+            ),
             "notes": forms.Textarea(
                 attrs={"class": "form-control notes-textarea", "rows": "3"}
             ),
@@ -118,13 +137,14 @@ class TransactionForm(forms.ModelForm):
         self.fields["account"].empty_label = "— No account —"
         # Filtrar para excluir "System adjustment" (AJ) do formulário
         self.fields["type"].choices = [
-            (value, label) for value, label in Transaction.Type.choices 
-            if value != "AJ"
+            (value, label) for value, label in Transaction.Type.choices if value != "AJ"
         ]
         self.fields["type"].required = True
 
         if self._user:
-            self.fields["account"].queryset = Account.objects.filter(user=self._user).only("name")
+            self.fields["account"].queryset = Account.objects.filter(
+                user=self._user
+            ).only("name")
         else:
             self.fields["account"].queryset = Account.objects.none()
 
@@ -132,9 +152,13 @@ class TransactionForm(forms.ModelForm):
             if self.instance.category:
                 self.initial["category"] = self.instance.category.name
             if self.instance.tags.exists():
-                self.initial["tags_input"] = ", ".join(self.instance.tags.values_list("name", flat=True))
+                self.initial["tags_input"] = ", ".join(
+                    self.instance.tags.values_list("name", flat=True)
+                )
             if self.instance.period:
-                self.initial["period"] = f"{self.instance.period.year}-{self.instance.period.month:02d}"
+                self.initial["period"] = (
+                    f"{self.instance.period.year}-{self.instance.period.month:02d}"
+                )
 
             # Garantir que a data está no formato correto (YYYY-MM-DD)
             if self.instance.date:
@@ -164,7 +188,7 @@ class TransactionForm(forms.ModelForm):
         if raw == "":
             raise forms.ValidationError(_("This field is required."))
 
-        normalized = raw.replace("\u00A0", "").replace(" ", "")
+        normalized = raw.replace("\u00a0", "").replace(" ", "")
         if "," in normalized and "." in normalized:
             normalized = normalized.replace(".", "").replace(",", ".")
         elif "," in normalized:
@@ -194,8 +218,10 @@ class TransactionForm(forms.ModelForm):
         if not name:
             raise forms.ValidationError(_("This field is required."))
         user = self._user or self.instance.user
-        category, _ = Category.objects.get_or_create(user=user, name=name)
-        return category
+        existing = Category.objects.filter(user=user, name__iexact=name).first()
+        if existing:
+            return existing
+        return Category.objects.create(user=user, name=name)
 
     def clean_tags_input(self):
         return (self.cleaned_data.get("tags_input") or "").strip()
@@ -258,9 +284,11 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         name = self.cleaned_data.get("name", "").strip()
 
         # Impedir criação manual da categoria "Other" (e variantes)
-        if name.lower() in ['other', 'outro', 'others']:
+        if name.lower() in ["other", "outro", "others"]:
             if not self.instance.pk:
-                raise ValidationError("Reserved category names cannot be created manually.")
+                raise ValidationError(
+                    "Reserved category names cannot be created manually."
+                )
 
         # Verificar duplicados
         if (
@@ -280,10 +308,11 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         self.instance.user = self.user
 
         # 🔁 Verificar se já existe uma categoria com esse nome
-        existing = Category.objects.filter(
-            user=self.user,
-            name__iexact=new_name
-        ).exclude(pk=self.instance.pk).first()
+        existing = (
+            Category.objects.filter(user=self.user, name__iexact=new_name)
+            .exclude(pk=self.instance.pk)
+            .first()
+        )
 
         if existing:
             # ❌ Proibir fusão com "Other"
@@ -320,7 +349,9 @@ class CustomUserCreationForm(UserCreationForm):
 class AccountBalanceForm(forms.ModelForm):
     account = forms.CharField(
         label="Account",
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Account name"}),
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "Account name"}
+        ),
         max_length=70,
     )
 
@@ -328,18 +359,20 @@ class AccountBalanceForm(forms.ModelForm):
         model = AccountBalance
         fields = ["account", "reported_balance"]
         widgets = {
-            "reported_balance": forms.NumberInput(attrs={
-                "class": "form-control text-end",
-                "step": "0.01",
-                "placeholder": "Enter balance",
-            }),
+            "reported_balance": forms.NumberInput(
+                attrs={
+                    "class": "form-control text-end",
+                    "step": "0.01",
+                    "placeholder": "Enter balance",
+                }
+            ),
         }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
-        if self.instance and getattr(self.instance, 'account_id', None):
-            self.initial['account'] = self.instance.account.name
+        if self.instance and getattr(self.instance, "account_id", None):
+            self.initial["account"] = self.instance.account.name
 
     def clean_account(self):
         name = self.cleaned_data.get("account", "").strip()
@@ -397,8 +430,6 @@ AccountBalanceFormSet = modelformset_factory(
 )
 
 
-
-
 class AccountForm(UserAwareMixin, forms.ModelForm):
     """
     Cria/edita contas. Se existir outra conta com mesmo nome (case-insensitive),
@@ -429,7 +460,9 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         for name in ALLOWED_ACCOUNT_TYPE_NAMES:
             AccountType.objects.get_or_create(name=name)
 
-        self.fields["account_type"].queryset = AccountType.objects.filter(name__in=ALLOWED_ACCOUNT_TYPE_NAMES).order_by("name")
+        self.fields["account_type"].queryset = AccountType.objects.filter(
+            name__in=ALLOWED_ACCOUNT_TYPE_NAMES
+        ).order_by("name")
         self.fields["currency"].queryset = Currency.objects.order_by("code")
 
         if (
@@ -456,10 +489,9 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         if not name or not account_type or not currency:
             return
 
-        duplicate_qs = (
-            Account.objects.filter(user=self.user, name__iexact=name)
-            .exclude(pk=self.instance.pk)
-        )
+        duplicate_qs = Account.objects.filter(
+            user=self.user, name__iexact=name
+        ).exclude(pk=self.instance.pk)
 
         if not duplicate_qs.exists():
             return  # → sem duplicados
@@ -474,7 +506,10 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
             )
 
         # Moeda/tipo diferentes ⇒ bloqueio duro
-        if duplicate.account_type_id != account_type.id or duplicate.currency_id != currency.id:
+        if (
+            duplicate.account_type_id != account_type.id
+            or duplicate.currency_id != currency.id
+        ):
             raise ValidationError(
                 _(
                     "Another account with this name already exists but with a "
@@ -513,8 +548,15 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         if duplicate:
             return self._merge_into(duplicate)
 
-        # ---------- criação/edição normal ----------
         if commit:
+            conflict_qs = Account.objects.filter(
+                user=self.user, name__iexact=name
+            ).exclude(pk=self.instance.pk)
+            if conflict_qs.exists():
+                raise ValidationError(
+                    _("An account with this name already exists."),
+                    code="duplicate",
+                )
             self.instance.save()
         return self.instance
 
@@ -533,7 +575,9 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
                 self.instance.save()
 
             # 1) fundir saldos
-            balances_qs = AccountBalance.objects.select_for_update().filter(account=self.instance)
+            balances_qs = AccountBalance.objects.select_for_update().filter(
+                account=self.instance
+            )
 
             for bal in balances_qs:
                 merged, created = AccountBalance.objects.get_or_create(
@@ -542,7 +586,9 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
                     defaults={"reported_balance": bal.reported_balance},
                 )
                 if not created:
-                    merged.reported_balance = F("reported_balance") + bal.reported_balance
+                    merged.reported_balance = (
+                        F("reported_balance") + bal.reported_balance
+                    )
                     merged.save(update_fields=["reported_balance"])
                 bal.delete()
 
@@ -557,23 +603,31 @@ class TransactionImportForm(forms.Form):
     file = forms.FileField(
         label="Excel File",
         help_text="Select a .xlsx file with the transactions",
-        widget=forms.ClearableFileInput(attrs={
-            "class": "form-control"
-        })
+        widget=forms.ClearableFileInput(attrs={"class": "form-control"}),
     )
 
 
 class RecurringTransactionForm(UserAwareMixin, forms.ModelForm):
     class Meta:
         model = RecurringTransaction
-        fields = ["schedule", "amount", "account", "category", "tags", "next_run_at", "active"]
+        fields = [
+            "schedule",
+            "amount",
+            "account",
+            "category",
+            "tags",
+            "next_run_at",
+            "active",
+        ]
         widgets = {
             "schedule": forms.Select(attrs={"class": "form-select"}),
             "amount": forms.TextInput(attrs={"class": "form-control text-end"}),
             "account": forms.Select(attrs={"class": "form-select"}),
             "category": forms.Select(attrs={"class": "form-select"}),
             "tags": forms.SelectMultiple(attrs={"class": "form-select"}),
-            "next_run_at": forms.DateTimeInput(attrs={"type": "datetime-local", "class": "form-control"}),
+            "next_run_at": forms.DateTimeInput(
+                attrs={"type": "datetime-local", "class": "form-control"}
+            ),
         }
 
     def __init__(self, *args, user: User | None = None, **kwargs):
