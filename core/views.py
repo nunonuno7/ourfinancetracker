@@ -4306,7 +4306,7 @@ def dashboard_kpis_json(request):
 
         total_income = float(stats["total_income"] or 0)
         total_expenses = float(abs(stats["total_expenses"] or 0))  # Make positive
-        total_investments = float(abs(stats["total_investments"] or 0))  # Make positive
+        total_investments = float(stats["total_investments"] or 0)
         total_transactions = stats["total_count"]
         categorized_transactions = stats["categorized_count"]
 
