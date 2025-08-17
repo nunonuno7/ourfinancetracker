@@ -105,7 +105,9 @@ class TransactionForm(forms.ModelForm):
                 "placeholder": "0.00",
                 "id": "id_amount",
             }),
-            "notes": forms.Textarea(attrs={"class": "form-control", "rows": "3", "style": "height:5em;"}),
+            "notes": forms.Textarea(
+                attrs={"class": "form-control notes-textarea", "rows": "3"}
+            ),
         }
 
     def __init__(self, *args, user: User = None, **kwargs):

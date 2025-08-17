@@ -1197,6 +1197,7 @@ button:hover,
 .p-075 { padding: 0.75rem; }
 
 /* Utility classes to replace inline styles */
+.notes-textarea { height: 5em; }
 .w-30 { width: 30px; }
 .w-40 { width: 40px; }
 .w-60 { width: 60px; }
