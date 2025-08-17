@@ -1023,16 +1023,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Reinitialize tooltips for updated elements
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.forEach(el => {
-      // Dispose existing tooltip if any
-      const existingTooltip = bootstrap.Tooltip.getInstance(el);
-      if (existingTooltip) {
-        existingTooltip.dispose();
-      }
-      // Create new tooltip
-      new bootstrap.Tooltip(el);
-    });
+    const tooltipTriggerList = Array.from(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList
+      .filter(el => el && (el.getAttribute('title') || el.getAttribute('data-bs-original-title')))
+      .forEach(el => {
+        // Dispose existing tooltip if any
+        const existingTooltip = bootstrap.Tooltip.getInstance(el);
+        if (existingTooltip) {
+          existingTooltip.dispose();
+        }
+        try {
+          // Create new tooltip
+          new bootstrap.Tooltip(el);
+        } catch (err) {
+          console.error('Tooltip initialization failed', err, el);
+        }
+      });
 
     if (window.recomputeKPICards) {
       window.recomputeKPICards();
