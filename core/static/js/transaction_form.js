@@ -63,22 +63,27 @@ function initTransactionForm() {
     }
   }
   
-  flatpickr(dateInput, {
-    dateFormat: "Y-m-d",
-    defaultDate: initialDate,
-    altInput: true,
-    altFormat: "d/m/Y",
-    allowInput: true,
-    onChange: function (selectedDates) {
-      if (selectedDates.length > 0) {
+  // ✅ Guard against missing Flatpickr (e.g. offline or CDN failure)
+  if (typeof flatpickr === "function") {
+    flatpickr(dateInput, {
+      dateFormat: "Y-m-d",
+      defaultDate: initialDate,
+      altInput: true,
+      altFormat: "d/m/Y",
+      allowInput: true,
+      onChange: function (selectedDates) {
+        if (selectedDates.length > 0) {
+          syncPeriodFromDate();
+        }
+      },
+      onReady: function () {
+        // Sincronizar período ao carregar
         syncPeriodFromDate();
       }
-    },
-    onReady: function() {
-      // Sincronizar período ao carregar
-      syncPeriodFromDate();
-    }
-  });
+    });
+  } else {
+    console.warn("⏭️ Flatpickr not loaded; skipping date picker init");
+  }
 
   // Event listener para mudanças manuais na data
   dateInput.addEventListener('change', syncPeriodFromDate);
@@ -124,14 +129,18 @@ function initTransactionForm() {
     const rawList = categoryInput.dataset.categoryList || "";
     const options = rawList.split(",").map(name => ({ value: name.trim(), text: name.trim() }));
 
-    new TomSelect(categoryInput, {
-      create: true,
-      persist: false,
-      maxItems: 1,
-      options,
-      items: categoryInput.value ? [categoryInput.value] : [],
-      sortField: { field: "text", direction: "asc" },
-    });
+    if (typeof TomSelect === "function") {
+      new TomSelect(categoryInput, {
+        create: true,
+        persist: false,
+        maxItems: 1,
+        options,
+        items: categoryInput.value ? [categoryInput.value] : [],
+        sortField: { field: "text", direction: "asc" },
+      });
+    } else {
+      console.warn("⏭️ TomSelect not loaded; skipping category selector");
+    }
   }
 
   const tagsInput = document.getElementById("id_tags_input");
@@ -145,25 +154,29 @@ function initTransactionForm() {
 
     const allTags = initialTags.map(name => ({ name }));
 
-    fetch("/tags/autocomplete/?q=")
-      .then(res => res.json())
-      .then(data => {
-        const tagOptions = [...new Set([...allTags, ...data])];
+    if (typeof TomSelect === "function") {
+      fetch("/tags/autocomplete/?q=")
+        .then(res => res.json())
+        .then(data => {
+          const tagOptions = [...new Set([...allTags, ...data])];
 
-        new TomSelect(tagsInput, {
-          plugins: ["remove_button"],
-          delimiter: ",",
-          persist: false,
-          create: true,
-          placeholder: "Add tags...",
-          valueField: "name",
-          labelField: "name",
-          searchField: "name",
-          preload: true,
-          options: tagOptions,
-          items: initialTags,
+          new TomSelect(tagsInput, {
+            plugins: ["remove_button"],
+            delimiter: ",",
+            persist: false,
+            create: true,
+            placeholder: "Add tags...",
+            valueField: "name",
+            labelField: "name",
+            searchField: "name",
+            preload: true,
+            options: tagOptions,
+            items: initialTags,
+          });
         });
-      });
+    } else {
+      console.warn("⏭️ TomSelect not loaded; skipping tags selector");
+    }
   }
 
   const amountInput = document.getElementById("id_amount");
