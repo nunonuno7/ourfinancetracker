@@ -3553,6 +3553,25 @@ def account_balance_import_xlsx(request):
             if not uploaded_file:
                 messages.error(request, "No file uploaded.")
                 return render(request, "core/import_balances_form.html")
+            # Validate uploaded file before processing
+            allowed_types = {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }
+            max_size = 20 * 1024 * 1024  # 20MB
+
+            if not uploaded_file.name.lower().endswith(".xlsx"):
+                messages.error(
+                    request, "Invalid file type. Please upload an .xlsx file."
+                )
+                return render(request, "core/import_balances_form.html")
+
+            if uploaded_file.content_type not in allowed_types:
+                messages.error(request, "Unsupported file content type.")
+                return render(request, "core/import_balances_form.html")
+
+            if uploaded_file.size > max_size:
+                messages.error(request, "File too large. Maximum size is 20MB.")
+                return render(request, "core/import_balances_form.html")
 
             # Read Excel file
             df = pd.read_excel(uploaded_file)

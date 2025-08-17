@@ -102,3 +102,33 @@ def test_account_balance_import_missing_columns(client):
     from django.contrib.messages import get_messages
     messages = [m.message for m in get_messages(response.wsgi_request)]
     assert any('Missing required columns' in m for m in messages)
+
+
+@pytest.mark.django_db
+def test_account_balance_import_invalid_extension(client):
+    user = User.objects.create_user('u7', password='x')
+    client.force_login(user)
+    initial_count = AccountBalance.objects.filter(account__user=user).count()
+    file = SimpleUploadedFile('balances.txt', b'content', content_type='text/plain')
+    response = client.post(reverse('account_balance_import_xlsx'), {'file': file}, follow=True)
+    from django.contrib.messages import get_messages
+    messages = [m.message for m in get_messages(response.wsgi_request)]
+    assert any('Invalid file type' in m for m in messages)
+    assert AccountBalance.objects.filter(account__user=user).count() == initial_count
+
+
+@pytest.mark.django_db
+def test_account_balance_import_file_too_large(client):
+    user = User.objects.create_user('u8', password='x')
+    client.force_login(user)
+    initial_count = AccountBalance.objects.filter(account__user=user).count()
+    large_content = b'0' * (20 * 1024 * 1024 + 1)
+    file = SimpleUploadedFile(
+        'balances.xlsx', large_content,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response = client.post(reverse('account_balance_import_xlsx'), {'file': file}, follow=True)
+    from django.contrib.messages import get_messages
+    messages = [m.message for m in get_messages(response.wsgi_request)]
+    assert any('File too large' in m for m in messages)
+    assert AccountBalance.objects.filter(account__user=user).count() == initial_count
