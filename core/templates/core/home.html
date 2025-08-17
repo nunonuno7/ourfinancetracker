@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}OurFinanceTracker - Simple Financial Management for Busy People{% endblock %}
+{% block title %}OurFinanceTracker - Simple Financial Management for Busy People{% endblock title %}
 
 {% block extra_head %}
 <style nonce="{{ request.csp_nonce }}">
@@ -303,6 +303,10 @@
     margin-bottom: 0;
   }
 
+  .kpi-green { color: #3AB49E; }
+  .kpi-green-dark { color: #2E9A84; }
+  .kpi-dark { color: #24282C; }
+  .kpi-gray { color: #A0A4A8; }
 
   @media (max-width: 768px) {
     .hero-section {
@@ -341,7 +345,7 @@
     }
   }
 </style>
-{% endblock %}
+{% endblock extra_head %}
 
 {% block content %}
 
@@ -356,7 +360,7 @@
         </div>
         <h1 class="hero-title">💰 OurFinanceTracker</h1>
         <p class="hero-subtitle">
-          Financial control for busy (or lazy!) people with minimum effort
+          Made for the Lazy: Manage Your Money with 3 Simple Steps
         </p>
         <div class="hero-cta">
           <a href="{% url 'accounts:signup' %}" class="btn btn-light btn-lg">
@@ -388,7 +392,7 @@
     <div class="row">
       <div class="col-lg-6 mb-4">
         <div class="card example-card">
-          <img src="{% static 'images/dashboard-example.png' %}" alt="Intelligent Financial Dashboard" class="img-fluid">
+          <img src="{% static 'images/dashboard-example.png' %}" alt="Intelligent Financial Dashboard" class="img-fluid" width="600" height="400">
           <h3 class="h5 mb-3">Intelligent Financial Dashboard</h3>
           <p class="text-muted">
             Complete analysis of your spending and investments with KPIs, charts, and historical data.
@@ -399,7 +403,7 @@
 
       <div class="col-lg-6 mb-4">
         <div class="card example-card">
-          <img src="{% static 'images/transactions-example.png' %}" alt="Advanced Transaction Management" class="img-fluid">
+          <img src="{% static 'images/transactions-example.png' %}" alt="Advanced Transaction Management" class="img-fluid" width="600" height="400">
           <h3 class="h5 mb-3">Advanced Transaction Management</h3>
           <p class="text-muted">
             Professional transaction interface with Excel-style filters, bulk operations,
@@ -504,37 +508,37 @@
       <div class="row">
         <div class="col-lg-3 col-md-6 mb-4">
           <div class="kpi-stat text-center">
-            <div class="kpi-icon" style="color: #3AB49E;">
+            <div class="kpi-icon kpi-green">
               <i class="bi bi-people-fill"></i>
             </div>
-            <div class="kpi-number fw-bold" style="color: #3AB49E;">+{{ total_users }}0</div>
+            <div class="kpi-number fw-bold kpi-green">+{{ total_users }}0</div>
             <div class="kpi-label">Users Registered</div>
           </div>
         </div>
         <div class="col-lg-3 col-md-6 mb-4">
           <div class="kpi-stat text-center">
-            <div class="kpi-icon" style="color: #2E9A84;">
+            <div class="kpi-icon kpi-green-dark">
               <i class="bi bi-graph-up-arrow"></i>
             </div>
-            <div class="kpi-number fw-bold" style="color: #2E9A84;">{{ total_transactions }}k+</div>
+            <div class="kpi-number fw-bold kpi-green-dark">{{ total_transactions }}k+</div>
             <div class="kpi-label">Transactions Tracked</div>
           </div>
         </div>
         <div class="col-lg-3 col-md-6 mb-4">
           <div class="kpi-stat text-center">
-            <div class="kpi-icon" style="color: #24282C;">
+            <div class="kpi-icon kpi-dark">
               <i class="bi bi-bank"></i>
             </div>
-            <div class="kpi-number fw-bold" style="color: #24282C;">+{{ total_accounts }}0</div>
+            <div class="kpi-number fw-bold kpi-dark">+{{ total_accounts }}0</div>
             <div class="kpi-label">Active Accounts</div>
           </div>
         </div>
         <div class="col-lg-3 col-md-6 mb-4">
           <div class="kpi-stat text-center">
-            <div class="kpi-icon" style="color: #A0A4A8;">
+            <div class="kpi-icon kpi-gray">
               <i class="bi bi-tags-fill"></i>
             </div>
-            <div class="kpi-number fw-bold" style="color: #A0A4A8;">{{ total_categories }}0+</div>
+            <div class="kpi-number fw-bold kpi-gray">{{ total_categories }}0+</div>
             <div class="kpi-label">Categories Created</div>
           </div>
         </div>
@@ -698,8 +702,6 @@
         </div>
       </div>
     </div>
-
-
   </div>
 </section>
 
@@ -804,7 +806,9 @@
   </div>
 </section>
 
-{% endblock %}
+{% include "core/partials/lazy_instructions.html" %}
+
+{% endblock content %}
 
 {% block extra_js %}
 <script nonce="{{ request.csp_nonce }}">
@@ -832,4 +836,4 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
-{% endblock %}
+{% endblock extra_js %}
