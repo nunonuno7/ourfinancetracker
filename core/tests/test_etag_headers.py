@@ -1,10 +1,10 @@
 import json
-import os
 from datetime import date
 from decimal import Decimal
-from unittest import mock
+from unittest import skipIf
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 
@@ -62,48 +62,11 @@ class ETagHeadersTest(TestCase):
         )
         self.assertEqual(response_304_lm.status_code, 304)
 
-    @mock.patch.dict(
-        os.environ,
-        {
-            "SUPABASE_REST_URL": "http://test",
-            "SUPABASE_API_KEY": "key",
-            "SUPABASE_JWT_SECRET": "secret",
-        },
+    @skipIf(
+        connection.vendor == "sqlite",
+        "transactions_json_v2 uses PostgreSQL-specific SQL",
     )
-    @mock.patch("core.views.requests.post")
-    @mock.patch("core.views.requests.get")
-    def test_transactions_json_v2_etag(self, mock_get, mock_post):
-        tx_resp = mock.Mock()
-        tx_resp.json.return_value = [
-            {
-                "id": 1,
-                "date": "2024-01-01",
-                "type": "IN",
-                "amount": 10,
-                "category": {"name": "Cat"},
-                "account": {"name": "Acc"},
-                "period": "2024-01",
-                "description": "d",
-                "tags": "",
-                "is_system": False,
-                "editable": True,
-                "is_estimated": False,
-            }
-        ]
-        tx_resp.headers = {"Content-Range": "0-0/1"}
-        tx_resp.raise_for_status = lambda: None
-        mock_get.return_value = tx_resp
-
-        filt_resp = mock.Mock()
-        filt_resp.json.return_value = {
-            "types": ["Income"],
-            "categories": ["Cat"],
-            "accounts": ["Acc"],
-            "periods": ["2024-01"],
-        }
-        filt_resp.raise_for_status = lambda: None
-        mock_post.return_value = filt_resp
-
+    def test_transactions_json_v2_etag(self):
         url = reverse("transactions_json_v2")
         params = {"date_start": "2024-01-01", "date_end": "2024-12-31"}
         response = self.client.get(url, params)
