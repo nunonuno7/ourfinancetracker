@@ -1027,6 +1027,12 @@ class TransactionManager {
     if (this.groupBy === 'account') {
       return tx.account || 'No account';
     }
+    if (this.groupBy === 'type') {
+      return tx.type || 'No type';
+    }
+    if (this.groupBy === 'period') {
+      return tx.period || 'No period';
+    }
     return '';
   }
 
