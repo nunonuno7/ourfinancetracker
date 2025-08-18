@@ -29,3 +29,5 @@ requests==2.32.4  # <- para proxy seguro com Supabase REST API
 # ───── Webserver local (produção/dev) ─────
 gunicorn==23.0.0
 
+# ───── Fuzz testing ─────
+hypothesis==6.138.2
