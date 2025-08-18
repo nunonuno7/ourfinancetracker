@@ -71,3 +71,4 @@ pytest-django==4.11.1
 pytest-cov==6.2.1
 django-anymail==13.0.1
 resend==2.13.0
+hypothesis==6.138.2
