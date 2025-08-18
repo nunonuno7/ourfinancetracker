@@ -51,6 +51,9 @@ whitenoise==6.9.0
 requests==2.32.4
 pytz==2025.2
 
+# Progress bar
+tqdm==4.66.5
+
 # Structured logging
 django-structlog==9.1.1
 
