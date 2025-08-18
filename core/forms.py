@@ -16,6 +16,7 @@ from django.db import transaction
 from django.db.models import F
 from django.forms import BaseModelFormSet, modelformset_factory
 from django.utils.translation import gettext_lazy as _
+from django.utils.html import strip_tags
 
 from .models import (
     ALLOWED_ACCOUNT_TYPE_NAMES,
@@ -214,7 +215,7 @@ class TransactionForm(forms.ModelForm):
             self.add_error("direction", _("Investment flow is required."))
 
     def clean_category(self):
-        name = (self.cleaned_data.get("category") or "").strip()
+        name = strip_tags((self.cleaned_data.get("category") or "").strip())
         if not name:
             raise forms.ValidationError(_("This field is required."))
         user = self._user or self.instance.user
@@ -235,7 +236,7 @@ class TransactionForm(forms.ModelForm):
         return Category.objects.create(user=user, name=name)
 
     def clean_tags_input(self):
-        return (self.cleaned_data.get("tags_input") or "").strip()
+        return strip_tags((self.cleaned_data.get("tags_input") or "").strip())
 
     def save(self, commit=True) -> Transaction:
         instance: Transaction = super().save(commit=False)
@@ -292,7 +293,7 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
 
     # CORRIGIDO: Validação melhorada para "Other"
     def clean_name(self) -> str:
-        name = self.cleaned_data.get("name", "").strip()
+        name = strip_tags(self.cleaned_data.get("name", "").strip())
 
         # Impedir criação manual de categorias reservadas
         if name.lower() in ["other", "outro", "others", "estimated transaction"]:
@@ -313,7 +314,7 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         return name
 
     def save(self, commit: bool = True) -> Category:
-        new_name = self.cleaned_data["name"].strip()
+        new_name = strip_tags(self.cleaned_data["name"]).strip()
         self.cleaned_data["name"] = new_name
         self.instance.name = new_name
         self.instance.user = self.user
@@ -386,7 +387,7 @@ class AccountBalanceForm(forms.ModelForm):
             self.initial["account"] = self.instance.account.name
 
     def clean_account(self):
-        name = self.cleaned_data.get("account", "").strip()
+        name = strip_tags(self.cleaned_data.get("account", "").strip())
         if not name:
             raise ValidationError("Account name is required.")
         if len(name) > 100:
@@ -487,7 +488,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # CLEANERS
     # ------------------------------------------------------------------ #
     def clean_name(self):
-        return self.cleaned_data["name"].strip()
+        return strip_tags(self.cleaned_data["name"]).strip()
 
     def clean(self):
         super().clean()
