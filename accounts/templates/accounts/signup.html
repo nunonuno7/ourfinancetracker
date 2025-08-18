@@ -1,7 +1,7 @@
 
 {% extends "base.html" %}
 
-{% block title %}Sign Up{% endblock %}
+{% block title %}Sign Up{% endblock title %}
 
 {% block content %}
 <div class="container mt-4">
@@ -15,7 +15,7 @@
                     {% if messages %}
                         {% for message in messages %}
                             <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show" role="alert">
-                                {{ message }}
+                                {{ message|escape }}
                                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                             </div>
                         {% endfor %}
@@ -47,5 +47,5 @@
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
+  </div>
+  {% endblock content %}

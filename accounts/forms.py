@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.utils.html import strip_tags
 
 
 class SignupForm(forms.Form):
@@ -9,10 +10,10 @@ class SignupForm(forms.Form):
     password = forms.CharField(widget=forms.PasswordInput)
 
     def clean_username(self):
-        return self.cleaned_data["username"].strip()
+        return strip_tags(self.cleaned_data["username"]).strip()
 
     def clean_email(self):
-        return self.cleaned_data["email"].strip().lower()
+        return strip_tags(self.cleaned_data["email"]).strip().lower()
 
     def clean_password(self):
         password = self.cleaned_data["password"]
