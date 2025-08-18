@@ -145,3 +145,19 @@ def test_clean_category_reuses_case_insensitive_match():
     tx = form.save()
     assert tx.category == existing
     assert Category.objects.filter(user=user, name__iexact="food").count() == 1
+
+
+@pytest.mark.django_db
+def test_cannot_use_blocked_category():
+    user = User.objects.create_user("u10")
+    Category.objects.create(user=user, name="Estimated Transaction", blocked=True)
+    data = {
+        "date": "2024-01-10",
+        "type": Transaction.Type.EXPENSE,
+        "amount": "5",
+        "period": "2024-01",
+        "category": "Estimated Transaction",
+    }
+    form = TransactionForm(data=data, user=user)
+    assert not form.is_valid()
+    assert "category" in form.errors

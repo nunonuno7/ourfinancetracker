@@ -24,8 +24,8 @@ class AccountAdmin(admin.ModelAdmin):
 # Registo personalizado para Category
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "user", "position")
-    list_filter = ("user",)
+    list_display = ("name", "user", "position", "blocked")
+    list_filter = ("user", "blocked")
     search_fields = ("name",)
 
 # Registo personalizado para Transaction

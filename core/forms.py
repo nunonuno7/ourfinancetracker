@@ -220,7 +220,18 @@ class TransactionForm(forms.ModelForm):
         user = self._user or self.instance.user
         existing = Category.objects.filter(user=user, name__iexact=name).first()
         if existing:
+            if existing.blocked:
+                raise forms.ValidationError(
+                    _("This category is reserved and cannot be used."))
             return existing
+        if name.lower() in [
+            "other",
+            "outro",
+            "others",
+            "estimated transaction",
+        ]:
+            raise forms.ValidationError(
+                _("This category is reserved and cannot be used."))
         return Category.objects.create(user=user, name=name)
 
     def clean_tags_input(self):
@@ -283,8 +294,8 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
     def clean_name(self) -> str:
         name = self.cleaned_data.get("name", "").strip()
 
-        # Impedir criação manual da categoria "Other" (e variantes)
-        if name.lower() in ["other", "outro", "others"]:
+        # Impedir criação manual de categorias reservadas
+        if name.lower() in ["other", "outro", "others", "estimated transaction"]:
             if not self.instance.pk:
                 raise ValidationError(
                     "Reserved category names cannot be created manually."
@@ -634,5 +645,7 @@ class RecurringTransactionForm(UserAwareMixin, forms.ModelForm):
         super().__init__(*args, user=user, **kwargs)
         if self.user:
             self.fields["account"].queryset = Account.objects.filter(user=self.user)
-            self.fields["category"].queryset = Category.objects.filter(user=self.user)
+            self.fields["category"].queryset = Category.objects.filter(
+                user=self.user, blocked=False
+            )
             self.fields["tags"].queryset = Tag.objects.filter(user=self.user)
