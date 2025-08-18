@@ -106,6 +106,8 @@ def test_estimate_creates_single_estimated_transaction_for_period(
         ).count()
         == 1
     )
+    assert tx1.category.name == "Estimated Transaction"
+    assert tx1.category.blocked is True
 
     run_estimate_for(client, period_aug)
     assert (

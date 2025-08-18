@@ -444,8 +444,13 @@ class FinanceEstimationService:
 
             # Get or create estimation category
             category, _ = Category.objects.get_or_create(
-                name="Estimated Transaction", user=self.user
+                name="Estimated Transaction",
+                user=self.user,
+                defaults={"blocked": True},
             )
+            if not category.blocked:
+                category.blocked = True
+                category.save(update_fields=["blocked"])
 
             # Get default account
             account = Account.objects.filter(user=self.user).first()

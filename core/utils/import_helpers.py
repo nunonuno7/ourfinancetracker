@@ -187,8 +187,8 @@ class BulkTransactionImporter:
 
         # Check existing categories
         existing_categories = {
-            c.name: c 
-            for c in Category.objects.filter(user=self.user)
+            c.name: c
+            for c in Category.objects.filter(user=self.user, blocked=False)
         }
 
         # Create missing categories
@@ -196,6 +196,7 @@ class BulkTransactionImporter:
             Category(name=name, user=self.user)
             for name in unique_categories
             if name not in existing_categories
+            and name.lower() != "estimated transaction"
         ]
 
         if categories_to_create:
@@ -203,8 +204,8 @@ class BulkTransactionImporter:
 
         # Refresh lookup with optimized query
         return {
-            c.name: c 
-            for c in Category.objects.filter(user=self.user).only('id', 'name')
+            c.name: c
+            for c in Category.objects.filter(user=self.user, blocked=False).only('id', 'name')
         }
 
     def _bulk_create_accounts(self, df: pd.DataFrame) -> Dict:

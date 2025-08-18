@@ -349,6 +349,8 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
 
         qs = super().get_queryset()
         filtered_qs = qs.filter(user=self.request.user)
+        if hasattr(qs.model, "blocked"):
+            filtered_qs = filtered_qs.filter(blocked=False)
 
         # Otimizar queries com relacionamentos
         model_name = getattr(self, "model", None)
@@ -698,7 +700,9 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
 
         context["accounts"] = Account.objects.filter(user=user).order_by("name")
         context["category_list"] = list(
-            Category.objects.filter(user=user).values_list("name", flat=True)
+            Category.objects.filter(user=user, blocked=False).values_list(
+                "name", flat=True
+            )
         )
         return context
 
@@ -759,9 +763,9 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["category_list"] = list(
-            Category.objects.filter(user=self.request.user).values_list(
-                "name", flat=True
-            )
+            Category.objects.filter(
+                user=self.request.user, blocked=False
+            ).values_list("name", flat=True)
         )
         return context
 
@@ -2412,7 +2416,7 @@ def category_autocomplete(request):
     """Autocomplete for categories."""
     term = request.GET.get("term", "")
     categories = Category.objects.filter(
-        user=request.user, name__icontains=term
+        user=request.user, blocked=False, name__icontains=term
     ).values_list("name", flat=True)[:10]
     return JsonResponse(list(categories), safe=False)
 

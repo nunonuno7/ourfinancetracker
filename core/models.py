@@ -249,6 +249,10 @@ class Category(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="categories")  # type: ignore[valid-type]
     name = models.CharField(max_length=100)
+    blocked = models.BooleanField(
+        default=False,
+        help_text="If true, category is reserved and hidden from normal use",
+    )
     position = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -415,7 +419,7 @@ class Transaction(models.Model):
         # Atribui categoria mais usada se não houver
         if not self.pk and not self.category_id:
             most_used = (
-                Category.objects.filter(user=self.user)
+                Category.objects.filter(user=self.user, blocked=False)
                 .annotate(num=models.Count("transactions"))
                 .order_by("-num")
                 .first()
