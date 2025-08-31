@@ -397,13 +397,21 @@ else:
 EMAIL_BACKEND = ENV("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 DEFAULT_FROM_EMAIL = ENV("DEFAULT_FROM_EMAIL", "noreply@ourfinancetracker.com")
 EMAIL_LINK_DOMAIN = ENV("EMAIL_LINK_DOMAIN", "www.ourfinancetracker.com")
-EMAIL_HOST = ENV("EMAIL_HOST", "")
-EMAIL_PORT = int(ENV("EMAIL_PORT", "587"))
-EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "true")
+
+EMAIL_HOST = ENV("EMAIL_HOST", "mail.ourfinancetracker.com")
+EMAIL_PORT = int(ENV("EMAIL_PORT", "465"))
+
+# ⚠️ Muito importante: só um deles deve estar True
+EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", "true")    # SSL direto (465)
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "false")   # STARTTLS (587)
+
 EMAIL_HOST_USER = ENV("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = ENV("EMAIL_HOST_PASSWORD", "")
 EMAIL_TIMEOUT = int(ENV("EMAIL_TIMEOUT", "20"))
+
 SERVER_EMAIL = ENV("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+# fallback para dev (se não houver host definido, manda p/ consola)
 if DEBUG and not EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
