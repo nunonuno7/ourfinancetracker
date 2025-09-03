@@ -313,6 +313,7 @@ CONTENT_SECURITY_POLICY = {
         "default-src": ("'self'",),
         "script-src": (
             "'self'",
+            "'unsafe-eval'",
             NONCE,
             "https://cdn.jsdelivr.net",
             "https://cdn.datatables.net",
