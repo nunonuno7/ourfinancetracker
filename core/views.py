@@ -27,6 +27,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
+from celery.exceptions import OperationalError
 from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib import messages
@@ -1397,7 +1398,19 @@ def import_transactions_xlsx(request):
                 for chunk in uploaded_file.chunks():
                     dest.write(chunk)
 
-            task = import_transactions_task.delay(request.user.id, str(tmp_path))
+            try:
+                task = import_transactions_task.delay(
+                    request.user.id, str(tmp_path)
+                )
+            except (OperationalError, ConnectionError) as e:
+                logger.exception(
+                    "Celery unavailable, running import synchronously", exc_info=e
+                )
+                import_transactions_task(request.user.id, str(tmp_path))
+                return JsonResponse(
+                    {"status": "processed synchronously"}, status=200
+                )
+
             return JsonResponse({"task_id": task.id}, status=202)
 
         except Exception as e:

@@ -3,6 +3,8 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import User
 from django.contrib.messages import get_messages
+from unittest.mock import patch
+from celery.exceptions import OperationalError
 
 
 @pytest.mark.django_db
@@ -38,3 +40,21 @@ def test_import_transactions_xlsx_too_large(client):
     response = client.post(reverse("transaction_import_xlsx"), {"file": file}, follow=True)
     msgs = list(get_messages(response.wsgi_request))
     assert any("File too large" in m.message for m in msgs)
+
+
+@pytest.mark.django_db
+def test_import_transactions_xlsx_sync_fallback(client):
+    user = User.objects.create_user(username="tester4", password="secret")
+    client.force_login(user)
+    file = SimpleUploadedFile(
+        "data.xlsx",
+        b"dummy",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    with patch("core.views.import_transactions_task") as mocked_task:
+        mocked_task.delay.side_effect = OperationalError("broker down")
+        response = client.post(reverse("transaction_import_xlsx"), {"file": file})
+        assert mocked_task.delay.called
+        assert mocked_task.called
+        assert response.status_code == 200
+        assert response.json()["status"] == "processed synchronously"
