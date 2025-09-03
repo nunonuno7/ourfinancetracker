@@ -115,7 +115,9 @@ class BulkTransactionImporter:
         try:
             logger.info(f"🔄 [BulkTransactionImporter] Converting data types...")
             df_clean['Date'] = pd.to_datetime(df_clean['Date']).dt.date
-            df_clean['Amount'] = df_clean['Amount'].astype(float)
+            df_clean['Amount'] = (
+                df_clean['Amount'].astype(str).str.replace(',', '.').astype(float)
+            )
 
             logger.debug(f"📅 [BulkTransactionImporter] Date range: {df_clean['Date'].min()} to {df_clean['Date'].max()}")
             logger.debug(f"💰 [BulkTransactionImporter] Amount range: {df_clean['Amount'].min()} to {df_clean['Amount'].max()}")

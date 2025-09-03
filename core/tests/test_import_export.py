@@ -51,6 +51,23 @@ def test_bulk_importer_duplicate_rows():
 
 
 @pytest.mark.django_db
+def test_bulk_importer_amount_with_comma_decimal():
+    user = User.objects.create_user('u_comma')
+    df = pd.DataFrame({
+        'Date': ['2024-01-01'],
+        'Type': ['IN'],
+        'Amount': ['10,35'],
+        'Category': ['Salary'],
+        'Account': ['Bank'],
+    })
+    importer = import_helpers.BulkTransactionImporter(user)
+    result = importer.import_dataframe(df)
+    assert result['imported'] == 1
+    transaction = Transaction.objects.get(user=user)
+    assert transaction.amount == Decimal('10.35')
+
+
+@pytest.mark.django_db
 def test_bulk_importer_large_file_chunked():
     user = User.objects.create_user('u4')
     rows = 2100
