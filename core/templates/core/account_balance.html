@@ -17,7 +17,6 @@
               <div class="btn-group" role="group">
                 <a class="btn btn-outline-secondary btn-sm" href="?year={{ year }}&month={{ month|add:'-1' }}">‹ Prev</a>
                 <input type="month" id="selector" value="{{ year }}-{{ month|stringformat:'02d' }}"
-                       onchange="window.location='?month='+this.value.split('-')[1]+'&year='+this.value.split('-')[0];"
                        class="form-control form-control-sm w-auto">
                 <a class="btn btn-outline-secondary btn-sm" href="?year={{ year }}&month={{ month|add:'1' }}">Next ›</a>
               </div>
@@ -215,4 +214,4 @@
 <script src="{% static 'js/account_balance.js' %}" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="{% static 'js/drag_reorder.js' %}" defer></script>
-{% endblock %}
+{% endblock content %}

@@ -589,6 +589,16 @@ document.addEventListener("DOMContentLoaded", () => {
       availableAccounts = [];
     }
   }
+
+  // Month selector navigation
+  const monthSelector = document.getElementById("selector");
+  if (monthSelector) {
+    monthSelector.addEventListener("change", () => {
+      const [year, month] = monthSelector.value.split("-");
+      window.location.search = `?year=${year}&month=${parseInt(month, 10)}`;
+    });
+    console.log("✅ [account_balance.js] Month selector handler initialized");
+  }
   
   // Add row button
   const addBtn = document.getElementById("add-row-btn");
