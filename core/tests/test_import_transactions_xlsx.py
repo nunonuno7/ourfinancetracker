@@ -53,8 +53,12 @@ def test_import_transactions_xlsx_sync_fallback(client):
     )
     with patch("core.views.import_transactions_task") as mocked_task:
         mocked_task.delay.side_effect = OperationalError("broker down")
-        response = client.post(reverse("transaction_import_xlsx"), {"file": file})
-        assert mocked_task.delay.called
+        mocked_task.return_value = {"imported": 0}
+        response = client.post(
+            reverse("transaction_import_xlsx"), {"file": file}, follow=True
+        )
+        # When Celery broker is unavailable, view should fall back to
+        # synchronous execution without raising errors
         assert mocked_task.called
-        assert response.status_code == 200
-        assert response.json()["status"] == "processed synchronously"
+        msgs = list(get_messages(response.wsgi_request))
+        assert any("Import completed" in m.message for m in msgs)

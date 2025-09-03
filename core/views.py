@@ -1398,20 +1398,36 @@ def import_transactions_xlsx(request):
                 for chunk in uploaded_file.chunks():
                     dest.write(chunk)
 
-            try:
-                task = import_transactions_task.delay(
-                    request.user.id, str(tmp_path)
-                )
-            except (OperationalError, ConnectionError) as e:
-                logger.exception(
-                    "Celery unavailable, running import synchronously", exc_info=e
-                )
-                import_transactions_task(request.user.id, str(tmp_path))
-                return JsonResponse(
-                    {"status": "processed synchronously"}, status=200
-                )
+            result = None
 
-            return JsonResponse({"task_id": task.id}, status=202)
+            use_async = not settings.DEBUG and not settings.CELERY_BROKER_URL.startswith(
+                "memory"
+            )
+
+            if use_async:
+                try:
+                    import_transactions_task.delay(request.user.id, str(tmp_path))
+                    messages.info(
+                        request,
+                        "Import started in background. You will be notified when it completes.",
+                    )
+                    return redirect("transaction_list")
+                except (OperationalError, ConnectionError) as e:
+                    logger.exception(
+                        "Celery unavailable, running import synchronously", exc_info=e
+                    )
+                    result = import_transactions_task(request.user.id, str(tmp_path))
+            else:
+                result = import_transactions_task(request.user.id, str(tmp_path))
+
+            if isinstance(result, dict):
+                imported = result.get("imported", 0)
+            else:
+                imported = 0
+            messages.success(
+                request, f"Import completed: {imported} transactions."
+            )
+            return redirect("transaction_list")
 
         except Exception as e:
             logger.error(f"Import error for user {request.user.id}: {e}")
