@@ -119,7 +119,8 @@ function addRow() {
     }
     
     // Find insertion point (before action bar)
-    const actionBar = form.querySelector(".card:last-child");
+    const addRowButton = document.getElementById('add-row-btn');
+    const actionBar = addRowButton ? addRowButton.closest('.card') : null;
     if (!actionBar) {
       console.error("❌ [addRow] Could not find insertion point");
       return;
