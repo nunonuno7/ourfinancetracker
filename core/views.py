@@ -1205,32 +1205,13 @@ def transaction_bulk_update(request):
 @require_POST
 @login_required
 def transaction_bulk_duplicate(request):
-    """Bulk duplicate transactions for selected month offsets."""
+    """Bulk duplicate transactions."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get("transaction_ids", [])
-        months = data.get("months", [1])
 
         if not transaction_ids:
             return JsonResponse({"success": False, "error": "No transactions selected"})
-
-        if not isinstance(months, list):
-            return JsonResponse({"success": False, "error": "Invalid months format"})
-
-        valid_months = sorted(
-            {
-                int(month)
-                for month in months
-                if isinstance(month, int) and 1 <= int(month) <= 12
-            }
-        )
-        if not valid_months:
-            return JsonResponse(
-                {
-                    "success": False,
-                    "error": "Please provide month offsets between 1 and 12",
-                }
-            )
 
         # Get original transactions
         transactions = (
@@ -1245,56 +1226,47 @@ def transaction_bulk_duplicate(request):
             )
 
         created = 0
+        today = date.today()
+        current_period, _ = DatePeriod.objects.get_or_create(
+            year=today.year,
+            month=today.month,
+            defaults={"label": today.strftime("%B %Y")},
+        )
 
         # Use atomic transaction for all operations
         with db_transaction.atomic():
             new_transactions = []
             for tx in transactions:
-                original_tags = list(tx.tags.all())
-
-                for month_offset in valid_months:
-                    target_month_index = tx.date.month - 1 + month_offset
-                    target_year = tx.date.year + (target_month_index // 12)
-                    target_month = (target_month_index % 12) + 1
-                    target_day = min(tx.date.day, monthrange(target_year, target_month)[1])
-                    target_date = date(target_year, target_month, target_day)
-
-                    target_period, _ = DatePeriod.objects.get_or_create(
-                        year=target_year,
-                        month=target_month,
-                        defaults={"label": target_date.strftime("%B %Y")},
-                    )
-
-                    new_tx = Transaction.objects.create(
-                        user=tx.user,
-                        type=tx.type,
-                        amount=tx.amount,
-                        date=target_date,
-                        notes=f"Duplicate of transaction from {tx.date}",
-                        is_estimated=tx.is_estimated,
-                        period=target_period,
-                        account=tx.account,
-                        category=tx.category,
-                    )
-                    new_transactions.append((new_tx, original_tags))
-                    created += 1
+                # Create duplicate with today's date
+                new_tx = Transaction.objects.create(
+                    user=tx.user,
+                    type=tx.type,
+                    amount=tx.amount,
+                    date=today,
+                    notes=f"Duplicate of transaction from {tx.date}",
+                    is_estimated=tx.is_estimated,
+                    period=current_period,
+                    account=tx.account,
+                    category=tx.category,
+                )
+                new_transactions.append((new_tx, tx.tags.all()))
+                created += 1
 
             # Copy tags for all new transactions
             for new_tx, original_tags in new_transactions:
-                if original_tags:
-                    new_tx.tags.add(*original_tags)
+                for tag in original_tags:
+                    new_tx.tags.add(tag)
 
         # Clear cache only AFTER all database operations are complete
         clear_tx_cache(request.user.id, force=True)
         logger.info(
-            f"✅ Bulk duplicate completed: {created} transactions created for offsets {valid_months}, cache cleared for user {request.user.id}"
+            f"✅ Bulk duplicate completed: {created} transactions created, cache cleared for user {request.user.id}"
         )
 
         return JsonResponse(
             {
                 "success": True,
                 "created": created,
-                "months": valid_months,
                 "message": f"{created} transactions duplicated",
             }
         )
