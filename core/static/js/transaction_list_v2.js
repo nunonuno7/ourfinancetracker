@@ -1,53 +1,4 @@
 // Transactions 2.0 JavaScript - Advanced functionality
-const DynamicCSS = (() => {
-  let sheet;
-  const created = new Set();
-
-  function ensureSheet() {
-    if (sheet) return sheet;
-    let nonce = window.CSP_NONCE;
-    if (!nonce) {
-      const meta = document.querySelector('meta[name="csp-nonce"]');
-      if (meta) nonce = meta.getAttribute('content');
-    }
-    if (!nonce) {
-      const script = document.querySelector('script[nonce]');
-      if (script) nonce = script.getAttribute('nonce');
-    }
-    const el = document.createElement('style');
-    if (nonce) el.setAttribute('nonce', nonce);
-    document.head.appendChild(el);
-    sheet = el.sheet;
-    return sheet;
-  }
-
-  function safeClassName(prop, value) {
-    return `dyn-${prop.replace(/[^a-z]/gi, '')}-${String(value).replace(/[^a-z0-9_-]/gi, '')}`;
-  }
-
-  function classFor(prop, value, important = true) {
-    const cn = safeClassName(prop, value);
-    if (!created.has(cn)) {
-      const rule = `.${cn}{${prop}:${value}${important ? ' !important' : ''};}`;
-      ensureSheet().insertRule(rule, sheet.cssRules.length);
-      created.add(cn);
-    }
-    return cn;
-  }
-
-  return { classFor };
-})();
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (s) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  }[s]));
-}
-
 class TransactionManager {
   constructor() {
     console.log("🚀 [TransactionManager] Initializing Transaction Manager...");
@@ -59,9 +10,6 @@ class TransactionManager {
     this.selectedRows = new Set();
     this.bulkMode = false;
     this.maxPageSize = 1000; // Maximum safety limit
-
-    this.groupBy = 'none';
-    this.lastData = null;
 
     // Sorting state
     this.sortField = "date";
@@ -93,11 +41,6 @@ class TransactionManager {
     this.bindEvents();
     console.log("🔗 [init] Event listeners connected");
 
-    if (window.innerWidth < 992) {
-      this.groupBy = 'category';
-      $('#group-by-selector').val('category');
-    }
-
     this.loadTransactions();
     this.loadTotals();
 
@@ -105,7 +48,7 @@ class TransactionManager {
     this.updateSortIndicators();
 
     // Initialize checkbox column as hidden (since bulk mode starts as false)
-    $("#transactions-table thead th:first-child").addClass("d-none");
+    $("#transactions-table thead th:first-child").addClass("is-hidden");
 
     console.log("✅ [init] Complete initialization finished");
   }
@@ -160,13 +103,6 @@ class TransactionManager {
       this.changePageSize(e.target.value),
     );
 
-    $("#group-by-selector").on("change", (e) => {
-      this.groupBy = e.target.value;
-      if (this.lastData) {
-        this.renderTransactions(this.lastData);
-      }
-    });
-
     // Buttons
     $("#apply-filters-btn").on("click", () => this.loadTransactions());
     $("#clear-filters-btn").on("click", () => this.clearFilters());
@@ -181,7 +117,7 @@ class TransactionManager {
     );
     $("#select-all").on("change", (e) => this.selectAll(e.target.checked));
     $("#bulk-mark-cleared").on("click", () => this.bulkMarkCleared());
-    $("#bulk-duplicate").on("click", () => this.bulkDuplicate());
+    $("#bulk-duplicate").on("click", () => this.showDuplicateModal());
     $("#bulk-delete").on("click", () => this.bulkDelete());
 
     // Row selection
@@ -591,7 +527,6 @@ class TransactionManager {
 
       const data = await response.json();
       console.log("📊 [loadTransactions] Full response data:", data);
-      this.lastData = data;
 
       if (!data.transactions) {
         console.log("⚠️ [loadTransactions] No transactions key in response");
@@ -686,8 +621,6 @@ class TransactionManager {
     console.group("🎨 [renderTransactions] RENDERING STARTED");
     console.log("Timestamp:", new Date().toISOString());
 
-    this.lastData = data;
-
     console.log("📋 DATA VALIDATION:");
     console.table({
       hasData: !!data,
@@ -725,43 +658,9 @@ class TransactionManager {
 
     console.log("✏️ CREATING", data.transactions.length, "TABLE ROWS");
 
-    const transactions = data.transactions.slice();
-
-    if (this.groupBy && this.groupBy !== 'none') {
-      const groups = new Map();
-      transactions.forEach((tx) => {
-        const key = this.getGroupKey(tx);
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(tx);
-      });
-
-      const sorted = Array.from(groups.entries()).sort((a, b) =>
-        a[0].localeCompare(b[0])
-      );
-
-      sorted.forEach(([key, items]) => {
-        const total = items.reduce(
-          (sum, t) => sum + parseFloat(t.amount),
-          0
-        );
-        const header = this.createGroupHeader(key, items.length, total);
-        tbody.append(header);
-        items.forEach((tx, idx) => {
-          try {
-            const row = this.createTransactionRow(tx, idx);
-            tbody.append(row);
-          } catch (error) {
-            console.error(`❌ Error creating row:`, error);
-          }
-        });
-      });
-
-      this.finishRendering(data);
-      return;
-    }
-
     // Performance optimization for large datasets
     const batchSize = 50;
+    const transactions = data.transactions;
 
     if (transactions.length > batchSize) {
       // Render in batches for better performance
@@ -835,17 +734,7 @@ class TransactionManager {
     $("#total-count").text(countMessage);
     console.log("📊 Count message set:", countMessage);
     console.log("✅ RENDERING COMPLETED");
-    this.checkInlineStyles();
     console.groupEnd();
-  }
-
-  checkInlineStyles() {
-    const container = document.getElementById("transactions-table");
-    if (!container) return;
-    const styled = container.querySelectorAll("[style]");
-    if (styled.length > 0) {
-      console.warn("[CSP] Inline styles detected:", styled);
-    }
   }
 
   createTransactionRow(tx, index) {
@@ -872,7 +761,7 @@ class TransactionManager {
         'Transfer': 'type-badge type-transfer'
       };
       const className = typeClasses[type] || 'type-badge';
-      return `<span class="${className}">${this.getTypeIcon(type)} ${escapeHtml(type)}</span>`;
+      return `<span class="${className}">${this.getTypeIcon(type)} ${type}</span>`;
     };
 
     // Format amount with proper styling
@@ -890,21 +779,19 @@ class TransactionManager {
         amountClass = numAmount >= 0 ? 'amount-positive' : 'amount-negative';
       }
       
-      return `<span class="transaction-amount ${amountClass}">${escapeHtml(tx.amount_formatted)}</span>`;
+      return `<span class="transaction-amount ${amountClass}">${tx.amount_formatted}</span>`;
     };
 
     // Format category as pill
     const formatCategory = (category) => {
       if (!category || category === '') return '<span class="text-muted">-</span>';
-      const safe = escapeHtml(category);
-      return `<span class="category-pill" title="${safe}">${safe}</span>`;
+      return `<span class="category-pill" title="${category}">${category}</span>`;
     };
 
     // Format account as pill
     const formatAccount = (account) => {
       if (!account || account === 'No account') return '<span class="text-muted">-</span>';
-      const safe = escapeHtml(account);
-      return `<span class="account-pill" title="${safe}">${safe}</span>`;
+      return `<span class="account-pill" title="${account}">${account}</span>`;
     };
 
     // Format tags as pills
@@ -913,14 +800,13 @@ class TransactionManager {
       
       const tagList = tags.split(', ').filter(tag => tag.trim());
       if (tagList.length === 0) return '<span class="text-muted">-</span>';
-
-      const tagPills = tagList.slice(0, 2).map(tag => {
-        const safe = escapeHtml(tag);
-        return `<span class="tag-pill" title="${safe}">${safe}</span>`;
-      }).join(' ');
-
+      
+      const tagPills = tagList.slice(0, 2).map(tag => 
+        `<span class="tag-pill" title="${tag}">${tag}</span>`
+      ).join(' ');
+      
       const moreCount = tagList.length - 2;
-      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${escapeHtml(tagList.slice(2).join(', '))}">+${moreCount}</span>` : '';
+      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${tagList.slice(2).join(', ')}">+${moreCount}</span>` : '';
       
       return `<div class="tags-container">${tagPills}${moreIndicator}</div>`;
     };
@@ -931,7 +817,7 @@ class TransactionManager {
       const day = date.getDate().toString().padStart(2, '0');
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const year = date.getFullYear().toString().substr(-2);
-      return `<span class="text-nowrap">${escapeHtml(`${day}/${month}/${year}`)}</span>`;
+      return `<span class="text-nowrap">${day}/${month}/${year}</span>`;
     };
 
     // Handle actions based on transaction type and editability
@@ -977,16 +863,15 @@ class TransactionManager {
     }
 
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
-    const checkboxClass = this.bulkMode ? "" : " d-none";
+    const checkboxVisibility = this.bulkMode ? "" : "is-hidden";
 
-    const template = document.createElement('template');
-    template.innerHTML = `
+    return `
       <tr data-id="${tx.id}" class="${rowClass}">
-        <td class="text-center${checkboxClass}">
+        <td class="text-center ${checkboxVisibility}">
           <input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}>
         </td>
         <td class="text-nowrap">${formatDate(tx.date)}</td>
-        <td class="d-none d-md-table-cell text-muted">${escapeHtml(tx.period)}</td>
+        <td class="d-none d-md-table-cell text-muted">${tx.period}</td>
         <td>${getTypeBadge(tx.type)}${systemBadge}</td>
         <td class="text-end">${formatAmount(tx.amount_formatted, tx.type)}</td>
         <td class="d-none d-lg-table-cell">${formatCategory(tx.category)}</td>
@@ -995,45 +880,6 @@ class TransactionManager {
         <td class="text-center">${actionsHtml}</td>
       </tr>
     `;
-    const row = template.content.firstElementChild;
-    row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
-    return row;
-  }
-
-  createGroupHeader(name, count, total) {
-    const template = document.createElement('template');
-    const totalFormatted = parseFloat(total).toFixed(2);
-    template.innerHTML = `
-      <tr class="group-header d-lg-none">
-        <td colspan="9">
-          <div class="group-header-content">
-            <span class="group-header-name">${escapeHtml(name)}</span>
-            <span class="group-header-meta">${count} transactions · € ${totalFormatted}</span>
-          </div>
-        </td>
-      </tr>`;
-    const row = template.content.firstElementChild;
-    row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
-    return row;
-  }
-
-  getGroupKey(tx) {
-    if (this.groupBy === 'category') {
-      return tx.category || 'Uncategorized';
-    }
-    if (this.groupBy === 'month') {
-      return tx.date ? tx.date.slice(0, 7) : 'Unknown';
-    }
-    if (this.groupBy === 'account') {
-      return tx.account || 'No account';
-    }
-    if (this.groupBy === 'type') {
-      return tx.type || 'No type';
-    }
-    if (this.groupBy === 'period') {
-      return tx.period || 'No period';
-    }
-    return '';
   }
 
   getTypeIcon(type) {
@@ -1303,11 +1149,11 @@ class TransactionManager {
 
     // If showing all transactions, hide pagination
     if (this.pageSize >= totalRecords) {
-      $("#pagination-nav").addClass("is-hidden");
+      $("#pagination-nav").hide();
       return;
     }
 
-    $("#pagination-nav").removeClass("is-hidden");
+    $("#pagination-nav").show();
 
     if (totalPages <= 1) return;
 
@@ -1384,19 +1230,15 @@ class TransactionManager {
     // Show/hide the entire checkbox column in the header
     const checkboxHeader = $("#transactions-table thead th:first-child");
     if (enabled) {
-      checkboxHeader.removeClass("d-none");
+      checkboxHeader.removeClass("is-hidden");
     } else {
-      checkboxHeader.addClass("d-none");
+      checkboxHeader.addClass("is-hidden");
     }
 
     // Show/hide all cells of the first column in the tbody
     $("#transactions-tbody tr").each(function () {
       const firstCell = $(this).find("td:first-child");
-      if (enabled) {
-        firstCell.removeClass("d-none");
-      } else {
-        firstCell.addClass("d-none");
-      }
+      firstCell.toggleClass("is-hidden", !enabled);
     });
 
     if (!enabled) {
@@ -1476,6 +1318,126 @@ class TransactionManager {
       }
     } catch (error) {
       this.showError("Failed to update transactions");
+    }
+  }
+
+  showDuplicateModal() {
+    if (this.selectedRows.size === 0) {
+      alert("Please select transactions first.");
+      return;
+    }
+
+    // Create modal if it doesn't exist
+    if ($("#duplicateModal").length === 0) {
+      const modalHtml = `
+        <div class="modal fade" id="duplicateModal" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Duplicate Transactions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <p>Select target periods for duplicating ${this.selectedRows.size} transactions:</p>
+                <div class="mb-3">
+                  <label class="form-label">Periods</label>
+                  <select id="duplicate-target-periods" class="form-select" multiple style="height: 200px;">
+                    <!-- Populated via API -->
+                  </select>
+                  <small class="text-muted">Hold Ctrl (or Cmd) to select multiple periods.</small>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-bulk-duplicate">Duplicate</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      $("body").append(modalHtml);
+
+      $("#confirm-bulk-duplicate").on("click", () => this.executeBulkDuplicate());
+    }
+
+    // Update message
+    $("#duplicateModal .modal-body p").text(`Select target periods for duplicating ${this.selectedRows.size} transactions:`);
+
+    // Load periods
+    this.loadPeriodsForDuplicate();
+
+    $("#duplicateModal").modal("show");
+  }
+
+  async loadPeriodsForDuplicate() {
+    try {
+      const response = await fetch("/api/periods/autocomplete/");
+      if (response.ok) {
+        const periods = await response.json();
+        const select = $("#duplicate-target-periods");
+        select.empty();
+        
+        // Add current period and future periods
+        periods.forEach(p => {
+          select.append(`<option value="${p.id}">${p.text}</option>`);
+        });
+      }
+    } catch (error) {
+      console.error("Error loading periods:", error);
+    }
+  }
+
+  async executeBulkDuplicate() {
+    const targetPeriods = $("#duplicate-target-periods").val();
+    
+    // If no periods selected, we can either alert or just proceed with original behavior (current period)
+    // The user specifically asked to select periods.
+    if (!targetPeriods || targetPeriods.length === 0) {
+        if (!confirm("No periods selected. Duplicate in current period(s)?")) {
+            return;
+        }
+    }
+
+    $("#duplicateModal").modal("hide");
+    
+    this.showLoading(true);
+    const loadingToast = this.showToast(
+      `Duplicating ${this.selectedRows.size} transactions...`,
+      "info",
+      0,
+    );
+
+    try {
+      const response = await fetch("/transactions/bulk-duplicate/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
+        },
+        body: JSON.stringify({
+          transaction_ids: Array.from(this.selectedRows),
+          target_periods: targetPeriods
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to duplicate transactions");
+      }
+
+      const result = await response.json();
+      
+      this.cache.clear();
+      await Promise.all([this.loadTransactions(), this.loadTotals()]);
+
+      if (loadingToast) loadingToast.remove();
+      this.showSuccess(`✅ ${result.created} transactions duplicated successfully`);
+    } catch (error) {
+      console.error("Bulk duplicate error:", error);
+      if (loadingToast) loadingToast.remove();
+      this.showError(`❌ Failed to duplicate transactions: ${error.message}`);
+    } finally {
+      this.showLoading(false);
     }
   }
 
@@ -1683,10 +1645,8 @@ class TransactionManager {
 
   showToast(message, type, delay = 3000) {
     const toastId = `toast-${Date.now()}-${Math.random()}`;
-    const offset = document.querySelectorAll('.toast').length * 80;
-    const offsetClass = DynamicCSS.classFor('top', `${offset}px`);
     const toast = $(`
-      <div class="toast position-fixed ${offsetClass} end-0 m-3 toast-high" id="${toastId}">
+      <div class="toast position-fixed top-0 end-0 m-3 z-9999" id="${toastId}">
         <div class="toast-body bg-${type} text-white">
           ${message}
         </div>
@@ -1700,7 +1660,7 @@ class TransactionManager {
       toast.on("hidden.bs.toast", () => toast.remove());
     } else {
       // Persistent toast - won't auto-hide
-      toast.toast({ autohide: false }).toast("show");
+      toast.show();
     }
 
     return toast; // Return toast element for manual control
@@ -1718,10 +1678,8 @@ class TransactionManager {
               </h5>
             </div>
             <div class="modal-body text-center">
-              <div class="progress mb-3 h-25">
-                <progress id="bulk-progress-bar" class="w-100" value="0" max="100"></progress>
-                <div id="progress-text">0%</div>
-              </div>
+              <progress class="w-100 mb-3" id="bulk-progress-bar" value="0" max="100"></progress>
+              <div id="progress-text">0%</div>
               <div id="progress-message" class="text-muted">
                 ${initialMessage}
               </div>
@@ -1754,7 +1712,10 @@ class TransactionManager {
       progressText.text(percent + "%");
       progressMessage.text(message);
 
+      // Add success styling when complete
       if (percent >= 100) {
+        progressBar.removeClass("bg-primary").addClass("bg-success");
+        progressBar.removeClass("progress-bar-animated");
         progressMessage.html(
           '<i class="fas fa-check-circle text-success me-1"></i>' + message,
         );
@@ -1836,6 +1797,9 @@ class TransactionManager {
 let transactionManager;
 
 $(document).ready(() => {
+  window.csrfToken =
+    document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+    getCookie('csrftoken');
   transactionManager = new TransactionManager();
 });
 
