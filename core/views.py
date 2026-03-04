@@ -255,7 +255,7 @@ def dashboard(request):
         default_period = f"{current_date.year}-{current_date.month - 1:02d}"
     period = request.GET.get("period", default_period)
     if not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", period or ""):
-        period = current_period
+        period = default_period
 
     prev_period = _shift_period(period, -1)
     next_period = _shift_period(period, 1)
