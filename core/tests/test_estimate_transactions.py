@@ -264,3 +264,44 @@ def test_reestimate_does_not_affect_other_periods(
     assert qs_aug.first().id == aug_tx2.id
     assert qs_sep.count() == 1
     assert qs_sep.first().id == sep_tx.id
+
+
+@pytest.mark.django_db
+def test_january_summary_uses_previous_december_balance_for_estimation(
+    user, savings_account
+):
+    period_dec_prev = make_period("2024-12")
+    period_jan = make_period("2025-01")
+
+    set_balance(savings_account, period_dec_prev, Decimal("1000"))
+    set_balance(savings_account, period_jan, Decimal("800"))
+
+    service = FinanceEstimationService(user)
+    summary = service.get_estimation_summary(period_jan)
+
+    assert summary["status"] == "missing_expenses"
+    assert Decimal(str(summary["estimated_amount"])) == Decimal("200")
+
+
+@pytest.mark.django_db
+def test_estimation_summaries_year_filter_returns_january_to_december(
+    client, user, savings_account
+):
+    for month in range(1, 13):
+        period = make_period(f"2025-{month:02d}")
+        set_balance(savings_account, period, Decimal("1000"))
+
+    # Include another year to ensure year filter is respected.
+    period_2026 = make_period("2026-01")
+    set_balance(savings_account, period_2026, Decimal("1000"))
+
+    resp = client.get(reverse("get_estimation_summaries"), {"year": "2025"})
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert len(payload["summaries"]) == 12
+
+    labels = [summary["period"] for summary in payload["summaries"]]
+    assert "2025-01" in labels
+    assert "2025-12" in labels

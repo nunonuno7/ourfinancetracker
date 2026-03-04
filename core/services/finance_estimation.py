@@ -219,10 +219,26 @@ class FinanceEstimationService:
     def get_estimation_summary(self, period):
         """Get estimation summary for a specific period."""
         try:
-            # Get account balances for current and next period
-            current_balances = self.get_period_balances(period)
-            next_period = self.get_next_period(period)
-            next_balances = self.get_period_balances(next_period) if next_period else {}
+            # Get account balances for comparison periods.
+            # Business rule: January reconciles against December from the
+            # previous year; all other months reconcile against the next month.
+            balance_start_period = period
+            balance_end_period = self.get_next_period(period)
+
+            if period.month == 1:
+                previous_december = DatePeriod.objects.filter(
+                    year=period.year - 1, month=12
+                ).first()
+                if previous_december:
+                    balance_start_period = previous_december
+                    balance_end_period = period
+
+            current_balances = self.get_period_balances(balance_start_period)
+            next_balances = (
+                self.get_period_balances(balance_end_period)
+                if balance_end_period
+                else {}
+            )
 
             # Get recorded transactions for the period - separated by estimated vs real
             real_transactions = Transaction.objects.filter(
