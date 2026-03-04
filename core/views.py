@@ -4064,8 +4064,13 @@ def get_estimation_summaries(request):
             except (ValueError, TypeError):
                 logger.warning(f"Invalid year filter: {year_filter}")
 
-        # Exclude the most recent period because we need next period data for estimation
-        periods = periods_qs[1:13]  # Skip first, get next 12 months
+        # For explicit year filters, return the full year (up to 12 months).
+        # Without filters, keep historical behavior of skipping the most recent
+        # period because the default estimation flow relies on forward balances.
+        if year_filter:
+            periods = periods_qs[:12]
+        else:
+            periods = periods_qs[1:13]  # Skip first, get next 12 months
 
         logger.debug(f"Found {periods.count()} periods for user {request.user.id}")
 
