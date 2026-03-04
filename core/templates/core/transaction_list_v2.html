@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
 {% load filtros %}
-{% now "Y-m-d" as today %} {% block content %} {% csrf_token %}
+{% now "Y-m-d" as today %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/transaction_list_v2.css' %}">
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
 <div class="container-fluid mt-4">
   <!-- CSRF Token -->
   <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
@@ -266,7 +274,18 @@
         </select>
       </div>
 
-
+      <!-- Group By Selector -->
+      <div class="d-flex align-items-center gap-2">
+        <label class="form-label mb-0 fw-bold">🔀 Group by →</label>
+        <select id="group-by-selector" class="form-select form-select-sm w-auto">
+          <option value="none">None</option>
+          <option value="category">Category</option>
+          <option value="month">Month</option>
+          <option value="account">Account</option>
+          <option value="type">Type</option>
+          <option value="period">Period</option>
+        </select>
+      </div>
 
       <!-- Bulk Mode Toggle -->
       <div class="d-flex gap-2 align-items-center">
@@ -306,15 +325,15 @@
         <table id="transactions-table" class="table table-hover mb-0 table-sm">
           <thead class="table-dark sticky-top">
             <tr class="text-nowrap">
-              <th class="w-40 text-center">
+              <th class="th-checkbox">
                 <input
                   type="checkbox"
                   class="form-check-input is-hidden"
                   id="select-all"
                 />
-                <span class="badge bg-secondary badge-xs">#</span>
+                <span class="badge bg-secondary fs-7">#</span>
               </th>
-              <th class="sortable-header min-w-110" data-sort="date">
+              <th class="sortable-header min-w-110 p-075" data-sort="date">
                 <div class="d-flex align-items-center">
                   <span class="me-1">📅</span>
                   <span class="d-none d-sm-inline">Date</span>
@@ -322,7 +341,7 @@
                 </div>
               </th>
               <th
-                class="d-none d-md-table-cell sortable-header min-w-100"
+                class="d-none d-md-table-cell sortable-header min-w-100 p-075"
                 data-sort="period"
               >
                 <div class="d-flex align-items-center">
@@ -331,14 +350,14 @@
                   <i class="fas fa-sort sort-icon ms-1"></i>
                 </div>
               </th>
-              <th class="sortable-header min-w-90" data-sort="type">
+              <th class="sortable-header min-w-90 p-075" data-sort="type">
                 <div class="d-flex align-items-center">
                   <span class="me-1">📊</span>
                   <span class="d-none d-sm-inline">Type</span>
                   <i class="fas fa-sort sort-icon ms-1"></i>
                 </div>
               </th>
-              <th class="sortable-header text-end min-w-120" data-sort="amount">
+              <th class="sortable-header text-end min-w-120 p-075" data-sort="amount">
                 <div class="d-flex align-items-center justify-content-end">
                   <span class="me-1">💰</span>
                   <span>Amount</span>
@@ -346,7 +365,7 @@
                 </div>
               </th>
               <th
-                class="d-none d-lg-table-cell sortable-header min-w-120"
+                class="d-none d-lg-table-cell sortable-header min-w-120 p-075"
                 data-sort="category"
               >
                 <div class="d-flex align-items-center">
@@ -356,7 +375,7 @@
                 </div>
               </th>
               <th
-                class="d-none d-xl-table-cell sortable-header min-w-100"
+                class="d-none d-xl-table-cell sortable-header min-w-100 p-075"
                 data-sort="tags"
               >
                 <div class="d-flex align-items-center">
@@ -366,7 +385,7 @@
                 </div>
               </th>
               <th
-                class="d-none d-md-table-cell sortable-header min-w-100"
+                class="d-none d-md-table-cell sortable-header min-w-100 p-075"
                 data-sort="account"
               >
                 <div class="d-flex align-items-center">
@@ -375,7 +394,7 @@
                   <i class="fas fa-sort sort-icon ms-1"></i>
                 </div>
               </th>
-              <th class="w-120 text-center">
+              <th class="w-120 p-075 text-center">
                 <div class="d-flex align-items-center justify-content-center">
                   <span class="me-1">⚙️</span>
                   <span class="d-none d-sm-inline">Actions</span>
@@ -427,9 +446,14 @@
   </div>
 </div>
 
+<script nonce="{{ request.csp_nonce }}">
+  // Ensure CSRF token is available for AJAX calls
+  window.csrfToken = "{{ csrf_token }}";
+</script>
+
 <!-- Page-specific dependencies -->
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr" nonce="{{ request.csp_nonce }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js" nonce="{{ request.csp_nonce }}"></script>
 <link
   rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
@@ -440,6 +464,6 @@
 />
 
 <!-- Custom JavaScript -->
-<script src="{% static 'js/transactions-v2.js' %}" defer></script>
+<script src="{% static 'js/transaction_list_v2.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
 
 {% endblock %}

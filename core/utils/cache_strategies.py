@@ -28,7 +28,7 @@ class CacheManager:
         
         # Hash para evitar chaves muito longas
         key_string = "_".join(key_parts)
-        key_hash = hashlib.md5(key_string.encode()).hexdigest()[:12]
+        key_hash = hashlib.sha256(key_string.encode()).hexdigest()[:12]
         
         return f"{self.cache_prefix}:{key_hash}"
     

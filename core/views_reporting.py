@@ -1,31 +1,36 @@
+import logging
 import os
+from datetime import datetime, timedelta
+
 import jwt
 import requests
-from datetime import datetime, timedelta
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse, HttpResponseForbidden
 from django.views.decorators.http import require_GET
-from django.core.exceptions import ImproperlyConfigured
 
-import logging
 logger = logging.getLogger(__name__)
 
 
 def get_env_or_fail(key: str) -> str:
     value = os.getenv(key)
     if not value:
-        raise ImproperlyConfigured(f"A variável de ambiente '{key}' está em falta.")
+        raise ImproperlyConfigured(
+            f"A variável de ambiente '{key}' está em falta."  # noqa: E501
+        )
     return value
 
 
 @require_GET
 def proxy_report_csv_token(request):
     """
-    Public endpoint that accepts a short-lived JWT via the 'Authorization: Bearer <token>' header.
-    For backwards compatibility, a 'token' query string is still accepted but will be removed.
+    Public endpoint that accepts a short-lived JWT via the
+    'Authorization: Bearer <token>' header.
+    For backwards compatibility, a 'token' query string is still accepted
+    but will be removed.
     """
     # Prefer header over query string
     auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-    token = ""
+    token = ""  # nosec B105
     if auth_header.lower().startswith("bearer "):
         token = auth_header.split(" ", 1)[1].strip()
     else:
@@ -57,7 +62,11 @@ def proxy_report_csv_token(request):
         "role": "authenticated",
         "exp": datetime.utcnow() + timedelta(minutes=5),
     }
-    fresh_token = jwt.encode(fresh_payload, service_role_key, algorithm="HS256")
+    fresh_token = jwt.encode(
+        fresh_payload,
+        service_role_key,
+        algorithm="HS256",
+    )
     logger.debug("🔐 Minted fresh short-lived JWT for Supabase.")
 
     try:
@@ -73,15 +82,21 @@ def proxy_report_csv_token(request):
         "Accept": "text/csv",
     }
 
-    url = f"{rest_url}/reporting_transactions?select=date,amount,type,category,account,notes"
-    r = requests.get(url, headers=headers)
+    url = (
+        f"{rest_url}/reporting_transactions?select="
+        "date,amount,type,category,account,notes"
+    )
+    r = requests.get(url, headers=headers, timeout=10)
     logger.info(f"📥 Supabase response status={r.status_code}")
     if r.status_code != 200:
         logger.warning(f"❌ Response body: {r.text}")
-        return HttpResponse(f"❌ Supabase error: {r.status_code}", status=r.status_code)
+        return HttpResponse(
+            f"❌ Supabase error: {r.status_code}",
+            status=r.status_code,
+        )
 
     response = HttpResponse(r.content, content_type="text/csv")
-    response["Content-Disposition"] = 'attachment; filename=reporting.csv'
+    response["Content-Disposition"] = "attachment; filename=reporting.csv"
     # Avoid leaking tokens via Referer just in case
     response["Referrer-Policy"] = "no-referrer"
     return response

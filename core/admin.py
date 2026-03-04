@@ -9,16 +9,23 @@ from .models import (
     Category,
     Transaction,
     UserSettings,
+    RecurringTransaction,
 )
 
 # Registo simples
-admin.site.register([Currency, AccountType, Account, AccountBalance, UserSettings])
+admin.site.register([Currency, AccountType, AccountBalance, UserSettings])
+
+
+# Registo personalizado para Account
+@admin.register(Account)
+class AccountAdmin(admin.ModelAdmin):
+    search_fields = ("name", "user__username")
 
 # Registo personalizado para Category
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "user", "position")
-    list_filter = ("user",)
+    list_display = ("name", "user", "position", "blocked")
+    list_filter = ("user", "blocked")
     search_fields = ("name",)
 
 # Registo personalizado para Transaction
@@ -28,3 +35,10 @@ class TransactionAdmin(admin.ModelAdmin):
     list_filter = ("type", "user", "is_estimated")
     search_fields = ("notes",)
     autocomplete_fields = ("category",)
+
+
+@admin.register(RecurringTransaction)
+class RecurringTransactionAdmin(admin.ModelAdmin):
+    list_display = ("user", "schedule", "amount", "next_run_at", "active")
+    list_filter = ("schedule", "active")
+    autocomplete_fields = ("category", "account")

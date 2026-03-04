@@ -115,7 +115,9 @@ class BulkTransactionImporter:
         try:
             logger.info(f"🔄 [BulkTransactionImporter] Converting data types...")
             df_clean['Date'] = pd.to_datetime(df_clean['Date']).dt.date
-            df_clean['Amount'] = df_clean['Amount'].astype(float)
+            df_clean['Amount'] = (
+                df_clean['Amount'].astype(str).str.replace(',', '.').astype(float)
+            )
 
             logger.debug(f"📅 [BulkTransactionImporter] Date range: {df_clean['Date'].min()} to {df_clean['Date'].max()}")
             logger.debug(f"💰 [BulkTransactionImporter] Amount range: {df_clean['Amount'].min()} to {df_clean['Amount'].max()}")
@@ -187,8 +189,8 @@ class BulkTransactionImporter:
 
         # Check existing categories
         existing_categories = {
-            c.name: c 
-            for c in Category.objects.filter(user=self.user)
+            c.name: c
+            for c in Category.objects.filter(user=self.user, blocked=False)
         }
 
         # Create missing categories
@@ -196,6 +198,7 @@ class BulkTransactionImporter:
             Category(name=name, user=self.user)
             for name in unique_categories
             if name not in existing_categories
+            and name.lower() != "estimated transaction"
         ]
 
         if categories_to_create:
@@ -203,8 +206,8 @@ class BulkTransactionImporter:
 
         # Refresh lookup with optimized query
         return {
-            c.name: c 
-            for c in Category.objects.filter(user=self.user).only('id', 'name')
+            c.name: c
+            for c in Category.objects.filter(user=self.user, blocked=False).only('id', 'name')
         }
 
     def _bulk_create_accounts(self, df: pd.DataFrame) -> Dict:

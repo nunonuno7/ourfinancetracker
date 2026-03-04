@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from accounts.tokens import generate_activation_token, revoke_activation_token
+from accounts.tokens import generate_activation_token
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,6 @@ def send_account_activation_email(user, request):
         logger.info("Activation email sent to %s", user.email)
         return True
     except (smtplib.SMTPException, BadHeaderError) as exc:
-        revoke_activation_token(user)
         logger.error("Failed to send activation email to %s: %s", user.email, exc)
         return False
 

@@ -13,6 +13,10 @@
         const script = document.createElement('script');
         script.src = '/static/js/transaction_list_v2.js';
         script.type = 'text/javascript';
-        document.head.appendChild(script);
+        const n = window.CSP_NONCE || null;
+        if (n) {
+            script.setAttribute('nonce', n);
+        }
+        document.body.appendChild(script);
     }
 })();

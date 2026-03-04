@@ -1,4 +1,53 @@
 // Transactions 2.0 JavaScript - Advanced functionality
+const DynamicCSS = (() => {
+  let sheet;
+  const created = new Set();
+
+  function ensureSheet() {
+    if (sheet) return sheet;
+    let nonce = window.CSP_NONCE;
+    if (!nonce) {
+      const meta = document.querySelector('meta[name="csp-nonce"]');
+      if (meta) nonce = meta.getAttribute('content');
+    }
+    if (!nonce) {
+      const script = document.querySelector('script[nonce]');
+      if (script) nonce = script.getAttribute('nonce');
+    }
+    const el = document.createElement('style');
+    if (nonce) el.setAttribute('nonce', nonce);
+    document.head.appendChild(el);
+    sheet = el.sheet;
+    return sheet;
+  }
+
+  function safeClassName(prop, value) {
+    return `dyn-${prop.replace(/[^a-z]/gi, '')}-${String(value).replace(/[^a-z0-9_-]/gi, '')}`;
+  }
+
+  function classFor(prop, value, important = true) {
+    const cn = safeClassName(prop, value);
+    if (!created.has(cn)) {
+      const rule = `.${cn}{${prop}:${value}${important ? ' !important' : ''};}`;
+      ensureSheet().insertRule(rule, sheet.cssRules.length);
+      created.add(cn);
+    }
+    return cn;
+  }
+
+  return { classFor };
+})();
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (s) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[s]));
+}
+
 class TransactionManager {
   constructor() {
     console.log("🚀 [TransactionManager] Initializing Transaction Manager...");
@@ -10,6 +59,9 @@ class TransactionManager {
     this.selectedRows = new Set();
     this.bulkMode = false;
     this.maxPageSize = 1000; // Maximum safety limit
+
+    this.groupBy = 'none';
+    this.lastData = null;
 
     // Sorting state
     this.sortField = "date";
@@ -41,6 +93,11 @@ class TransactionManager {
     this.bindEvents();
     console.log("🔗 [init] Event listeners connected");
 
+    if (window.innerWidth < 992) {
+      this.groupBy = 'category';
+      $('#group-by-selector').val('category');
+    }
+
     this.loadTransactions();
     this.loadTotals();
 
@@ -48,7 +105,7 @@ class TransactionManager {
     this.updateSortIndicators();
 
     // Initialize checkbox column as hidden (since bulk mode starts as false)
-    $("#transactions-table thead th:first-child").css("display", "none");
+    $("#transactions-table thead th:first-child").addClass("d-none");
 
     console.log("✅ [init] Complete initialization finished");
   }
@@ -102,6 +159,13 @@ class TransactionManager {
     $("#page-size-selector").on("change", (e) =>
       this.changePageSize(e.target.value),
     );
+
+    $("#group-by-selector").on("change", (e) => {
+      this.groupBy = e.target.value;
+      if (this.lastData) {
+        this.renderTransactions(this.lastData);
+      }
+    });
 
     // Buttons
     $("#apply-filters-btn").on("click", () => this.loadTransactions());
@@ -527,6 +591,7 @@ class TransactionManager {
 
       const data = await response.json();
       console.log("📊 [loadTransactions] Full response data:", data);
+      this.lastData = data;
 
       if (!data.transactions) {
         console.log("⚠️ [loadTransactions] No transactions key in response");
@@ -621,6 +686,8 @@ class TransactionManager {
     console.group("🎨 [renderTransactions] RENDERING STARTED");
     console.log("Timestamp:", new Date().toISOString());
 
+    this.lastData = data;
+
     console.log("📋 DATA VALIDATION:");
     console.table({
       hasData: !!data,
@@ -658,9 +725,43 @@ class TransactionManager {
 
     console.log("✏️ CREATING", data.transactions.length, "TABLE ROWS");
 
+    const transactions = data.transactions.slice();
+
+    if (this.groupBy && this.groupBy !== 'none') {
+      const groups = new Map();
+      transactions.forEach((tx) => {
+        const key = this.getGroupKey(tx);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tx);
+      });
+
+      const sorted = Array.from(groups.entries()).sort((a, b) =>
+        a[0].localeCompare(b[0])
+      );
+
+      sorted.forEach(([key, items]) => {
+        const total = items.reduce(
+          (sum, t) => sum + parseFloat(t.amount),
+          0
+        );
+        const header = this.createGroupHeader(key, items.length, total);
+        tbody.append(header);
+        items.forEach((tx, idx) => {
+          try {
+            const row = this.createTransactionRow(tx, idx);
+            tbody.append(row);
+          } catch (error) {
+            console.error(`❌ Error creating row:`, error);
+          }
+        });
+      });
+
+      this.finishRendering(data);
+      return;
+    }
+
     // Performance optimization for large datasets
     const batchSize = 50;
-    const transactions = data.transactions;
 
     if (transactions.length > batchSize) {
       // Render in batches for better performance
@@ -734,7 +835,17 @@ class TransactionManager {
     $("#total-count").text(countMessage);
     console.log("📊 Count message set:", countMessage);
     console.log("✅ RENDERING COMPLETED");
+    this.checkInlineStyles();
     console.groupEnd();
+  }
+
+  checkInlineStyles() {
+    const container = document.getElementById("transactions-table");
+    if (!container) return;
+    const styled = container.querySelectorAll("[style]");
+    if (styled.length > 0) {
+      console.warn("[CSP] Inline styles detected:", styled);
+    }
   }
 
   createTransactionRow(tx, index) {
@@ -761,7 +872,7 @@ class TransactionManager {
         'Transfer': 'type-badge type-transfer'
       };
       const className = typeClasses[type] || 'type-badge';
-      return `<span class="${className}">${this.getTypeIcon(type)} ${type}</span>`;
+      return `<span class="${className}">${this.getTypeIcon(type)} ${escapeHtml(type)}</span>`;
     };
 
     // Format amount with proper styling
@@ -779,19 +890,21 @@ class TransactionManager {
         amountClass = numAmount >= 0 ? 'amount-positive' : 'amount-negative';
       }
       
-      return `<span class="transaction-amount ${amountClass}">${tx.amount_formatted}</span>`;
+      return `<span class="transaction-amount ${amountClass}">${escapeHtml(tx.amount_formatted)}</span>`;
     };
 
     // Format category as pill
     const formatCategory = (category) => {
       if (!category || category === '') return '<span class="text-muted">-</span>';
-      return `<span class="category-pill" title="${category}">${category}</span>`;
+      const safe = escapeHtml(category);
+      return `<span class="category-pill" title="${safe}">${safe}</span>`;
     };
 
     // Format account as pill
     const formatAccount = (account) => {
       if (!account || account === 'No account') return '<span class="text-muted">-</span>';
-      return `<span class="account-pill" title="${account}">${account}</span>`;
+      const safe = escapeHtml(account);
+      return `<span class="account-pill" title="${safe}">${safe}</span>`;
     };
 
     // Format tags as pills
@@ -800,13 +913,14 @@ class TransactionManager {
       
       const tagList = tags.split(', ').filter(tag => tag.trim());
       if (tagList.length === 0) return '<span class="text-muted">-</span>';
-      
-      const tagPills = tagList.slice(0, 2).map(tag => 
-        `<span class="tag-pill" title="${tag}">${tag}</span>`
-      ).join(' ');
-      
+
+      const tagPills = tagList.slice(0, 2).map(tag => {
+        const safe = escapeHtml(tag);
+        return `<span class="tag-pill" title="${safe}">${safe}</span>`;
+      }).join(' ');
+
       const moreCount = tagList.length - 2;
-      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${tagList.slice(2).join(', ')}">+${moreCount}</span>` : '';
+      const moreIndicator = moreCount > 0 ? `<span class="badge bg-secondary ms-1" title="${escapeHtml(tagList.slice(2).join(', '))}">+${moreCount}</span>` : '';
       
       return `<div class="tags-container">${tagPills}${moreIndicator}</div>`;
     };
@@ -817,7 +931,7 @@ class TransactionManager {
       const day = date.getDate().toString().padStart(2, '0');
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const year = date.getFullYear().toString().substr(-2);
-      return `<span class="text-nowrap">${day}/${month}/${year}</span>`;
+      return `<span class="text-nowrap">${escapeHtml(`${day}/${month}/${year}`)}</span>`;
     };
 
     // Handle actions based on transaction type and editability
@@ -863,15 +977,16 @@ class TransactionManager {
     }
 
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
-    const checkboxVisibility = this.bulkMode ? "" : 'style="display: none;"';
+    const checkboxClass = this.bulkMode ? "" : " d-none";
 
-    return `
+    const template = document.createElement('template');
+    template.innerHTML = `
       <tr data-id="${tx.id}" class="${rowClass}">
-        <td ${checkboxVisibility} class="text-center">
+        <td class="text-center${checkboxClass}">
           <input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}>
         </td>
         <td class="text-nowrap">${formatDate(tx.date)}</td>
-        <td class="d-none d-md-table-cell text-muted">${tx.period}</td>
+        <td class="d-none d-md-table-cell text-muted">${escapeHtml(tx.period)}</td>
         <td>${getTypeBadge(tx.type)}${systemBadge}</td>
         <td class="text-end">${formatAmount(tx.amount_formatted, tx.type)}</td>
         <td class="d-none d-lg-table-cell">${formatCategory(tx.category)}</td>
@@ -880,6 +995,45 @@ class TransactionManager {
         <td class="text-center">${actionsHtml}</td>
       </tr>
     `;
+    const row = template.content.firstElementChild;
+    row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+    return row;
+  }
+
+  createGroupHeader(name, count, total) {
+    const template = document.createElement('template');
+    const totalFormatted = parseFloat(total).toFixed(2);
+    template.innerHTML = `
+      <tr class="group-header d-lg-none">
+        <td colspan="9">
+          <div class="group-header-content">
+            <span class="group-header-name">${escapeHtml(name)}</span>
+            <span class="group-header-meta">${count} transactions · € ${totalFormatted}</span>
+          </div>
+        </td>
+      </tr>`;
+    const row = template.content.firstElementChild;
+    row.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+    return row;
+  }
+
+  getGroupKey(tx) {
+    if (this.groupBy === 'category') {
+      return tx.category || 'Uncategorized';
+    }
+    if (this.groupBy === 'month') {
+      return tx.date ? tx.date.slice(0, 7) : 'Unknown';
+    }
+    if (this.groupBy === 'account') {
+      return tx.account || 'No account';
+    }
+    if (this.groupBy === 'type') {
+      return tx.type || 'No type';
+    }
+    if (this.groupBy === 'period') {
+      return tx.period || 'No period';
+    }
+    return '';
   }
 
   getTypeIcon(type) {
@@ -1149,11 +1303,11 @@ class TransactionManager {
 
     // If showing all transactions, hide pagination
     if (this.pageSize >= totalRecords) {
-      $("#pagination-nav").hide();
+      $("#pagination-nav").addClass("is-hidden");
       return;
     }
 
-    $("#pagination-nav").show();
+    $("#pagination-nav").removeClass("is-hidden");
 
     if (totalPages <= 1) return;
 
@@ -1224,24 +1378,24 @@ class TransactionManager {
 
   toggleBulkMode(enabled) {
     this.bulkMode = enabled;
-    $("#select-all").toggle(enabled);
+    $("#select-all").toggleClass("is-hidden", !enabled);
     $("#bulk-actions").toggleClass("d-none", !enabled);
 
     // Show/hide the entire checkbox column in the header
     const checkboxHeader = $("#transactions-table thead th:first-child");
     if (enabled) {
-      checkboxHeader.css("display", "");
+      checkboxHeader.removeClass("d-none");
     } else {
-      checkboxHeader.css("display", "none");
+      checkboxHeader.addClass("d-none");
     }
 
     // Show/hide all cells of the first column in the tbody
     $("#transactions-tbody tr").each(function () {
       const firstCell = $(this).find("td:first-child");
       if (enabled) {
-        firstCell.css("display", "");
+        firstCell.removeClass("d-none");
       } else {
-        firstCell.css("display", "none");
+        firstCell.addClass("d-none");
       }
     });
 
@@ -1529,8 +1683,10 @@ class TransactionManager {
 
   showToast(message, type, delay = 3000) {
     const toastId = `toast-${Date.now()}-${Math.random()}`;
+    const offset = document.querySelectorAll('.toast').length * 80;
+    const offsetClass = DynamicCSS.classFor('top', `${offset}px`);
     const toast = $(`
-      <div class="toast position-fixed top-0 end-0 m-3" id="${toastId}" style="z-index: 9999;">
+      <div class="toast position-fixed ${offsetClass} end-0 m-3 toast-high" id="${toastId}">
         <div class="toast-body bg-${type} text-white">
           ${message}
         </div>
@@ -1544,7 +1700,7 @@ class TransactionManager {
       toast.on("hidden.bs.toast", () => toast.remove());
     } else {
       // Persistent toast - won't auto-hide
-      toast.show();
+      toast.toast({ autohide: false }).toast("show");
     }
 
     return toast; // Return toast element for manual control
@@ -1562,11 +1718,9 @@ class TransactionManager {
               </h5>
             </div>
             <div class="modal-body text-center">
-              <div class="progress mb-3" style="height: 25px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                     role="progressbar" style="width: 0%" id="bulk-progress-bar">
-                  <span id="progress-text">0%</span>
-                </div>
+              <div class="progress mb-3 h-25">
+                <progress id="bulk-progress-bar" class="w-100" value="0" max="100"></progress>
+                <div id="progress-text">0%</div>
               </div>
               <div id="progress-message" class="text-muted">
                 ${initialMessage}
@@ -1596,14 +1750,11 @@ class TransactionManager {
     const progressMessage = $("#progress-message");
 
     if (progressBar.length) {
-      progressBar.css("width", percent + "%");
+      progressBar.attr("value", percent);
       progressText.text(percent + "%");
       progressMessage.text(message);
 
-      // Add success styling when complete
       if (percent >= 100) {
-        progressBar.removeClass("bg-primary").addClass("bg-success");
-        progressBar.removeClass("progress-bar-animated");
         progressMessage.html(
           '<i class="fas fa-check-circle text-success me-1"></i>' + message,
         );

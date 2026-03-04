@@ -18,13 +18,11 @@ from django.db import transaction, IntegrityError
 from django.contrib import messages
 from django.conf import settings
 from django.core.cache import cache
-from django.utils import timezone
-from datetime import timedelta
 from .tokens import (
     generate_activation_token,
     validate_activation_token,
-    revoke_activation_token,
 )
+from .forms import SignupForm
 
 logger = logging.getLogger(__name__)
 
@@ -32,81 +30,46 @@ MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_TIMEOUT = 600  # 10 minutes in seconds
 
 def signup(request):
+    form = SignupForm(request.POST or None)
     if request.method == "POST":
-        username = request.POST["username"].strip()
-        email = request.POST["email"].strip().lower()
-        password = request.POST["password"]
+        if not form.is_valid():
+            for field, errors in form.errors.items():
+                label = form.fields.get(field).label if field in form.fields else field
+                label = label or field.replace("_", " ").capitalize()
+                for error in errors:
+                    messages.error(request, f"{label}: {error}")
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
+
+        username = form.cleaned_data["username"]
+        email = form.cleaned_data["email"]
+        password = form.cleaned_data["password"]
+
+        # Remove any inactive accounts with matching username or email
+        User.objects.filter(username__iexact=username, is_active=False).delete()
+        User.objects.filter(email__iexact=email, is_active=False).delete()
 
         if User.objects.filter(username__iexact=username).exists():
-            messages.error(request, "This username is already taken. Please choose another one.")
-            return render(request, "accounts/signup.html", status=400)
+            messages.error(request, "Username already taken")
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
 
-        # Se já existir conta ativa com este email
-        if User.objects.filter(email__iexact=email, is_active=True).exists():
-            messages.error(request, "An account with this email already exists. Try resetting your password.")
-            return render(request, "accounts/signup.html", status=400)
-
-        # Se existir conta inativa com o mesmo email, reenvia ativação em vez de criar nova
-        existing_inactive = User.objects.filter(email__iexact=email, is_active=False).first()
-        if existing_inactive:
-            # Generate activation token for existing user
-            revoke_activation_token(existing_inactive)
-            token = generate_activation_token(existing_inactive)
-            uid = urlsafe_base64_encode(force_bytes(existing_inactive.pk))
-
-            # Send activation email
-            activation_link = request.build_absolute_uri(
-                reverse('accounts:activate', kwargs={'uidb64': uid, 'token': token})
-            )
-
-            try:
-                message = render_to_string(
-                    'accounts/emails/account_activation_email.txt',
-                    {
-                        'user': existing_inactive,
-                        'activation_link': activation_link,
-                    },
-                )
-                html_message = render_to_string(
-                    'accounts/emails/account_activation_email.html',
-                    {
-                        'user': existing_inactive,
-                        'activation_link': activation_link,
-                    },
-                )
-                send_mail(
-                    'Activate your account',
-                    message,
-                    settings.DEFAULT_FROM_EMAIL,
-                    [existing_inactive.email],
-                    html_message=html_message,
-                )
-            except (smtplib.SMTPException, BadHeaderError) as e:
-                logger.exception("Email sending failed: %s", e)
-                revoke_activation_token(existing_inactive)
-                messages.error(
-                    request,
-                    "There was an error sending the activation email. Please try again later.",
-                )
-                return render(request, "accounts/signup.html")
-
-            messages.info(request, "We have resent the activation link to your email.")
-            return render(request, "accounts/check_email.html")
+        if User.objects.filter(email__iexact=email).exists():
+            messages.error(request, "Email already registered")
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         try:
             with transaction.atomic():
                 user = User.objects.create_user(
                     username=username, email=email, password=password, is_active=False
                 )
-        except IntegrityError:
-            messages.error(request, "This username is already taken. Please choose another one.")
-            return render(request, "accounts/signup.html", status=400)
+        except IntegrityError as exc:
+            messages.error(request, f"Error creating account: {exc}")
+            return render(request, "accounts/signup.html", {"form": form}, status=400)
 
         # Generate activation token
         token = generate_activation_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-        # Send activation email
+        # Send activation email with the fresh token
         activation_link = request.build_absolute_uri(
             reverse('accounts:activate', kwargs={'uidb64': uid, 'token': token})
         )
@@ -135,16 +98,15 @@ def signup(request):
             )
         except (smtplib.SMTPException, BadHeaderError) as e:
             logger.exception("Email sending failed: %s", e)
-            revoke_activation_token(user)
             messages.error(
                 request,
                 "There was an error sending the activation email. Please try again later.",
             )
-            return render(request, "accounts/signup.html")
+            return render(request, "accounts/signup.html", {"form": form})
 
         return render(request, "accounts/check_email.html")
 
-    return render(request, "accounts/signup.html")
+    return render(request, "accounts/signup.html", {"form": form})
 
 def activate(request, uidb64, token):
     """
@@ -165,7 +127,6 @@ def activate(request, uidb64, token):
         logger.warning("Activation: could not resolve user from uidb64=%s (%s)", uidb64, exc)
 
     if user and validate_activation_token(user, token):
-        revoke_activation_token(user)
         if not user.is_active:
             user.is_active = True
             user.save(update_fields=["is_active"])

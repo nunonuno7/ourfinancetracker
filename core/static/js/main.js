@@ -10,10 +10,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ───── Bootstrap tooltips ─────
-  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-  tooltipTriggerList.forEach(el => {
-    new bootstrap.Tooltip(el);
-  });
+  const tooltipTriggerList = Array.from(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList
+    .filter(el => el && (el.getAttribute('title') || el.getAttribute('data-bs-original-title')))
+    .forEach(el => {
+      try {
+        new bootstrap.Tooltip(el);
+      } catch (err) {
+        console.error('Tooltip initialization failed', err, el);
+      }
+    });
 
   // ───── Bootstrap popovers (opcional) ─────
   const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
