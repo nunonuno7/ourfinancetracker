@@ -15,10 +15,10 @@
             <div class="d-flex align-items-center gap-2">
               <!-- Month Navigation -->
               <div class="btn-group" role="group">
-                <a class="btn btn-outline-secondary btn-sm" href="?year={{ year }}&month={{ month|add:'-1' }}">‹ Prev</a>
+                <a class="btn btn-outline-secondary btn-sm" href="?year={{ prev_year }}&month={{ prev_month }}">‹ Prev</a>
                 <input type="month" id="selector" value="{{ year }}-{{ month|stringformat:'02d' }}"
                        class="form-control form-control-sm w-auto">
-                <a class="btn btn-outline-secondary btn-sm" href="?year={{ year }}&month={{ month|add:'1' }}">Next ›</a>
+                <a class="btn btn-outline-secondary btn-sm" href="?year={{ next_year }}&month={{ next_month }}">Next ›</a>
               </div>
 
               <!-- Actions -->

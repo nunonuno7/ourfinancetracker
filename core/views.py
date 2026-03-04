@@ -3231,6 +3231,16 @@ def account_balance_view(request):
                 grouped_forms[key] = []
             grouped_forms[key].append(form)
 
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
     context = {
         "formset": formset,
         "grouped_forms": grouped_forms,
@@ -3238,6 +3248,10 @@ def account_balance_view(request):
         "grand_total": grand_total,
         "year": year,
         "month": month,
+        "prev_year": prev_year,
+        "prev_month": prev_month,
+        "next_year": next_year,
+        "next_month": next_month,
         "selected_month": date(year, month, 1),
         "available_accounts": available_accounts,
     }
@@ -3249,6 +3263,10 @@ def account_balance_view(request):
             "grand_total": grand_total,
             "year": year,
             "month": month,
+            "prev_year": prev_year,
+            "prev_month": prev_month,
+            "next_year": next_year,
+            "next_month": next_month,
             "selected_month": date(year, month, 1),
         }
         cache.set(cache_key, cache_safe_context, timeout=600)  # 10 minutes cache
