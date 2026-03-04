@@ -1486,7 +1486,7 @@ class TransactionManager {
     }
 
     const confirmed = confirm(
-      `Duplicate ${this.selectedRows.size} transactions?`,
+      `Duplicate ${this.selectedRows.size} transactions to current month?`,
     );
     if (!confirmed) return;
 

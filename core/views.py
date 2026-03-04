@@ -1205,7 +1205,7 @@ def transaction_bulk_update(request):
 @require_POST
 @login_required
 def transaction_bulk_duplicate(request):
-    """Bulk duplicate transactions."""
+    """Bulk duplicate transactions into the current month."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get("transaction_ids", [])
@@ -1237,7 +1237,9 @@ def transaction_bulk_duplicate(request):
         with db_transaction.atomic():
             new_transactions = []
             for tx in transactions:
-                # Create duplicate with today's date
+                original_tags = list(tx.tags.all())
+
+                # Create duplicate in current month
                 new_tx = Transaction.objects.create(
                     user=tx.user,
                     type=tx.type,
@@ -1249,18 +1251,18 @@ def transaction_bulk_duplicate(request):
                     account=tx.account,
                     category=tx.category,
                 )
-                new_transactions.append((new_tx, tx.tags.all()))
+                new_transactions.append((new_tx, original_tags))
                 created += 1
 
             # Copy tags for all new transactions
             for new_tx, original_tags in new_transactions:
-                for tag in original_tags:
-                    new_tx.tags.add(tag)
+                if original_tags:
+                    new_tx.tags.add(*original_tags)
 
         # Clear cache only AFTER all database operations are complete
         clear_tx_cache(request.user.id, force=True)
         logger.info(
-            f"✅ Bulk duplicate completed: {created} transactions created, cache cleared for user {request.user.id}"
+            f"✅ Bulk duplicate completed: {created} transactions created in current month, cache cleared for user {request.user.id}"
         )
 
         return JsonResponse(
