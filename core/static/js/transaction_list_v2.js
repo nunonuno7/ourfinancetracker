@@ -1485,8 +1485,26 @@ class TransactionManager {
       return;
     }
 
+    const monthsInput = prompt(
+      "Para que meses quer duplicar? (ex: 1,2,3)",
+      "1",
+    );
+    if (monthsInput === null) return;
+
+    const months = monthsInput
+      .split(",")
+      .map((value) => Number.parseInt(value.trim(), 10))
+      .filter((value) => Number.isInteger(value) && value > 0 && value <= 12);
+
+    if (months.length === 0) {
+      this.showError("❌ Please provide valid months between 1 and 12 (ex: 1,2,3)");
+      return;
+    }
+
+    const uniqueMonths = [...new Set(months)].sort((a, b) => a - b);
+
     const confirmed = confirm(
-      `Duplicate ${this.selectedRows.size} transactions?`,
+      `Duplicate ${this.selectedRows.size} transactions for month offset(s): ${uniqueMonths.join(", ")}?`,
     );
     if (!confirmed) return;
 
@@ -1509,6 +1527,7 @@ class TransactionManager {
         },
         body: JSON.stringify({
           transaction_ids: Array.from(this.selectedRows),
+          months: uniqueMonths,
         }),
       });
 
