@@ -48,7 +48,7 @@ class TransactionManager {
     this.updateSortIndicators();
 
     // Initialize checkbox column as hidden (since bulk mode starts as false)
-    $("#transactions-table thead th:first-child").css("display", "none");
+    $("#transactions-table thead th:first-child").addClass("is-hidden");
 
     console.log("✅ [init] Complete initialization finished");
   }
@@ -117,7 +117,7 @@ class TransactionManager {
     );
     $("#select-all").on("change", (e) => this.selectAll(e.target.checked));
     $("#bulk-mark-cleared").on("click", () => this.bulkMarkCleared());
-    $("#bulk-duplicate").on("click", () => this.bulkDuplicate());
+    $("#bulk-duplicate").on("click", () => this.showDuplicateModal());
     $("#bulk-delete").on("click", () => this.bulkDelete());
 
     // Row selection
@@ -863,11 +863,11 @@ class TransactionManager {
     }
 
     // Sempre criar a coluna do checkbox, mas controlar visibilidade
-    const checkboxVisibility = this.bulkMode ? "" : 'style="display: none;"';
+    const checkboxVisibility = this.bulkMode ? "" : "is-hidden";
 
     return `
       <tr data-id="${tx.id}" class="${rowClass}">
-        <td ${checkboxVisibility} class="text-center">
+        <td class="text-center ${checkboxVisibility}">
           <input type="checkbox" class="form-check-input row-select" value="${tx.id}" ${isSelected ? "checked" : ""}>
         </td>
         <td class="text-nowrap">${formatDate(tx.date)}</td>
@@ -1224,25 +1224,21 @@ class TransactionManager {
 
   toggleBulkMode(enabled) {
     this.bulkMode = enabled;
-    $("#select-all").toggle(enabled);
+    $("#select-all").toggleClass("is-hidden", !enabled);
     $("#bulk-actions").toggleClass("d-none", !enabled);
 
     // Show/hide the entire checkbox column in the header
     const checkboxHeader = $("#transactions-table thead th:first-child");
     if (enabled) {
-      checkboxHeader.css("display", "");
+      checkboxHeader.removeClass("is-hidden");
     } else {
-      checkboxHeader.css("display", "none");
+      checkboxHeader.addClass("is-hidden");
     }
 
     // Show/hide all cells of the first column in the tbody
     $("#transactions-tbody tr").each(function () {
       const firstCell = $(this).find("td:first-child");
-      if (enabled) {
-        firstCell.css("display", "");
-      } else {
-        firstCell.css("display", "none");
-      }
+      firstCell.toggleClass("is-hidden", !enabled);
     });
 
     if (!enabled) {
@@ -1322,6 +1318,126 @@ class TransactionManager {
       }
     } catch (error) {
       this.showError("Failed to update transactions");
+    }
+  }
+
+  showDuplicateModal() {
+    if (this.selectedRows.size === 0) {
+      alert("Please select transactions first.");
+      return;
+    }
+
+    // Create modal if it doesn't exist
+    if ($("#duplicateModal").length === 0) {
+      const modalHtml = `
+        <div class="modal fade" id="duplicateModal" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Duplicate Transactions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <p>Select target periods for duplicating ${this.selectedRows.size} transactions:</p>
+                <div class="mb-3">
+                  <label class="form-label">Periods</label>
+                  <select id="duplicate-target-periods" class="form-select" multiple style="height: 200px;">
+                    <!-- Populated via API -->
+                  </select>
+                  <small class="text-muted">Hold Ctrl (or Cmd) to select multiple periods.</small>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-bulk-duplicate">Duplicate</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      $("body").append(modalHtml);
+
+      $("#confirm-bulk-duplicate").on("click", () => this.executeBulkDuplicate());
+    }
+
+    // Update message
+    $("#duplicateModal .modal-body p").text(`Select target periods for duplicating ${this.selectedRows.size} transactions:`);
+
+    // Load periods
+    this.loadPeriodsForDuplicate();
+
+    $("#duplicateModal").modal("show");
+  }
+
+  async loadPeriodsForDuplicate() {
+    try {
+      const response = await fetch("/api/periods/autocomplete/");
+      if (response.ok) {
+        const periods = await response.json();
+        const select = $("#duplicate-target-periods");
+        select.empty();
+        
+        // Add current period and future periods
+        periods.forEach(p => {
+          select.append(`<option value="${p.id}">${p.text}</option>`);
+        });
+      }
+    } catch (error) {
+      console.error("Error loading periods:", error);
+    }
+  }
+
+  async executeBulkDuplicate() {
+    const targetPeriods = $("#duplicate-target-periods").val();
+    
+    // If no periods selected, we can either alert or just proceed with original behavior (current period)
+    // The user specifically asked to select periods.
+    if (!targetPeriods || targetPeriods.length === 0) {
+        if (!confirm("No periods selected. Duplicate in current period(s)?")) {
+            return;
+        }
+    }
+
+    $("#duplicateModal").modal("hide");
+    
+    this.showLoading(true);
+    const loadingToast = this.showToast(
+      `Duplicating ${this.selectedRows.size} transactions...`,
+      "info",
+      0,
+    );
+
+    try {
+      const response = await fetch("/transactions/bulk-duplicate/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
+        },
+        body: JSON.stringify({
+          transaction_ids: Array.from(this.selectedRows),
+          target_periods: targetPeriods
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to duplicate transactions");
+      }
+
+      const result = await response.json();
+      
+      this.cache.clear();
+      await Promise.all([this.loadTransactions(), this.loadTotals()]);
+
+      if (loadingToast) loadingToast.remove();
+      this.showSuccess(`✅ ${result.created} transactions duplicated successfully`);
+    } catch (error) {
+      console.error("Bulk duplicate error:", error);
+      if (loadingToast) loadingToast.remove();
+      this.showError(`❌ Failed to duplicate transactions: ${error.message}`);
+    } finally {
+      this.showLoading(false);
     }
   }
 
@@ -1530,7 +1646,7 @@ class TransactionManager {
   showToast(message, type, delay = 3000) {
     const toastId = `toast-${Date.now()}-${Math.random()}`;
     const toast = $(`
-      <div class="toast position-fixed top-0 end-0 m-3" id="${toastId}" style="z-index: 9999;">
+      <div class="toast position-fixed top-0 end-0 m-3 z-9999" id="${toastId}">
         <div class="toast-body bg-${type} text-white">
           ${message}
         </div>
@@ -1562,12 +1678,8 @@ class TransactionManager {
               </h5>
             </div>
             <div class="modal-body text-center">
-              <div class="progress mb-3" style="height: 25px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                     role="progressbar" style="width: 0%" id="bulk-progress-bar">
-                  <span id="progress-text">0%</span>
-                </div>
-              </div>
+              <progress class="w-100 mb-3" id="bulk-progress-bar" value="0" max="100"></progress>
+              <div id="progress-text">0%</div>
               <div id="progress-message" class="text-muted">
                 ${initialMessage}
               </div>
@@ -1596,7 +1708,7 @@ class TransactionManager {
     const progressMessage = $("#progress-message");
 
     if (progressBar.length) {
-      progressBar.css("width", percent + "%");
+      progressBar.attr("value", percent);
       progressText.text(percent + "%");
       progressMessage.text(message);
 
@@ -1685,6 +1797,9 @@ class TransactionManager {
 let transactionManager;
 
 $(document).ready(() => {
+  window.csrfToken =
+    document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+    getCookie('csrftoken');
   transactionManager = new TransactionManager();
 });
 

@@ -119,8 +119,7 @@ function addRow() {
     }
     
     // Find insertion point (before action bar)
-    const addRowButton = document.getElementById('add-row-btn');
-    const actionBar = addRowButton ? addRowButton.closest('.card') : null;
+    const actionBar = form.querySelector(".card:last-child");
     if (!actionBar) {
       console.error("❌ [addRow] Could not find insertion point");
       return;
@@ -141,10 +140,10 @@ function addRow() {
           <table class="table table-hover mb-0">
             <thead class="table-light">
               <tr>
-                <th class="text-center">📱</th>
+                <th style="width: 40px;" class="text-center">📱</th>
                 <th>Account Name</th>
-                <th class="text-end w-180">Balance</th>
-                <th class="text-center w-60">Actions</th>
+                <th class="text-end" style="width: 180px;">Balance</th>
+                <th style="width: 60px;" class="text-center">Actions</th>
               </tr>
             </thead>
             <tbody class="sortable-table" id="balance-table" data-reorder-url="/account-reorder/">
@@ -589,16 +588,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       availableAccounts = [];
     }
-  }
-
-  // Month selector navigation
-  const monthSelector = document.getElementById("selector");
-  if (monthSelector) {
-    monthSelector.addEventListener("change", () => {
-      const [year, month] = monthSelector.value.split("-");
-      window.location.search = `?year=${year}&month=${parseInt(month, 10)}`;
-    });
-    console.log("✅ [account_balance.js] Month selector handler initialized");
   }
   
   // Add row button

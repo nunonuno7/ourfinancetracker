@@ -8,10 +8,6 @@ from .views import (
     # Transactions
     TransactionCreateView,
     TransactionUpdateView, TransactionDeleteView,
-    RecurringTransactionListView,
-    RecurringTransactionCreateView,
-    RecurringTransactionUpdateView,
-    RecurringTransactionDeleteView,
     transactions_json, import_transactions_xlsx,
     import_transactions_template, transaction_clear_cache,
     export_transactions_xlsx, export_data_xlsx, transaction_bulk_update,
@@ -38,8 +34,7 @@ from .views import (
     financial_analysis_json, sync_system_adjustments,
     clear_transaction_cache_view, dashboard_returns_json,
     # Transaction Estimation
-    estimate_transaction_page,
-    transaction_estimate,
+    estimate_transaction_view,
     get_estimation_summaries,
     estimate_transaction_for_period,
     delete_estimated_transaction,
@@ -51,7 +46,6 @@ from .views import (
 from .views_reporting import proxy_report_csv_token
 
 urlpatterns = [
-    path("service-worker.js", TemplateView.as_view(template_name="core/service-worker.js", content_type="application/javascript"), name="service_worker"),
     # Home
     path("", HomeView.as_view(), name="home"),
 
@@ -75,7 +69,6 @@ urlpatterns = [
     path("data/export-excel/", export_data_xlsx, name="data_export_xlsx"),
     path("transactions/import-excel/", import_transactions_xlsx, name="transaction_import_xlsx"),
     path("transactions/import/template/", import_transactions_template, name="import_transactions_template_xlsx"),
-    path("tasks/status/<str:task_id>/", views.task_status, name="task_status"),
     path("transactions/clear-cache/", transaction_clear_cache, name="transaction_clear_cache"),
     path("transactions/clear-session-flag/", clear_session_flag, name="clear_session_flag"),
 
@@ -85,19 +78,12 @@ urlpatterns = [
     path('transactions/bulk-delete/', transaction_bulk_delete, name='transaction_bulk_delete'),
 
     # Estimation endpoints
-    path('transactions/estimate/manage/', views.estimate_transaction_page, name='estimate_transaction'),
-    path('transactions/estimate/', views.transaction_estimate, name='transaction_estimate'),
+    path('transactions/estimate/', views.estimate_transaction_view, name='estimate_transaction'),
     path('transactions/estimate/period/', views.estimate_transaction_for_period, name='estimate_transaction_for_period'),
     path('transactions/estimate/summaries/', views.get_estimation_summaries, name='get_estimation_summaries'),
     path('transactions/estimate/years/', views.get_available_years, name='get_available_years'),
     path('transactions/estimate/<int:transaction_id>/delete/', views.delete_estimated_transaction, name='delete_estimated_transaction'),
     path('transactions/estimate/period/<int:period_id>/delete/', views.delete_estimated_transaction_by_period, name='delete_estimated_transaction_by_period'),
-
-    # Recurring transactions
-    path("recurring/", RecurringTransactionListView.as_view(), name="recurring_list"),
-    path("recurring/new/", RecurringTransactionCreateView.as_view(), name="recurring_create"),
-    path("recurring/<int:pk>/edit/", RecurringTransactionUpdateView.as_view(), name="recurring_update"),
-    path("recurring/<int:pk>/delete/", RecurringTransactionDeleteView.as_view(), name="recurring_delete"),
 
     # Categories
     path("categories/", CategoryListView.as_view(), name="category_list"),
@@ -138,8 +124,6 @@ urlpatterns = [
     path('dashboard/spending-by-category/', views.dashboard_spending_by_category_json, name='dashboard_spending_by_category_json'),
     path('dashboard/returns/', views.dashboard_returns_json, name='dashboard_returns_json'),
     path("financial-analysis/json/", financial_analysis_json, name="financial_analysis_json"),
-    path("kpi/goals/", views.kpi_goals_get, name="kpi_goals_get"),
-    path("kpi/goals/update/", views.kpi_goals_update, name="kpi_goals_update"),
     path("api/sync-adjustments/", sync_system_adjustments, name="sync_system_adjustments"),
     path("account-balances/json/", account_balances_pivot_json, name="account_balances_json"),
     path("account-balances/pivot-json/", account_balances_pivot_json, name="account_balances_pivot_json"),
@@ -152,4 +136,14 @@ urlpatterns = [
 
     # Health check
     path("healthz", healthz, name="healthz"),
+
+    # Service worker for PWA
+    path(
+        "service-worker.js",
+        TemplateView.as_view(
+            template_name="service-worker.js",
+            content_type="application/javascript",
+        ),
+        name="service_worker",
+    ),
 ]

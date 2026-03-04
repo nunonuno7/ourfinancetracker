@@ -1,21 +1,10 @@
 
 import logging
-import re
 import time
-
 from django.db import connection
 from django.utils.deprecation import MiddlewareMixin
 
-logger = logging.getLogger("core.performance")
-
-
-def _normalize_sql(sql: str) -> str:
-    """Normalize SQL by removing literal values to find N+1 patterns."""
-    # Replace quoted strings
-    sql = re.sub(r"'[^']*'", "?", sql)
-    # Replace numbers
-    sql = re.sub(r"\b\d+\b", "?", sql)
-    return sql
+logger = logging.getLogger('core.performance')
 
 class PerformanceMiddleware(MiddlewareMixin):
     """Middleware para monitorizar performance das requests"""
@@ -42,19 +31,6 @@ class PerformanceMiddleware(MiddlewareMixin):
                     f"High DB usage: {request.method} {request.path} "
                     f"used {db_queries} queries in {duration:.2f}s"
                 )
-
-            # Detetar e registar possíveis N+1 queries
-            queries = connection.queries[getattr(request, 'db_queries_start', 0):]
-            normalized = {}
-            for q in queries:
-                sql = q.get("sql", "")
-                norm = _normalize_sql(sql)
-                normalized[norm] = normalized.get(norm, 0) + 1
-            for sql, count in normalized.items():
-                if count > 1:
-                    logger.warning(
-                        f"Potential N+1 query detected {count} times: {sql[:200]}"
-                    )
             
             # Adicionar headers de performance em desenvolvimento
             if hasattr(request, 'user') and request.user.is_staff:

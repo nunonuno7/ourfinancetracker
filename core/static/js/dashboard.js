@@ -77,17 +77,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Enhanced chart initialization
   const initCharts = () => {
-    const evolutionCanvas = document.getElementById('evolution-chart');
-    const allocationCanvas = document.getElementById('allocation-chart');
-    const returnsCanvas = document.getElementById('returns-chart');
-
-    if (!evolutionCanvas || !allocationCanvas || !returnsCanvas) {
-      console.warn('⚠️ Chart canvases not found. Skipping chart initialization.');
-      return;
-    }
-
-    const ctx1 = evolutionCanvas.getContext('2d');
-    const ctx2 = allocationCanvas.getContext('2d');
+    const ctx1 = document.getElementById('evolution-chart').getContext('2d');
+    const ctx2 = document.getElementById('allocation-chart').getContext('2d');
 
     // Evolution Chart with enhanced features
     charts.evolution = new Chart(ctx1, {
@@ -256,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const flowsCanvas = document.createElement('canvas');
     flowsCanvas.id = 'flows-chart';
     flowsCanvas.style.display = 'none';
-    evolutionCanvas.parentNode.appendChild(flowsCanvas);
+    document.getElementById('evolution-chart').parentNode.appendChild(flowsCanvas);
 
     charts.flows = new Chart(flowsCanvas.getContext('2d'), {
       type: 'bar',
@@ -332,16 +323,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Create returns chart (initially hidden)
+    const returnsCanvas = document.getElementById('returns-chart');
+    // Remove Bootstrap's d-none class so we can control visibility via JS
+    returnsCanvas.classList.remove('d-none');
     returnsCanvas.style.display = 'none';
 
     charts.returns = new Chart(returnsCanvas.getContext('2d'), {
       type: 'line',
       data: {
-        labels: [],
+        // Provide a placeholder data point so Chart.js doesn't crash when the chart
+        // is displayed before real data is loaded. This also serves as a fallback
+        // when the API returns no data for the selected period.
+        labels: ['No data'],
         datasets: [
           {
             label: 'Portfolio Return (%)',
-            data: [],
+            data: [0],
             borderColor: '#6f42c1',
             borderWidth: 2,
             tension: 0.3,
@@ -349,7 +346,7 @@ document.addEventListener("DOMContentLoaded", () => {
           },
           {
             label: 'Average Portfolio Return (%)',
-            data: [],
+            data: [0],
             borderColor: '#28a745',
             borderWidth: 2,
             borderDash: [6, 6],
@@ -422,7 +419,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const expensesCanvas = document.createElement('canvas');
     expensesCanvas.id = 'expenses-chart';
     expensesCanvas.style.display = 'none';
-    evolutionCanvas.parentNode.appendChild(expensesCanvas);
+    document.getElementById('evolution-chart').parentNode.appendChild(expensesCanvas);
 
     charts.expenses = new Chart(expensesCanvas.getContext('2d'), {
       type: 'doughnut',
@@ -841,12 +838,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const estimatedExpenses = Math.max(200, estimatedIncome * 0.3); // Conservative estimate
       const savingsRate = estimatedIncome > 0 ? ((estimatedIncome - estimatedExpenses) / estimatedIncome * 100) : 0;
 
-      const months = Math.max(allPeriods.length, 1);
       return {
         patrimonio_total: `${totalPatrimonio.toLocaleString('en-GB')} €`,
         receita_media: `${Math.round(estimatedIncome).toLocaleString('en-GB')} €`,
         despesa_estimada_media: `${Math.round(estimatedExpenses).toLocaleString('en-GB')} €`,
-        valor_investido_medio: `${Math.round(totalInvestments / months).toLocaleString('en-GB')} €`,
+        valor_investido_total: `${totalInvestments.toLocaleString('en-GB')} €`,
         despesas_justificadas_pct: "95%", // Optimistic estimate
         taxa_poupanca: `${savingsRate.toFixed(1)}%`,
         wealth_growth: `${wealthGrowth >= 0 ? '+' : ''}${wealthGrowth.toFixed(1)}%`,
@@ -864,7 +860,7 @@ document.addEventListener("DOMContentLoaded", () => {
       patrimonio_total: "12,500 €",
       receita_media: "2,500 €",
       despesa_estimada_media: "1,800 €",
-      valor_investido_medio: "8,500 €",
+      valor_investido_total: "8,500 €",
       despesas_justificadas_pct: "85%",
       rentabilidade_mensal_media: "+2.5%",
       status: 'mock_data'
@@ -987,7 +983,7 @@ document.addEventListener("DOMContentLoaded", () => {
       'receita-media': data.receita_media || data.patrimonio_total || '0 €',
       'despesa-estimada': data.despesa_estimada_media || data.receita_media || '0 €',
       'verified-expenses': data.despesas_justificadas_pct_str || '0%',
-      'valor-investido': data.valor_investido_medio || '0 €',
+      'valor-investido': data.valor_investido_total || '0 €',
       'patrimonio-total': data.patrimonio_total || '0 €'
     };
 
@@ -1024,34 +1020,30 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Reinitialize tooltips for updated elements
-    const tooltipTriggerList = Array.from(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList
-      .filter(el => el && (el.getAttribute('title') || el.getAttribute('data-bs-original-title')))
-      .forEach(el => {
-        // Dispose existing tooltip if any
-        const existingTooltip = bootstrap.Tooltip.getInstance(el);
-        if (existingTooltip) {
-          existingTooltip.dispose();
-        }
-        try {
-          // Create new tooltip
-          new bootstrap.Tooltip(el);
-        } catch (err) {
-          console.error('Tooltip initialization failed', err, el);
-        }
-      });
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(el => {
+      // Dispose existing tooltip if any
+      const existingTooltip = bootstrap.Tooltip.getInstance(el);
+      if (existingTooltip) {
+        existingTooltip.dispose();
+      }
+      // Create new tooltip
+      new bootstrap.Tooltip(el);
+    });
 
-    if (window.recomputeKPICards) {
-      window.recomputeKPICards();
+    // Update progress bars and trends with error handling
+    try {
+      updateProgressBarsAndTrends(data);
+    } catch (error) {
+      console.warn('⚠️ Error updating progress bars:', error);
     }
-
   };
 
   // Helper function to generate enhanced KPI tooltips
   const generateKPITooltip = (id, value, data) => {
     const receita = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
     const despesa = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const investido = parseFloat((data.valor_investido_medio || '0').replace(/[^\d.-]/g, '')) || 0;
+    const investido = parseFloat((data.valor_investido_total || '0').replace(/[^\d.-]/g, '')) || 0;
     const patrimonio = parseFloat((data.patrimonio_total || '0').replace(/[^\d.-]/g, '')) || 0;
 
     switch(id) {
@@ -1085,13 +1077,13 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `;
       case 'valor-investido':
-        const investmentRatio = receita > 0 ? (investido / receita * 100).toFixed(1) : 0;
+        const investmentRatio = patrimonio > 0 ? (investido / patrimonio * 100).toFixed(1) : 0;
         return `
           <div class="text-start">
-            <strong>📈 Average Investement</strong><br>
+            <strong>📈 Total Invested</strong><br>
             Amount: <span class="text-primary">${value}</span><br>
-            <small>📊 ${investmentRatio}% of income</small><br>
-            <small>💡 ${investmentRatio > 20 ? 'Strong investing habit' : investmentRatio > 10 ? 'Good progress' : 'Could invest more'}</small>
+            <small>📊 ${investmentRatio}% of net worth</small><br>
+            <small>💡 ${investmentRatio > 60 ? 'High growth focus' : investmentRatio > 30 ? 'Balanced approach' : 'Conservative strategy'}</small>
           </div>
         `;
       case 'patrimonio-total':
@@ -1106,6 +1098,60 @@ document.addEventListener("DOMContentLoaded", () => {
       default:
         return `<strong>${value}</strong><br><small>Financial metric</small>`;
     }
+  };
+
+  const updateProgressBarsAndTrends = (data) => {
+    // Extract numeric values for progress calculation
+    const income = parseFloat(data.receita_media?.replace(/[^\d.-]/g, '') || 0);
+    const expense = parseFloat(data.despesa_estimada_media?.replace(/[^\d.-]/g, '') || 0);
+    const invested = parseFloat(data.valor_investido_total?.replace(/[^\d.-]/g, '') || 0);
+    const netWorth = parseFloat(data.patrimonio_total?.replace(/[^\d.-]/g, '') || 0);
+    const savingsRate = income > 0 ? ((income - expense) / income * 100) : 0;
+
+    // Calculate progress percentages (normalized to reasonable ranges)
+    const verifiedPct = parseFloat(data.despesas_justificadas_pct) || 0;
+
+    const progressBars = {
+      'receita-progress': Math.min(100, (income / 3000) * 100),
+      'despesa-progress': Math.min(100, (expense / 2500) * 100),
+      'verified-progress': Math.min(100, verifiedPct),
+      'investido-progress': Math.min(100, (invested / 20000) * 100),
+      'patrimonio-progress': Math.min(100, (netWorth / 25000) * 100),
+      'poupanca-progress': Math.min(100, savingsRate * 2)
+    };
+
+    Object.entries(progressBars).forEach(([id, width]) => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.width = `${width}%`;
+        element.style.transition = 'width 0.5s ease';
+      }
+    });
+
+    // Add trend indicators (mock data for now)
+    const trends = {
+      'receita-change': '+5.2% vs previous month',
+      'despesa-change': '-2.1% vs previous month',
+      'verified-change':
+        verifiedPct >= 90
+          ? '✅ Mostly verified'
+          : verifiedPct >= 75
+            ? '👍 Low estimation'
+            : verifiedPct >= 50
+              ? 'ℹ️ Moderate verification'
+              : '⚠️ Many estimated expenses',
+      'investido-change': '+12.5% this year',
+      'patrimonio-change': '+8.7% vs previous month',
+      'poupanca-change': savingsRate >= 20 ? '🎯 Excellent' : '⚠️ Can improve'
+    };
+
+    Object.entries(trends).forEach(([id, text]) => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.textContent = text;
+        element.style.fontSize = '0.75rem';
+      }
+    });
   };
 
   const updateCharts = async () => {
@@ -1461,15 +1507,21 @@ document.addEventListener("DOMContentLoaded", () => {
         charts.returns.data.datasets[0].data = [0];
         charts.returns.data.datasets[1].data = [0];
         charts.returns.update('none');
+        console.log('ℹ️ [updateReturnsChart] No returns data for selected period');
         return;
       }
 
+      // Ensure we never feed null/undefined values to Chart.js which would cause
+      // its tooltip plugin to crash.
+      const sanitize = (value) => (value === null || value === undefined ? 0 : value);
+
       charts.returns.data.labels = series.map(item => item.period);
-      charts.returns.data.datasets[0].data = series.map(item => item.portfolio_return);
-      charts.returns.data.datasets[1].data = series.map(item => item.avg_portfolio_return);
+      charts.returns.data.datasets[0].data = series.map(item => sanitize(item.portfolio_return));
+      charts.returns.data.datasets[1].data = series.map(item => sanitize(item.avg_portfolio_return));
 
       charts.returns.options.plugins.title.text = 'Investment Returns Over Time';
       charts.returns.update('none');
+      console.log('✅ [updateReturnsChart] Returns chart updated with', series.length, 'points');
     } catch (error) {
       console.error('❌ [updateReturnsChart] Failed to load returns data:', error);
     }
@@ -1580,14 +1632,14 @@ document.addEventListener("DOMContentLoaded", () => {
       evolutionCanvas.style.display = 'block';
     } else if (chartType === 'flows' && flowsCanvas) {
       flowsCanvas.style.display = 'block';
+      updateFlowsChart(analysisData);
     } else if (chartType === 'returns' && returnsCanvas) {
       returnsCanvas.style.display = 'block';
+      updateReturnsChart();
     } else if (chartType === 'expenses' && expensesCanvas) {
       expensesCanvas.style.display = 'block';
+      updateExpensesChart();
     }
-
-    // Ensure the selected chart reflects current filters
-    updateDashboard();
   };
 
   const generateInsights = (data) => {
@@ -1663,14 +1715,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Render insights with animations
     container.innerHTML = insights.map((insight, index) => `
-      <div class="insight-item insight-${insight.type}" data-delay="${index * 0.1}s">
+      <div class="insight-item insight-${insight.type}" style="animation-delay: ${index * 0.1}s;">
         <h6 class="mb-2">${insight.title}</h6>
         <p class="mb-0">${insight.text}</p>
       </div>
     `).join('');
-    container.querySelectorAll('.insight-item').forEach(item => {
-      item.style.animationDelay = item.dataset.delay;
-    });
   };
 
   // Enhanced slider initialization functions with better UX
@@ -2003,7 +2052,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIdx = periods.length - 1;
         const startIdx = Math.max(0, endIdx - 2);
         periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
-        updateDashboard();
       }
     });
 
@@ -2012,7 +2060,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIdx = periods.length - 1;
         const startIdx = Math.max(0, endIdx - 5);
         periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
-        updateDashboard();
       }
     });
 
@@ -2021,14 +2068,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIdx = periods.length - 1;
         const startIdx = Math.max(0, endIdx - 11);
         periodSlider.noUiSlider.set([periods[startIdx], periods[endIdx]]);
-        updateDashboard();
       }
     });
 
     document.getElementById('all-periods')?.addEventListener('click', () => {
       if (periods.length > 0) {
         periodSlider.noUiSlider.set([periods[0], periods[periods.length - 1]]);
-        updateDashboard();
       }
     });
 
@@ -2318,7 +2363,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   // Connect slider events to update dashboard with optimized debounce
-  const updateDashboardDebounced = debounce(updateDashboard, 200);
+  const updateDashboardDebounced = debounce(updateDashboard, 500);
 
   // Year slider event listeners - only on set (final value)
   if (yearSlider) {
@@ -2416,21 +2461,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Export functions
   document.getElementById('export-excel')?.addEventListener('click', () => {
-    if (periodSlider?.noUiSlider) {
-      const [start, end] = periodSlider.noUiSlider.get();
-      const formatPeriodForApi = (period) => {
-        const [month, year] = period.split('/');
-        const fullYear = 2000 + parseInt(year);
-        const monthNum = getMonthNumberInt(month);
-        const monthString = monthNum.toString().padStart(2, '0');
-        return `${fullYear}-${monthString}`;
-      };
-      const startParam = formatPeriodForApi(start);
-      const endParam = formatPeriodForApi(end);
-      window.location.href = `/account-balance/export-excel/?start=${startParam}&end=${endParam}`;
-    } else {
-      window.location.href = '/account-balance/export-excel/';
-    }
+    window.location.href = '/account-balance/export/';
   });
 
   document.getElementById('export-pdf')?.addEventListener('click', () => {

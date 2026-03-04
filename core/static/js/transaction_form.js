@@ -63,27 +63,22 @@ function initTransactionForm() {
     }
   }
   
-  // ✅ Guard against missing Flatpickr (e.g. offline or CDN failure)
-  if (typeof flatpickr === "function") {
-    flatpickr(dateInput, {
-      dateFormat: "Y-m-d",
-      defaultDate: initialDate,
-      altInput: true,
-      altFormat: "d/m/Y",
-      allowInput: true,
-      onChange: function (selectedDates) {
-        if (selectedDates.length > 0) {
-          syncPeriodFromDate();
-        }
-      },
-      onReady: function () {
-        // Sincronizar período ao carregar
+  flatpickr(dateInput, {
+    dateFormat: "Y-m-d",
+    defaultDate: initialDate,
+    altInput: true,
+    altFormat: "d/m/Y",
+    allowInput: true,
+    onChange: function (selectedDates) {
+      if (selectedDates.length > 0) {
         syncPeriodFromDate();
       }
-    });
-  } else {
-    console.warn("⏭️ Flatpickr not loaded; skipping date picker init");
-  }
+    },
+    onReady: function() {
+      // Sincronizar período ao carregar
+      syncPeriodFromDate();
+    }
+  });
 
   // Event listener para mudanças manuais na data
   dateInput.addEventListener('change', syncPeriodFromDate);
@@ -129,18 +124,14 @@ function initTransactionForm() {
     const rawList = categoryInput.dataset.categoryList || "";
     const options = rawList.split(",").map(name => ({ value: name.trim(), text: name.trim() }));
 
-    if (typeof TomSelect === "function") {
-      new TomSelect(categoryInput, {
-        create: true,
-        persist: false,
-        maxItems: 1,
-        options,
-        items: categoryInput.value ? [categoryInput.value] : [],
-        sortField: { field: "text", direction: "asc" },
-      });
-    } else {
-      console.warn("⏭️ TomSelect not loaded; skipping category selector");
-    }
+    new TomSelect(categoryInput, {
+      create: true,
+      persist: false,
+      maxItems: 1,
+      options,
+      items: categoryInput.value ? [categoryInput.value] : [],
+      sortField: { field: "text", direction: "asc" },
+    });
   }
 
   const tagsInput = document.getElementById("id_tags_input");
@@ -154,29 +145,25 @@ function initTransactionForm() {
 
     const allTags = initialTags.map(name => ({ name }));
 
-    if (typeof TomSelect === "function") {
-      fetch("/tags/autocomplete/?q=")
-        .then(res => res.json())
-        .then(data => {
-          const tagOptions = [...new Set([...allTags, ...data])];
+    fetch("/tags/autocomplete/?q=")
+      .then(res => res.json())
+      .then(data => {
+        const tagOptions = [...new Set([...allTags, ...data])];
 
-          new TomSelect(tagsInput, {
-            plugins: ["remove_button"],
-            delimiter: ",",
-            persist: false,
-            create: true,
-            placeholder: "Add tags...",
-            valueField: "name",
-            labelField: "name",
-            searchField: "name",
-            preload: true,
-            options: tagOptions,
-            items: initialTags,
-          });
+        new TomSelect(tagsInput, {
+          plugins: ["remove_button"],
+          delimiter: ",",
+          persist: false,
+          create: true,
+          placeholder: "Add tags...",
+          valueField: "name",
+          labelField: "name",
+          searchField: "name",
+          preload: true,
+          options: tagOptions,
+          items: initialTags,
         });
-    } else {
-      console.warn("⏭️ TomSelect not loaded; skipping tags selector");
-    }
+      });
   }
 
   const amountInput = document.getElementById("id_amount");
@@ -227,18 +214,12 @@ function initTransactionForm() {
   }
 
   const flowDiv = document.getElementById("investment-flow");
-  const typeSelect = document.getElementById("id_type");
   const typeRadios = document.querySelectorAll('input[name="type"]');
-  if (flowDiv) {
-    const getTypeValue = () => {
-      if (typeSelect) return typeSelect.value;
-      const selected = document.querySelector('input[name="type"]:checked');
-      return selected ? selected.value : null;
-    };
+  if (flowDiv && typeRadios.length) {
     function toggleFlow() {
-      flowDiv.classList.toggle("d-none", getTypeValue() !== "IV");
+      const selected = document.querySelector('input[name="type"]:checked');
+      flowDiv.style.display = (selected?.value === "IV") ? "" : "none";
     }
-    typeSelect?.addEventListener("change", toggleFlow);
     typeRadios.forEach(r => r.addEventListener("change", toggleFlow));
     toggleFlow();
   }

@@ -12,7 +12,7 @@ def test_signup_email_failure(client, settings):
     data = {
         "username": "newuser",
         "email": "newuser@example.com",
-        "password": "StrongPass123!",
+        "password": "password123",
     }
     with patch("accounts.views.send_mail", side_effect=smtplib.SMTPException("fail")):
         response = client.post(reverse("accounts:signup"), data)
