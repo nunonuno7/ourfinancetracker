@@ -1,0 +1,11 @@
+{
+  "name": "ourfinancetracker",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "esbuild": "^0.20.2"
+  },
+  "scripts": {
+    "build": "esbuild core/static/js/dashboard.js --bundle --minify --target=es2015 --outfile=core/static/js/dashboard.legacy.js"
+  }
+}
