@@ -705,10 +705,10 @@ class TransactionManager {
   }
 
   clearFilters() {
-    this.resetFiltersToDefaults({ preserveDateRange: true });
+    this.resetFiltersToDefaults();
     this.currentPage = 1;
     this.cache.clear(); // Clear cache when clearing filters
-    this.saveFiltersToStorage();
+    transactionListState.clearSavedFilters();
     this.showFilterFeedback();
     this.loadTransactions();
     this.loadTotals();

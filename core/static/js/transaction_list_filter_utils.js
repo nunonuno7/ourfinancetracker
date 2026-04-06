@@ -53,6 +53,7 @@
   const CTRL_MULTI_SELECT_HINT = "Hold Ctrl to select multiple options";
   const CHECKMARK_PREFIX = "\u2713 ";
   const CTRL_MULTI_SELECT_STATE_KEY = "ctrlMultiSelectState";
+  const CTRL_MULTI_SELECT_NATIVE_SYNC_GUARD = "ctrlMultiSelectIgnoreNativeSync";
 
   function readJsonScript(id, fallback = {}) {
     const payload = document.getElementById(id);
@@ -407,6 +408,15 @@
     };
     select.data(CTRL_MULTI_SELECT_STATE_KEY, state);
 
+    select.on("change.ctrlMultiSelectNativeSync", () => {
+      if (select.data(CTRL_MULTI_SELECT_NATIVE_SYNC_GUARD)) {
+        return;
+      }
+
+      const nativeValues = sortValuesByOptionOrder(select, select.val());
+      setCtrlMultiSelectValues(selector, nativeValues);
+    });
+
     button.on("show.bs.dropdown", () => {
       wrapper.addClass("tx-filter-dropdown-open");
       updateFiltersLayerState();
@@ -439,7 +449,9 @@
         setCtrlMultiSelectValues(selector, value);
       }
 
+      select.data(CTRL_MULTI_SELECT_NATIVE_SYNC_GUARD, true);
       select.trigger("change");
+      select.removeData(CTRL_MULTI_SELECT_NATIVE_SYNC_GUARD);
 
       if (!keepOpen) {
         state.dropdownInstance?.hide();
