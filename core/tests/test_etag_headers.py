@@ -1,10 +1,8 @@
 import json
 from datetime import date
 from decimal import Decimal
-from unittest import skipIf
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 
@@ -62,10 +60,6 @@ class ETagHeadersTest(TestCase):
         )
         self.assertEqual(response_304_lm.status_code, 304)
 
-    @skipIf(
-        connection.vendor == "sqlite",
-        "transactions_json_v2 uses PostgreSQL-specific SQL",
-    )
     def test_transactions_json_v2_etag(self):
         url = reverse("transactions_json_v2")
         params = {"date_start": "2024-01-01", "date_end": "2024-12-31"}
@@ -78,3 +72,17 @@ class ETagHeadersTest(TestCase):
         self.assertEqual(response_304.status_code, 304)
         response_304_lm = self.client.get(url, params, HTTP_IF_MODIFIED_SINCE=last_mod)
         self.assertEqual(response_304_lm.status_code, 304)
+
+    def test_transactions_json_v2_force_bypasses_conditional_cache(self):
+        url = reverse("transactions_json_v2")
+        params = {"date_start": "2024-01-01", "date_end": "2024-12-31"}
+        response = self.client.get(url, params)
+        etag = response["ETag"]
+
+        forced_response = self.client.get(
+            url,
+            {**params, "force": "true"},
+            HTTP_IF_NONE_MATCH=etag,
+        )
+
+        self.assertEqual(forced_response.status_code, 200)

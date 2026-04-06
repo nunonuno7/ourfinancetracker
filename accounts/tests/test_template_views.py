@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 
@@ -7,6 +8,21 @@ def test_login_page_renders(client):
     response = client.get(reverse("accounts:login"))
     assert response.status_code == 200
     assert "accounts/login.html" in [t.name for t in response.templates]
+
+
+@pytest.mark.django_db
+def test_login_invalid_credentials_render_clean_non_field_error(client):
+    user_model = get_user_model()
+    user_model.objects.create_user(username="tester", password="secret")
+
+    response = client.post(
+        reverse("accounts:login"),
+        {"username": "tester", "password": "wrong"},
+    )
+
+    assert response.status_code == 200
+    assert b"Please enter a correct username and password" in response.content
+    assert b"__all__" not in response.content
 
 
 @pytest.mark.django_db

@@ -8,18 +8,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
-    help = 'Sincroniza transações automáticas de receitas não inseridas'
+    help = "Sync missing automatic income transactions"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--user-id',
+            "--user-id",
             type=int,
-            help='ID específico do utilizador (opcional)'
+            help="Specific user ID (optional)",
         )
         parser.add_argument(
-            '--all-users',
-            action='store_true',
-            help='Processar todos os utilizadores'
+            "--all-users",
+            action="store_true",
+            help="Process all users",
         )
 
     def handle(self, *args, **options):
@@ -28,7 +28,7 @@ class Command(BaseCommand):
 
         if not user_id and not all_users:
             self.stdout.write(
-                self.style.ERROR('Deve especificar --user-id ou --all-users')
+                self.style.ERROR("You must specify --user-id or --all-users")
             )
             return
 
@@ -40,7 +40,9 @@ class Command(BaseCommand):
         total_created = 0
         total_users = len(users)
 
-        self.stdout.write(f"🚀 Sincronizando receitas automáticas para {total_users} utilizador(es)...")
+        self.stdout.write(
+            f"🚀 Syncing automatic income for {total_users} user(s)..."
+        )
 
         for user_id in users:
             try:
@@ -51,19 +53,21 @@ class Command(BaseCommand):
                     if created > 0:
                         self.stdout.write(
                             self.style.SUCCESS(
-                                f"✅ User {user_id}: {created} transações criadas/atualizadas"
+                                f"✅ User {user_id}: {created} transactions created/updated"
                             )
                         )
                     else:
-                        self.stdout.write(f"ℹ️ User {user_id}: Nenhuma atualização necessária")
+                        self.stdout.write(
+                            f"ℹ️ User {user_id}: No updates required"
+                        )
                         
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"❌ Erro no user {user_id}: {e}")
+                    self.style.ERROR(f"❌ Error for user {user_id}: {e}")
                 )
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"🎯 Concluído! Total: {total_created} transações processadas"
+                f"🎯 Completed! Total: {total_created} transactions processed"
             )
         )

@@ -15,7 +15,7 @@ def get_env_or_fail(key: str) -> str:
     value = os.getenv(key)
     if not value:
         raise ImproperlyConfigured(
-            f"A variável de ambiente '{key}' está em falta."  # noqa: E501
+            f"Missing environment variable '{key}'."  # noqa: E501
         )
     return value
 
@@ -37,7 +37,7 @@ def proxy_report_csv_token(request):
         token = request.GET.get("token", "")  # deprecated fallback
 
     if not token:
-        return HttpResponseForbidden("❌ Missing token.")
+        return HttpResponseForbidden("Missing token.")
 
     try:
         service_role_key = get_env_or_fail("SUPABASE_SERVICE_ROLE_KEY")
@@ -46,13 +46,13 @@ def proxy_report_csv_token(request):
         logger.debug("✅ Decoded original token claims.")
         user_id = decoded.get("sub")
         if not user_id:
-            return HttpResponseForbidden("❌ Invalid JWT – missing 'sub'.")
+            return HttpResponseForbidden("Invalid JWT - missing 'sub'.")
     except jwt.ExpiredSignatureError:
-        return HttpResponseForbidden("❌ Token expired.")
+        return HttpResponseForbidden("Token expired.")
     except jwt.InvalidTokenError:
-        return HttpResponseForbidden("❌ Invalid token.")
+        return HttpResponseForbidden("Invalid token.")
     except ImproperlyConfigured as e:
-        logger.error(f"❌ Misconfiguration: {e}")
+        logger.error(f"Misconfiguration: {e}")
         return HttpResponse(str(e), status=500)
 
     # Mint a fresh 5-minute JWT scoped to the same subject
@@ -67,13 +67,13 @@ def proxy_report_csv_token(request):
         service_role_key,
         algorithm="HS256",
     )
-    logger.debug("🔐 Minted fresh short-lived JWT for Supabase.")
+    logger.debug("Issued a short-lived JWT for Supabase.")
 
     try:
         api_key = get_env_or_fail("SUPABASE_API_KEY")
         rest_url = get_env_or_fail("SUPABASE_REST_URL")
     except ImproperlyConfigured as e:
-        logger.error(f"❌ Misconfiguration: {e}")
+        logger.error(f"Misconfiguration: {e}")
         return HttpResponse(str(e), status=500)
 
     headers = {
@@ -87,11 +87,11 @@ def proxy_report_csv_token(request):
         "date,amount,type,category,account,notes"
     )
     r = requests.get(url, headers=headers, timeout=10)
-    logger.info(f"📥 Supabase response status={r.status_code}")
+    logger.info(f"Supabase response status={r.status_code}")
     if r.status_code != 200:
-        logger.warning(f"❌ Response body: {r.text}")
+        logger.warning(f"Response body: {r.text}")
         return HttpResponse(
-            f"❌ Supabase error: {r.status_code}",
+            f"Supabase error: {r.status_code}",
             status=r.status_code,
         )
 

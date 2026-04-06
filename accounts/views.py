@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
@@ -28,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_TIMEOUT = 600  # 10 minutes in seconds
+
+
+def _login_attempt_cache_keys(username: str) -> tuple[str, str]:
+    """Return cache-safe keys for login attempt tracking."""
+    normalized = username.strip().casefold()
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return (f"failed_login:{digest}", f"lockout_login:{digest}")
 
 def signup(request):
     form = SignupForm(request.POST or None)
@@ -146,7 +154,7 @@ class CustomLoginView(LoginView):
     def dispatch(self, request, *args, **kwargs):
         username = request.POST.get("username")
         if username:
-            lock_key = f"lockout_{username}"
+            _, lock_key = _login_attempt_cache_keys(username)
             if cache.get(lock_key):
                 messages.error(
                     request,
@@ -158,8 +166,7 @@ class CustomLoginView(LoginView):
     def form_invalid(self, form):
         username = self.request.POST.get("username")
         if username:
-            attempts_key = f"failed_{username}"
-            lock_key = f"lockout_{username}"
+            attempts_key, lock_key = _login_attempt_cache_keys(username)
             attempts = cache.get(attempts_key, 0) + 1
             cache.set(attempts_key, attempts, LOCKOUT_TIMEOUT)
             if attempts >= MAX_FAILED_ATTEMPTS:
@@ -172,8 +179,9 @@ class CustomLoginView(LoginView):
 
     def form_valid(self, form):
         username = form.get_user().get_username()
-        cache.delete(f"failed_{username}")
-        cache.delete(f"lockout_{username}")
+        attempts_key, lock_key = _login_attempt_cache_keys(username)
+        cache.delete(attempts_key)
+        cache.delete(lock_key)
         return super().form_valid(form)
 
 

@@ -10,26 +10,26 @@ from django.db import connection
 from datetime import date
 import pandas as pd
 
-# Verificar transações na base de dados
+# Check transactions in the database
 user = User.objects.first()
 if user:
-    print(f"Utilizador: {user.username} (ID: {user.id})")
+    print(f"User: {user.username} (ID: {user.id})")
     
-    # Contar transações
+    # Count transactions
     tx_count = Transaction.objects.filter(user=user).count()
-    print(f"Transações do utilizador: {tx_count}")
+    print(f"User transactions: {tx_count}")
     
-    # Mostrar algumas transações
+    # Show a few transactions
     if tx_count > 0:
         latest = Transaction.objects.filter(user=user).order_by('-date')[:5]
         for tx in latest:
             print(f"  - {tx.date} | {tx.type} | {tx.amount} | {tx.category}")
     
-    # Query direta
+    # Direct query
     with connection.cursor() as cursor:
         cursor.execute("SELECT COUNT(*) FROM core_transaction WHERE user_id = %s", [user.id])
         count = cursor.fetchone()[0]
-        print(f"Query direta: {count} transações")
+        print(f"Direct query: {count} transactions")
         
         if count > 0:
             cursor.execute("""
@@ -40,17 +40,17 @@ if user:
                 LIMIT 5
             """, [user.id])
             rows = cursor.fetchall()
-            print("Últimas 5 transações:")
+            print("Latest 5 transactions:")
             for row in rows:
                 print(f"  - {row}")
 
-    # NOVO: Testar query específica do transactions_json
-    print("\n=== TESTE QUERY TRANSACTIONS_JSON ===")
+    # NEW: Test the specific transactions_json query
+    print("\n=== TRANSACTIONS_JSON QUERY TEST ===")
     start_date = date(2025, 1, 1)
     end_date = date.today()
     
     with connection.cursor() as cursor:
-        # Query exacta da função transactions_json
+        # Exact query used by the transactions_json function
         cursor.execute("""
             SELECT tx.id, tx.date, 
                    COALESCE(dp.year, EXTRACT(year FROM tx.date)) as year,
@@ -68,18 +68,18 @@ if user:
             ORDER BY tx.date DESC, tx.id DESC
         """, [user.id, start_date, end_date])
         transactions = cursor.fetchall()
-        print(f"Query transactions_json retornou: {len(transactions)} transações")
+        print(f"transactions_json query returned: {len(transactions)} transactions")
         
         if transactions:
-            print("Primeiras 3 transações:")
+            print("First 3 transactions:")
             for i, tx in enumerate(transactions[:3]):
                 print(f"  {i+1}: {tx}")
         
-        # Verificar DatePeriods
+        # Check DatePeriods
         periods = DatePeriod.objects.all().count()
-        print(f"\nDatePeriods na BD: {periods}")
+        print(f"\nDatePeriods in DB: {periods}")
         
-        # Verificar se há transações sem period_id
+        # Check whether there are transactions without period_id
         cursor.execute("SELECT COUNT(*) FROM core_transaction WHERE user_id = %s AND period_id IS NULL", [user.id])
         no_period = cursor.fetchone()[0]
-        print(f"Transações sem period_id: {no_period}")
+        print(f"Transactions without period_id: {no_period}")

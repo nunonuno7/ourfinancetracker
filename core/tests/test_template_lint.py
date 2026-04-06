@@ -17,8 +17,9 @@ def iter_templates():
 
 @pytest.mark.parametrize('template_path', list(iter_templates()))
 def test_no_inline_styles_or_unsafe_scripts(template_path):
-    content = template_path.read_text()
+    content = template_path.read_text(encoding="utf-8")
     assert 'style="' not in content, f'inline style attribute found in {template_path}'
+    assert 'onclick=' not in content, f'inline onclick handler found in {template_path}'
     # Check inline <script> tags have nonce
     for match in re.finditer(r'<script(?![^>]*\bsrc=)[^>]*>', content, re.IGNORECASE):
         tag = match.group(0)

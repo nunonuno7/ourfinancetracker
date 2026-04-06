@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🏠 Home page loaded!");
 
-  // Exemplo: realce suave de botões ao carregar
+  // Example: subtle button highlight on load
   document.querySelectorAll(".btn").forEach(btn => {
     btn.classList.add("shadow");
     btn.addEventListener("mouseenter", () => btn.classList.add("btn-glow"));

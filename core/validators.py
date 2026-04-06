@@ -6,66 +6,66 @@ from datetime import date
 import re
 
 def validate_transaction_amount(value):
-    """Valida montantes de transações"""
+    """Validate transaction amounts."""
     if value == 0:
         raise ValidationError(_('Transaction amount cannot be zero.'))
     
     if abs(value) > Decimal('999999999.99'):
         raise ValidationError(_('Transaction amount is too large.'))
     
-    # Verificar precisão decimal
+    # Check decimal precision
     if value.as_tuple().exponent < -2:
         raise ValidationError(_('Amount cannot have more than 2 decimal places.'))
 
 def validate_account_name(value):
-    """Valida nomes de contas"""
+    """Validate account names."""
     if not value or not value.strip():
         raise ValidationError(_('Account name cannot be empty.'))
     
     if len(value.strip()) < 2:
         raise ValidationError(_('Account name must be at least 2 characters long.'))
     
-    # Verificar caracteres especiais problemáticos
+    # Check for problematic special characters
     if re.search(r'[<>"\';]', value):
         raise ValidationError(_('Account name contains invalid characters.'))
 
 def validate_category_name(value):
-    """Valida nomes de categorias"""
+    """Validate category names."""
     if not value or not value.strip():
         raise ValidationError(_('Category name cannot be empty.'))
     
     if len(value.strip()) > 50:
         raise ValidationError(_('Category name is too long (max 50 characters).'))
     
-    # Verificar caracteres especiais
+    # Check for invalid special characters
     if re.search(r'[<>"\';]', value):
         raise ValidationError(_('Category name contains invalid characters.'))
 
 def validate_date_range(start_date, end_date):
-    """Valida intervalos de datas"""
+    """Validate date ranges."""
     if start_date and end_date:
         if start_date > end_date:
             raise ValidationError(_('Start date cannot be after end date.'))
         
-        # Verificar intervalo máximo (ex: 5 anos)
+        # Check maximum supported range (for example, 5 years)
         max_days = 365 * 5
         if (end_date - start_date).days > max_days:
             raise ValidationError(_('Date range cannot exceed 5 years.'))
 
 class TransactionValidator:
-    """Validador complexo para transações"""
+    """Higher-level validator for transactions."""
     
     @staticmethod
     def validate_transaction_data(transaction_data, user):
-        """Valida dados completos de transação"""
+        """Validate the full transaction payload."""
         errors = {}
         
-        # Validar tipo de transação
+        # Validate transaction type
         tx_type = transaction_data.get('type')
         if tx_type not in ['IN', 'EX', 'IV', 'TR', 'AJ']:
             errors['type'] = 'Invalid transaction type.'
         
-        # Validar conta pertence ao utilizador
+        # Validate that the account belongs to the current user
         account_id = transaction_data.get('account')
         if account_id:
             from .models import Account
@@ -74,7 +74,7 @@ class TransactionValidator:
             except Account.DoesNotExist:
                 errors['account'] = 'Invalid account for this user.'
         
-        # Validar categoria pertence ao utilizador
+        # Validate that the category belongs to the current user
         category_id = transaction_data.get('category')
         if category_id:
             from .models import Category

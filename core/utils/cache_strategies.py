@@ -12,28 +12,28 @@ from core.utils.cache_helpers import _clear_specific_cache_keys
 logger = logging.getLogger(__name__)
 
 class CacheManager:
-    """Sistema de cache avançado com invalidação inteligente"""
+    """Advanced cache manager with smart invalidation."""
     
     def __init__(self):
-        self.default_timeout = 300  # 5 minutos
+        self.default_timeout = 300  # 5 minutes
         self.cache_prefix = "ourft_v2"
     
     def generate_cache_key(self, user_id: int, data_type: str, **kwargs) -> str:
-        """Gera chave de cache única e segura"""
+        """Generate a unique and safe cache key."""
         key_parts = [str(user_id), data_type]
         
-        # Adicionar parâmetros ordenados
+        # Add parameters in sorted order
         for key, value in sorted(kwargs.items()):
             key_parts.append(f"{key}:{value}")
         
-        # Hash para evitar chaves muito longas
+        # Hash to avoid overly long keys
         key_string = "_".join(key_parts)
         key_hash = hashlib.sha256(key_string.encode()).hexdigest()[:12]
         
         return f"{self.cache_prefix}:{key_hash}"
     
     def get_transactions_cache_key(self, user_id: int, start_date: date, end_date: date, **filters) -> str:
-        """Cache key específica para transações"""
+        """Return a cache key specifically for transactions."""
         return self.generate_cache_key(
             user_id, 
             "transactions",
@@ -43,10 +43,10 @@ class CacheManager:
         )
     
     def invalidate_user_cache(self, user_id: int, cache_types: List[str] = None):
-        """Invalida cache de um utilizador removendo efetivamente as chaves.
+        """Invalidate a user's cache by removing matching keys.
 
-        Usa correspondência por padrão quando o backend é Redis e recorre ao
-        utilitário `_clear_specific_cache_keys` caso contrário.
+        Uses wildcard matching when the backend is Redis and falls back to
+        `_clear_specific_cache_keys` otherwise.
         """
         if cache_types is None:
             cache_types = ["transactions", "balances", "dashboard", "kpis"]
@@ -69,7 +69,7 @@ class CacheManager:
                 _clear_specific_cache_keys(user_id, secret_hash)
     
     def get_or_set(self, key: str, callable_func, timeout: int = None) -> Any:
-        """Get or set com logging melhorado"""
+        """Get or set a cache value with improved logging."""
         timeout = timeout or self.default_timeout
         
         cached_value = cache.get(key)
@@ -82,5 +82,5 @@ class CacheManager:
         cache.set(key, fresh_value, timeout)
         return fresh_value
 
-# Instância global
+# Global instance
 cache_manager = CacheManager()

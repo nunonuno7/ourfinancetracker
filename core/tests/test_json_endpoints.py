@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 
-from core.models import DatePeriod
+from core.models import DatePeriod, Tag
 
 
 @pytest.mark.django_db
@@ -23,3 +23,24 @@ def test_period_autocomplete_returns_matching_periods(client, django_user_model)
     response = client.get(reverse("period_autocomplete"), {"term": "2024"})
     assert response.status_code == 200
     assert response.json() == ["2024-01"]
+
+
+@pytest.mark.django_db
+def test_tag_autocomplete_returns_only_current_users_tags_and_supports_empty_query(
+    client, django_user_model
+):
+    user = django_user_model.objects.create_user(username="tags-u", password="p")
+    other_user = django_user_model.objects.create_user(username="tags-other", password="p")
+    Tag.objects.create(user=user, name="groceries")
+    Tag.objects.create(user=user, name="monthly")
+    Tag.objects.create(user=other_user, name="private-tag")
+
+    client.force_login(user)
+
+    response = client.get(reverse("tag_autocomplete"), {"term": ""})
+    assert response.status_code == 200
+    assert response.json() == ["groceries", "monthly"]
+
+    response = client.get(reverse("tag_autocomplete"), {"q": "month"})
+    assert response.status_code == 200
+    assert response.json() == ["monthly"]

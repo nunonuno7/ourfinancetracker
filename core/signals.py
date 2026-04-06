@@ -16,62 +16,67 @@ logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-# ──────────────────────────── Transações ─────────────────────────────
+# ---------------------------- Transactions ----------------------------
 
 @receiver(post_save, sender=Transaction)
 def update_transaction_status(sender, instance, created, **kwargs):
     """
-    Mensagem de debug ao criar uma nova despesa.
+    Debug message when a new expense is created.
     """
     if created and instance.type == Transaction.Type.EXPENSE:
-        logger.debug(f"🧾 Nova despesa criada: {instance}")
+        logger.debug(f"New expense created: {instance}")
 
 @receiver(post_save, sender=Transaction)
 @receiver(post_delete, sender=Transaction) 
 def clear_transaction_cache(sender, instance, **kwargs):
-    """Limpar cache quando transações mudam."""
-    # Evitar loop infinito - só limpar se não estamos já a processar
-    if hasattr(clear_transaction_cache, '_processing'):
+    """Clear cache when transactions change."""
+    # Avoid infinite loops and only clear once per processing cycle
+    if hasattr(clear_transaction_cache, "_processing"):
         return
 
-    # 🚫 PROTEÇÃO EXTRA: Não processar transações automáticas do sistema
-    if getattr(instance, 'is_system', False):
-        logger.debug(f"🚫 Saltando processamento de transação automática do sistema para user_id={instance.user_id}")
+    # Extra protection: skip system-generated transactions
+    if getattr(instance, "is_system", False):
+        logger.debug(
+            f"Skipping system transaction processing for user_id={instance.user_id}"
+        )
         return
 
     # Skip cache clearing during bulk operations (will be handled by bulk views)
     from django.db import transaction as db_transaction
+
     if db_transaction.get_connection().in_atomic_block:
-        logger.debug(f"🚫 Saltando limpeza de cache durante operação atómica para user_id={instance.user_id}")
+        logger.debug(
+            f"Skipping cache clearing during atomic operation for user_id={instance.user_id}"
+        )
         return
 
     try:
         clear_transaction_cache._processing = True
-        logger.debug(f"🧹 Sinal ativado — limpando cache para user_id={instance.user_id}")
+        logger.debug(f"Signal triggered - clearing cache for user_id={instance.user_id}")
         clear_tx_cache(instance.user_id)
     finally:
-        delattr(clear_transaction_cache, '_processing')
+        delattr(clear_transaction_cache, "_processing")
 
-# 🚫 REMOVIDO: Armazenamento de dados para atualização automática de saldos
+# Removed: storing data for automatic balance updates
 
-# 🚫 REMOVIDO: Signals que alteravam saldos automaticamente
-# Os saldos das contas devem ser controlados APENAS pelo utilizador
+# Removed: signals that changed balances automatically
+# Account balances should only be controlled by the user
 
-# ───────────────────────────── Utilizador ─────────────────────────────
+# ------------------------------- User --------------------------------
 
 @receiver(post_save, sender=User)
 def create_default_account(sender, instance, created, **kwargs):
     """
-    Cria uma conta 'Cash' automaticamente para o utilizador, se ainda não existir.
-    Também garante que o utilizador tem `UserSettings`.
+    Create a "Cash" account automatically for the user if it does not exist yet.
+    Also ensure the user has `UserSettings`.
     """
     if not created:
         return
 
-    # Garantir que o utilizador tem settings
+    # Ensure the user has settings
     settings, _ = UserSettings.objects.get_or_create(user=instance)
 
-    # Criar conta "Cash" se ainda não existir
+    # Create the "Cash" account if it does not already exist
     if not Account.objects.filter(user=instance, name__iexact="Cash").exists():
         acc_type = AccountType.objects.filter(name__iexact="Savings").first()
         currency = settings.default_currency or Currency.objects.filter(code="EUR").first()

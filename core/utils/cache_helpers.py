@@ -1,10 +1,11 @@
 """
-Cache utilities para o ourfinancetracker.
-Funções para gerir cache de transações de forma segura e eficiente.
+Cache utilities for ourfinancetracker.
+Helpers for managing transaction cache safely and efficiently.
 """
 
 import hashlib
 import logging
+from fnmatch import fnmatch
 from typing import Optional
 from contextlib import contextmanager
 from django.core.cache import cache
@@ -16,46 +17,46 @@ logger = logging.getLogger(__name__)
 @contextmanager
 def bulk_operation():
     """
-    Context manager para operações em bulk que desabilita limpeza automática de cache.
-    Use com: with bulk_operation(): ...
+    Context manager for bulk operations that temporarily disables automatic
+    cache clearing.
     """
-    # Marcar que estamos numa operação bulk
+    # Mark that a bulk operation is currently running
     bulk_operation._active = True
     try:
         yield
     finally:
-        # Limpar flag quando sair do contexto
-        if hasattr(bulk_operation, '_active'):
-            delattr(bulk_operation, '_active')
+        # Remove the flag when leaving the context
+        if hasattr(bulk_operation, "_active"):
+            delattr(bulk_operation, "_active")
 
 
 def is_bulk_operation_active():
-    """Verifica se estamos numa operação bulk ativa."""
-    return hasattr(bulk_operation, '_active')
+    """Return whether a bulk operation is currently active."""
+    return hasattr(bulk_operation, "_active")
 
 
 def make_key(key: str, key_prefix: str = "", version: Optional[int] = None) -> str:
     """
-    Cria uma chave de cache segura e consistente.
+    Build a safe and consistent cache key.
 
     Args:
-        key: A chave base
-        key_prefix: Prefixo opcional para a chave
-        version: Versão da chave (opcional)
+        key: The base key
+        key_prefix: Optional key prefix
+        version: Optional key version
 
     Returns:
-        String da chave processada e segura para cache
+        A processed cache-safe key string
     """
     full_key = f"{key_prefix}:{key}" if key_prefix else key
     if version is not None:
         full_key = f"{full_key}:v{version}"
 
-    # Adiciona hash do secret_key para isolamento multi-projeto
+    # Add a SECRET_KEY hash for cross-project isolation
     secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:10]
     full_key = f"{full_key}:{secret_hash}"
 
-    # Garante que a chave final não excede limites ou contém espaços
-    if len(full_key) > 240 or ' ' in full_key:
+    # Ensure the final key does not exceed limits or contain spaces
+    if len(full_key) > 240 or " " in full_key:
         hashed = hashlib.sha256(full_key.encode()).hexdigest()
         return f"hashed:{hashed}"
 
@@ -64,27 +65,26 @@ def make_key(key: str, key_prefix: str = "", version: Optional[int] = None) -> s
 
 def clear_tx_cache(user_id: int, force: bool = False) -> None:
     """
-    Limpa todas as chaves de cache relacionadas com transações do utilizador.
-    Optimizado para evitar limpezas excessivas.
+    Clear all cache keys related to a user's transactions.
+    Optimized to avoid excessive invalidation.
 
     Args:
-        user_id: ID do utilizador
-        force: Quando ``True``, ignora o mecanismo de *throttling* e limpa
-            sempre o cache.
+        user_id: User ID
+        force: When ``True``, skip throttling and always clear the cache.
     """
-    # Throttle: só limpar cache uma vez por minuto por utilizador, a menos que forçado
+    # Throttle cache clearing to once per minute per user unless forced
     throttle_key = f"cache_clear_throttle_{user_id}"
     if not force and cache.get(throttle_key):
         logger.debug(f"Cache clearing throttled for user {user_id}")
         return
 
-    logger.info(f"A limpar cache de transações para user_id={user_id}")
-    cache.set(throttle_key, True, timeout=60)  # 1 minuto
+    logger.info(f"Clearing transaction cache for user_id={user_id}")
+    cache.set(throttle_key, True, timeout=60)  # 1 minute
 
-    # Hash da SECRET_KEY para evitar colisões entre ambientes
+    # Hash the SECRET_KEY to avoid collisions across environments
     secret_hash = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:10]
 
-    # Patterns de cache a limpar
+    # Cache patterns to clear
     cache_patterns = [
         f"tx_cache_user_{user_id}_*",
         f"tx_v2_{user_id}_*",
@@ -93,36 +93,59 @@ def clear_tx_cache(user_id: int, force: bool = False) -> None:
     ]
 
     for pattern in cache_patterns:
-        logger.debug(f"Cache limpa para key: {pattern}")
+        logger.debug(f"Clearing cache key pattern: {pattern}")
 
-        # Usar pattern matching do Redis se disponível
+        # Use Redis pattern matching when available
         try:
             from django.core.cache.backends.redis import RedisCache
             if isinstance(cache, RedisCache):
-                # Redis suporta pattern matching
+                # Redis supports wildcard matching
                 keys = cache._cache.get_client().keys(pattern)
                 if keys:
                     cache._cache.get_client().delete(*keys)
+            elif _clear_locmem_cache_keys(pattern):
+                continue
             else:
-                # Fallback para outros backends - limpar chaves específicas
+                # Fallback for other backends - clear specific keys
                 _clear_specific_cache_keys(user_id, secret_hash)
         except ImportError:
-            # Fallback se Redis não estiver disponível
-            _clear_specific_cache_keys(user_id, secret_hash)
+            # Fallback when Redis is not available
+            if not _clear_locmem_cache_keys(pattern):
+                _clear_specific_cache_keys(user_id, secret_hash)
+
+
+def _clear_locmem_cache_keys(pattern: str) -> bool:
+    """
+    Clear cache entries by wildcard pattern for backends that expose an
+    in-memory key dictionary (e.g. LocMemCache used in tests/dev).
+    """
+    backend_cache = getattr(cache, "_cache", None)
+    if backend_cache is None or not hasattr(backend_cache, "keys"):
+        return False
+
+    matched = False
+    # LocMemCache stores keys as ':<version>:<key>'
+    for stored_key in list(backend_cache.keys()):
+        original_key = stored_key.split(":", 2)[-1]
+        if fnmatch(original_key, pattern):
+            cache.delete(original_key)
+            matched = True
+
+    return matched
 
 
 def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
     """
-    Limpa chaves específicas de cache quando Redis não está disponível.
+    Clear specific cache keys when Redis is not available.
 
     Args:
-        user_id: ID do utilizador
-        secret_hash: Hash derivado da ``SECRET_KEY`` para outras chaves.
+        user_id: User ID
+        secret_hash: Hash derived from ``SECRET_KEY`` for related keys.
     """
-    # Lista de chaves específicas a limpar
+    # List of specific keys to clear
     cache_keys_to_clear = []
 
-    # Gerar chaves para os últimos 12 meses
+    # Generate keys for the last 12 months
     from datetime import date, timedelta
     today = date.today()
 
@@ -131,13 +154,13 @@ def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
         start_date = month_date.replace(day=1)
         end_date = month_date
 
-        # Chaves de transações usam hash dedicado com SECRET_KEY + user + datas
+        # Transaction keys use a dedicated hash with SECRET_KEY + user + dates
         raw = f"{settings.SECRET_KEY}:{user_id}:{start_date}:{end_date}".encode()
         digest = hashlib.sha256(raw).hexdigest()
         tx_key = f"tx_cache_user_{user_id}_{start_date}_{end_date}_{digest}"
         cache_keys_to_clear.append(tx_key)
 
-        # Chaves da API v2 (sem hash, com ordenação)
+        # API v2 keys (no hash, but include sorting)
         for sort_field in ["date", "amount", "type"]:
             for sort_dir in ["asc", "desc"]:
                 tx_v2_key = (
@@ -145,33 +168,33 @@ def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
                 )
                 cache_keys_to_clear.append(tx_v2_key)
 
-        # Chaves de saldos
+        # Balance keys
         balance_key = f"ourfinance:account_balance_user_{user_id}_{start_date}:{secret_hash}"
         cache_keys_to_clear.append(balance_key)
 
-        # Chaves de categorias
+        # Category keys
         category_key = f"ourfinance:category_cache_user_{user_id}_{start_date}:{secret_hash}"
         cache_keys_to_clear.append(category_key)
 
-    # Limpar todas as chaves
+    # Clear every collected key
     for key in cache_keys_to_clear:
         try:
             cache.delete(key)
         except Exception:
-            pass  # Ignorar erros individuais
+            pass  # Ignore individual delete failures
 
 
 def get_cache_key_for_transactions(user_id: int, start_date: str, end_date: str) -> str:
     """
-    Gera chave de cache específica para transações de um utilizador num intervalo.
+    Generate a cache key for a user's transactions within a date range.
 
     Args:
-        user_id: ID do utilizador
-        start_date: Data de início (formato string)
-        end_date: Data de fim (formato string)
+        user_id: User ID
+        start_date: Start date (string)
+        end_date: End date (string)
 
     Returns:
-        Chave de cache segura
+        Safe cache key
     """
     raw = f"{settings.SECRET_KEY}:{user_id}:{start_date}:{end_date}".encode()
     digest = hashlib.sha256(raw).hexdigest()

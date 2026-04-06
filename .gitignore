@@ -1,21 +1,21 @@
 # ──────────────────────────────
-# Ambiente Python / Django
+# Python / Django environment
 # ──────────────────────────────
-# Virtual env (caso exista dentro do repositório)
+# Virtual env (if it exists inside the repository)
 venv/
 .venv/
 
-# Dependências geradas pelo Python
+# Python-generated dependencies
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.pyc
 
-# Base de dados local
+# Local database
 db.sqlite3
 
-# Ficheiros de migrações incompletas
+# Incomplete migration files
 *.py,cover
 *.py,orig
 
@@ -26,11 +26,11 @@ db.sqlite3
 .env_production
 .env.example
 
-# Só modelos sem segredos
+# Only templates without secrets
 !.env.template
 !.env.sample
 
-# redundante mas explícito:
+# Redundant but explicit:
 .env_production
 # Log & runtime files
 *.log
@@ -38,14 +38,14 @@ db.sqlite3
 *.pid
 
 # ──────────────────────────────
-# Ferramentas / IDEs
+# Tools / IDEs
 # ──────────────────────────────
 .vscode/
 .idea/
 *.code-workspace
 
 # ──────────────────────────────
-# Sistemas operativos & backups
+# Operating systems & backups
 # ──────────────────────────────
 .DS_Store
 Thumbs.db
@@ -54,7 +54,7 @@ Thumbs.db
 *.tmp
 
 # ──────────────────────────────
-# Conteúdos opcionais do projeto
+# Optional project content
 # (notebooks, docs, roadmaps, etc.)
 # ──────────────────────────────
 *.ipynb
@@ -70,10 +70,10 @@ h git switch --detach *
 h git switch --detach 8f10c2a
 
 # ──────────────────────────────
-# Ficheiros de build / static
-#  (mantém se usares collectstatic
-#   no próprio repositório; caso
-#   contrário, ignora-os)
+# Build / static files
+#  (keep these if you run collectstatic
+#   in the repository itself; otherwise
+#   ignore them)
 # ──────────────────────────────
 /staticfiles/
 /media/
@@ -90,16 +90,26 @@ h git switch --detach 8f10c2a
 .env
 .env_*
 .env.*
-.env.example
 .env_production
 !.env.template
 !.env.sample
+!.env.example
+!.env.example
+
+# Keep the example environment file versioned
+!.env.example
+
+# Keep the example environment file versioned
+!.env.example
+
+# Test artifacts
+.hypothesis/
 
 # Dotenv
 .env
 .env_*
 .env.*
-.env.example
 .env_production
 !.env.template
 !.env.sample
+!.env.example

@@ -1,4 +1,4 @@
-# ───── Ambiente interativo / debug ─────
+# ───── Interactive / debug environment ─────
 ipython==9.4.0
 ipykernel==6.30.1
 jupyter_client==8.6.3
@@ -17,16 +17,16 @@ psutil==7.0.0
 nest-asyncio==1.6.0
 matplotlib-inline==0.1.7
 
-# ───── Integração com .env ─────
+# ───── .env integration ─────
 python-dotenv==1.1.1
 
 # ───── Supabase JWT generation ─────
-pyjwt==2.10.1  # <- necessário para gerar JWT no backend
+pyjwt==2.10.1  # <- required to generate JWT on the backend
 
 # ───── HTTP Client ─────
-requests==2.32.4  # <- para proxy seguro com Supabase REST API
+requests==2.32.4  # <- for secure proxying with the Supabase REST API
 
-# ───── Webserver local (produção/dev) ─────
+# ───── Local webserver (production/dev) ─────
 gunicorn==23.0.0
 
 # ───── Fuzz testing ─────

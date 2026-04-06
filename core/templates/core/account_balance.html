@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% load filtros %}
+{% load filters %}
 
 {% block content %}
 <div class="container-fluid">
@@ -39,7 +39,7 @@
           <div class="row text-center">
             <div class="col-md-3">
               <div class="text-muted small">Total Balance</div>
-              <div class="h5 mb-0 text-primary">{{ grand_total|formatar_moeda }}</div>
+              <div class="h5 mb-0 text-primary">{{ grand_total|format_money }}</div>
             </div>
             <div class="col-md-3">
               <div class="text-muted small">Account Groups</div>
@@ -47,7 +47,7 @@
             </div>
             <div class="col-md-3">
               <div class="text-muted small">Period</div>
-              <div class="h5 mb-0">{{ selected_month|date:"M Y" }}</div>
+              <div class="h5 mb-0">{{ selected_month|date:"j M Y" }}</div>
             </div>
             <div class="col-md-3">
               <div class="text-muted small">Quick Actions</div>
@@ -72,7 +72,7 @@
           <div class="card-header bg-light py-2">
             <div class="d-flex justify-content-between align-items-center">
               <h6 class="mb-0">💼 {{ account_type }} – {{ currency }}</h6>
-              <span class="badge bg-primary">{{ totals_by_group|get_item:key|formatar_moeda }}</span>
+              <span class="badge bg-primary">{{ totals_by_group|get_item:key|format_money }}</span>
             </div>
           </div>
           <div class="card-body p-0">
@@ -132,7 +132,7 @@
           </div>
 
           <div class="col-md-4 text-center">
-            <div class="h5 mb-0" id="total-balance">{{ grand_total|formatar_moeda }}</div>
+            <div class="h5 mb-0" id="total-balance">{{ grand_total|format_money }}</div>
             <small class="text-muted">Live Total</small>
           </div>
 

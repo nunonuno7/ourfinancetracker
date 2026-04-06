@@ -15,25 +15,25 @@ function initTransactionForm() {
     dateInput.value = todayStr;
   }
 
-  // Função para sincronizar período com base na data
+  // Keep the selected period in sync with the chosen date
   function syncPeriodFromDate() {
     if (!dateInput.value) return;
 
     let date;
     
-    // Tentar diferentes formatos de data
-    if (dateInput.value.includes('/')) {
-      // Formato DD/MM/YYYY ou MM/DD/YYYY
-      const parts = dateInput.value.split('/');
+    // Support multiple date formats during initialization
+    if (dateInput.value.includes("/")) {
+      // DD/MM/YYYY or MM/DD/YYYY
+      const parts = dateInput.value.split("/");
       if (parts.length === 3) {
-        // Assumir DD/MM/YYYY (formato português)
+        // Assume DD/MM/YYYY for manually typed values
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]);
         const year = parseInt(parts[2]);
-        date = new Date(year, month - 1, day); // month é 0-indexed no JavaScript
+        date = new Date(year, month - 1, day); // Month is 0-indexed in JavaScript
       }
     } else {
-      // Formato YYYY-MM-DD (ISO)
+      // YYYY-MM-DD (ISO)
       date = new Date(dateInput.value);
     }
 
@@ -46,24 +46,26 @@ function initTransactionForm() {
     monthSelector.value = periodValue;
     periodInput.value = periodValue;
 
-    console.log(`📅 Sincronização: Data ${dateInput.value} → Período ${periodValue} (${year}/${month})`);
+    console.log(
+      `Date sync: ${dateInput.value} -> period ${periodValue} (${year}/${month})`,
+    );
   }
 
-  // Flatpickr com sincronização corrigida
+  // Flatpickr with corrected synchronization
   if (dateInput._flatpickr) dateInput._flatpickr.destroy();
   
-  // Converter valor inicial se necessário
+  // Normalize the initial value when needed
   let initialDate = dateInput.value;
-  if (initialDate && initialDate.includes('/')) {
-    const parts = initialDate.split('/');
+  if (initialDate && initialDate.includes("/")) {
+    const parts = initialDate.split("/");
     if (parts.length === 3) {
-      // Converter DD/MM/YYYY para YYYY-MM-DD
-      initialDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      dateInput.value = initialDate; // Atualizar o input com formato correto
+      // Convert DD/MM/YYYY to YYYY-MM-DD
+      initialDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      dateInput.value = initialDate; // Update the input to the canonical format
     }
   }
   
-  // ✅ Guard against missing Flatpickr (e.g. offline or CDN failure)
+  // Guard against missing Flatpickr (for example, offline or CDN failure)
   if (typeof flatpickr === "function") {
     flatpickr(dateInput, {
       dateFormat: "Y-m-d",
@@ -77,17 +79,17 @@ function initTransactionForm() {
         }
       },
       onReady: function () {
-        // Sincronizar período ao carregar
+        // Sync the period when the widget loads
         syncPeriodFromDate();
       }
     });
   } else {
-    console.warn("⏭️ Flatpickr not loaded; skipping date picker init");
+    console.warn("Flatpickr not loaded; skipping date picker initialization");
   }
 
-  // Event listener para mudanças manuais na data
-  dateInput.addEventListener('change', syncPeriodFromDate);
-  dateInput.addEventListener('blur', syncPeriodFromDate);
+  // Keep the period synchronized for manual date edits
+  dateInput.addEventListener("change", syncPeriodFromDate);
+  dateInput.addEventListener("blur", syncPeriodFromDate);
 
   monthSelector.addEventListener("change", () => {
     const [year, month] = monthSelector.value.split("-");
@@ -98,10 +100,10 @@ function initTransactionForm() {
       dateInput._flatpickr.setDate(newDate, true);
     }
 
-    console.log(`📅 Month selector change: Período ${monthSelector.value} → Data ${newDate}`);
+    console.log(`Month selector change: period ${monthSelector.value} -> date ${newDate}`);
   });
 
-  // Sincronização inicial
+  // Initial synchronization
   syncPeriodFromDate();
 
   prevBtn?.addEventListener("click", () => changeMonth(-1));
@@ -147,33 +149,122 @@ function initTransactionForm() {
   if (tagsInput) {
     if (tagsInput.tomselect) tagsInput.tomselect.destroy();
 
-    const initialTags = tagsInput.value
-      .split(",")
-      .map(t => t.trim())
-      .filter(t => t.length > 0);
+    const bindSelectedTagToggle = (select) => {
+      const dropdown = select.dropdown_content;
+      if (!dropdown || dropdown.dataset.toggleSelectedBound === "true") return;
 
-    const allTags = initialTags.map(name => ({ name }));
+      dropdown.dataset.toggleSelectedBound = "true";
+      dropdown.addEventListener("mousedown", (event) => {
+        const option = event.target.closest("[data-selectable]");
+        if (!option) return;
+
+        const optionValue = (option.dataset.value || "").trim();
+        if (!optionValue || !select.items.includes(optionValue)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        select.removeItem(optionValue, true);
+        select.refreshOptions(false);
+        syncSelectedTagOptions(select);
+
+        requestAnimationFrame(() => {
+          if (!select.isOpen) {
+            select.open();
+          }
+        });
+      }, true);
+    };
+
+    const syncSelectedTagOptions = (select) => {
+      const selectedValues = new Set(
+        (Array.isArray(select.items) ? select.items : [select.items])
+          .map(value => (value || "").toString().trim())
+          .filter(value => value.length > 0)
+      );
+
+      select.dropdown_content
+        ?.querySelectorAll("[data-selectable]")
+        .forEach((option) => {
+          const optionValue = (option.dataset.value || "").trim();
+          option.classList.toggle(
+            "is-selected-tag-option",
+            selectedValues.has(optionValue)
+          );
+        });
+    };
+
+    const normalizeTagNames = (values) => [...new Set(
+      values
+        .map(value => {
+          if (typeof value === "string") return value.trim();
+          if (value && typeof value === "object") {
+            return (value.name || value.text || value.value || "").trim();
+          }
+          return "";
+        })
+        .filter(value => value.length > 0)
+    )];
+
+    const rawTagList = tagsInput.dataset.tagsList || "";
+    const initialTags = normalizeTagNames(tagsInput.value.split(","));
+    const localTagNames = normalizeTagNames(rawTagList.split(","));
+    const tagOptions = localTagNames.map(name => ({ value: name, text: name }));
 
     if (typeof TomSelect === "function") {
-      fetch("/tags/autocomplete/?q=")
-        .then(res => res.json())
-        .then(data => {
-          const tagOptions = [...new Set([...allTags, ...data])];
+      const tagSelect = new TomSelect(tagsInput, {
+        plugins: ["remove_button"],
+        delimiter: ",",
+        persist: false,
+        create: true,
+        createOnBlur: true,
+        closeAfterSelect: false,
+        hideSelected: false,
+        maxItems: null,
+        placeholder: "Add tags...",
+        valueField: "value",
+        labelField: "text",
+        searchField: ["text"],
+        options: tagOptions,
+        items: initialTags,
+        preload: true,
+        sortField: { field: "text", direction: "asc" },
+        load: function(query, callback) {
+          fetch(`/tags/autocomplete/?term=${encodeURIComponent(query || "")}`)
+            .then(res => {
+              if (!res.ok) throw new Error("Failed to load tags");
+              return res.json();
+            })
+            .then(data => {
+              const fetchedNames = normalizeTagNames(data);
+              callback(fetchedNames.map(name => ({ value: name, text: name })));
+              requestAnimationFrame(() => syncSelectedTagOptions(tagSelect));
+            })
+            .catch(() => callback());
+        },
+        onInitialize: function() {
+          bindSelectedTagToggle(this);
+          syncSelectedTagOptions(this);
+        },
+        onDropdownOpen: function() {
+          bindSelectedTagToggle(this);
+          syncSelectedTagOptions(this);
+        },
+        onItemAdd: function() {
+          syncSelectedTagOptions(this);
+        },
+        onItemRemove: function() {
+          syncSelectedTagOptions(this);
+        },
+      });
 
-          new TomSelect(tagsInput, {
-            plugins: ["remove_button"],
-            delimiter: ",",
-            persist: false,
-            create: true,
-            placeholder: "Add tags...",
-            valueField: "name",
-            labelField: "name",
-            searchField: "name",
-            preload: true,
-            options: tagOptions,
-            items: initialTags,
-          });
-        });
+      tagSelect.on("focus", () => {
+        if (!tagSelect.isOpen) {
+          tagSelect.open();
+        }
+        tagSelect.refreshOptions(false);
+        syncSelectedTagOptions(tagSelect);
+      });
     } else {
       console.warn("⏭️ TomSelect not loaded; skipping tags selector");
     }

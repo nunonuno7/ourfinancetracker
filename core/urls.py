@@ -61,6 +61,7 @@ urlpatterns = [
 
     # Dashboard
     path("dashboard/", dashboard, name="dashboard"),
+    path("dashboard/export/", views.dashboard_export, name="dashboard_export"),
 
     # Transactions
     path("transactions/", transaction_list_v2, name="transaction_list"),  # Alias for backward compatibility

@@ -18,7 +18,7 @@ def _normalize_sql(sql: str) -> str:
     return sql
 
 class PerformanceMiddleware(MiddlewareMixin):
-    """Middleware para monitorizar performance das requests"""
+    """Middleware to monitor request performance."""
     
     def process_request(self, request):
         request.start_time = time.time()
@@ -29,22 +29,22 @@ class PerformanceMiddleware(MiddlewareMixin):
             duration = time.time() - request.start_time
             db_queries = len(connection.queries) - getattr(request, 'db_queries_start', 0)
             
-            # Log requests lentas
-            if duration > 1.0:  # Mais de 1 segundo
+            # Log slow requests
+            if duration > 1.0:  # More than 1 second
                 logger.warning(
                     f"Slow request: {request.method} {request.path} "
                     f"took {duration:.2f}s with {db_queries} DB queries"
                 )
             
-            # Log queries excessivas
+            # Log excessive query counts
             if db_queries > 10:
                 logger.warning(
                     f"High DB usage: {request.method} {request.path} "
                     f"used {db_queries} queries in {duration:.2f}s"
                 )
 
-            # Detetar e registar possíveis N+1 queries
-            queries = connection.queries[getattr(request, 'db_queries_start', 0):]
+            # Detect and log possible N+1 queries
+            queries = connection.queries[getattr(request, "db_queries_start", 0) :]
             normalized = {}
             for q in queries:
                 sql = q.get("sql", "")
@@ -56,9 +56,9 @@ class PerformanceMiddleware(MiddlewareMixin):
                         f"Potential N+1 query detected {count} times: {sql[:200]}"
                     )
             
-            # Adicionar headers de performance em desenvolvimento
-            if hasattr(request, 'user') and request.user.is_staff:
-                response['X-DB-Queries'] = str(db_queries)
-                response['X-Response-Time'] = f"{duration:.3f}s"
+            # Add performance headers in development
+            if hasattr(request, "user") and request.user.is_staff:
+                response["X-DB-Queries"] = str(db_queries)
+                response["X-Response-Time"] = f"{duration:.3f}s"
         
         return response

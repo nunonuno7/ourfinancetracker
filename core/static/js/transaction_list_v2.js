@@ -98,8 +98,14 @@ class TransactionManager {
       $('#group-by-selector').val('category');
     }
 
-    this.loadTransactions();
-    this.loadTotals();
+    const forceInitialRefresh = window.transactionListShouldForceRefresh === true;
+    if (forceInitialRefresh) {
+      this.cache.clear();
+      console.log("[init] Forcing one fresh reload after transaction changes");
+    }
+
+    this.loadTransactions(forceInitialRefresh);
+    this.loadTotals(forceInitialRefresh);
 
     // Initialize sort indicators
     this.updateSortIndicators();
@@ -175,6 +181,14 @@ class TransactionManager {
     $("#export-btn").on("click", () => this.exportData());
     $("#import-btn").on("click", () => this.importData());
 
+    $("#pagination-ul").on("click", ".page-link[data-page]", (e) => {
+      e.preventDefault();
+      const page = Number(e.currentTarget.dataset.page);
+      if (!Number.isNaN(page)) {
+        this.goToPage(page);
+      }
+    });
+
     // Bulk actions
     $("#bulk-mode-toggle").on("change", (e) =>
       this.toggleBulkMode(e.target.checked),
@@ -190,6 +204,19 @@ class TransactionManager {
 
     // Column sorting
     $(document).on("click", ".sortable-header", (e) => this.handleSort(e));
+    $(document).on("click", "[data-action='edit-transaction']", (e) => {
+      const id = Number(e.currentTarget.dataset.transactionId);
+      if (!Number.isNaN(id)) {
+        this.logEditNavigation(id);
+      }
+    });
+    $(document).on("click", "[data-action='delete-transaction']", (e) => {
+      e.preventDefault();
+      const id = Number(e.currentTarget.dataset.transactionId);
+      if (!Number.isNaN(id)) {
+        deleteTransaction(id);
+      }
+    });
 
     // Initialize collapse state tracking with timing controls
     this.collapseStates = {
@@ -517,6 +544,19 @@ class TransactionManager {
     }
   }
 
+  logEditNavigation(id) {
+    console.info("[edit-transaction] Navigating to edit", {
+      id,
+      currentPage: this.currentPage,
+      totalCount: this.totalCount || 0,
+      visibleRows: this.transactions ? this.transactions.length : 0,
+      sortField: this.sortField,
+      sortDirection: this.sortDirection,
+      filters: this.getFilters(),
+      hasLastData: !!this.lastData,
+    });
+  }
+
   clearFilters() {
     $("#date-start").val("2024-01-01");
     $("#date-end").val(new Date().toISOString().split("T")[0]);
@@ -567,12 +607,14 @@ class TransactionManager {
 
       if (force) {
         params.append("force", "true");
+        params.append("_ts", Date.now().toString());
       }
       const url = `/transactions/json-v2/?${params.toString()}`;
       console.log("🌐 [loadTransactions] Request URL:", url);
 
       const response = await fetch(url, {
         method: "GET",
+        cache: force ? "no-store" : "default",
         headers: {
           "Content-Type": "application/json",
           "X-Requested-With": "XMLHttpRequest",
@@ -655,6 +697,7 @@ class TransactionManager {
 
       const response = await fetch("/transactions/totals-v2/", {
         method: "POST",
+        cache: force ? "no-store" : "default",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
@@ -956,7 +999,7 @@ class TransactionManager {
           <button class="btn btn-outline-secondary btn-sm" disabled title="Estimated transaction - edit via /transactions/estimate/">
             <i class="fas fa-calculator"></i>
           </button>
-          <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete estimated transaction">
+          <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" data-action="delete-transaction" data-transaction-id="${tx.id}" title="Delete estimated transaction">
             <i class="fas fa-trash"></i>
           </a>
         </div>
@@ -966,10 +1009,10 @@ class TransactionManager {
       console.log(`✏️ [createTransactionRow] Regular editable transaction ${tx.id}`);
       actionsHtml = `
         <div class="btn-group btn-group-sm" role="group">
-          <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" title="Edit transaction">
+          <a href="/transactions/${tx.id}/edit/" class="btn btn-outline-primary btn-sm" data-action="edit-transaction" data-transaction-id="${tx.id}" title="Edit transaction">
             <i class="fas fa-edit"></i>
           </a>
-          <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" title="Delete transaction">
+          <a href="/transactions/${tx.id}/delete/" class="btn btn-outline-danger btn-sm" data-action="delete-transaction" data-transaction-id="${tx.id}" title="Delete transaction">
             <i class="fas fa-trash"></i>
           </a>
         </div>
@@ -1314,7 +1357,7 @@ class TransactionManager {
     // Previous button
     paginationUl.append(`
       <li class="page-item ${currentPage === 1 ? "disabled" : ""}">
-        <button class="page-link" onclick="transactionManager.goToPage(${currentPage - 1})">
+        <button type="button" class="page-link" data-page="${currentPage - 1}" ${currentPage === 1 ? "disabled" : ""}>
           <i class="fas fa-chevron-left"></i> Previous
         </button>
       </li>
@@ -1324,7 +1367,7 @@ class TransactionManager {
     if (currentPage > 3) {
       paginationUl.append(`
         <li class="page-item">
-          <button class="page-link" onclick="transactionManager.goToPage(1)">1</button>
+          <button type="button" class="page-link" data-page="1">1</button>
         </li>
       `);
       if (currentPage > 4) {
@@ -1341,7 +1384,7 @@ class TransactionManager {
     for (let i = startPage; i <= endPage; i++) {
       paginationUl.append(`
         <li class="page-item ${i === currentPage ? "active" : ""}">
-          <button class="page-link" onclick="transactionManager.goToPage(${i})">${i}</button>
+          <button type="button" class="page-link" data-page="${i}" ${i === currentPage ? "disabled" : ""}>${i}</button>
         </li>
       `);
     }
@@ -1355,7 +1398,7 @@ class TransactionManager {
       }
       paginationUl.append(`
         <li class="page-item">
-          <button class="page-link" onclick="transactionManager.goToPage(${totalPages})">${totalPages}</button>
+          <button type="button" class="page-link" data-page="${totalPages}">${totalPages}</button>
         </li>
       `);
     }
@@ -1363,7 +1406,7 @@ class TransactionManager {
     // Next button
     paginationUl.append(`
       <li class="page-item ${currentPage === totalPages ? "disabled" : ""}">
-        <button class="page-link" onclick="transactionManager.goToPage(${currentPage + 1})">
+        <button type="button" class="page-link" data-page="${currentPage + 1}" ${currentPage === totalPages ? "disabled" : ""}>
           Next <i class="fas fa-chevron-right"></i>
         </button>
       </li>
@@ -1469,7 +1512,7 @@ class TransactionManager {
 
       if (response.ok) {
         this.cache.clear();
-        this.loadTransactions();
+        await this.loadTransactions(true);
         this.showSuccess("Transactions marked as cleared");
       } else {
         throw new Error("Failed to update transactions");
@@ -1485,15 +1528,13 @@ class TransactionManager {
       return;
     }
 
-    const confirmed = confirm(
-      `Duplicate ${this.selectedRows.size} transactions to current month?`,
-    );
-    if (!confirmed) return;
+    const targetPeriod = await this.promptDuplicateTargetPeriod();
+    if (!targetPeriod) return;
 
     // Show simple loading indicator
     this.showLoading(true);
     const loadingToast = this.showToast(
-      `Duplicating ${this.selectedRows.size} transactions...`,
+      `Duplicating ${this.selectedRows.size} transactions to ${targetPeriod}...`,
       "info",
       0,
     );
@@ -1509,6 +1550,7 @@ class TransactionManager {
         },
         body: JSON.stringify({
           transaction_ids: Array.from(this.selectedRows),
+          target_period: targetPeriod,
         }),
       });
 
@@ -1521,15 +1563,22 @@ class TransactionManager {
       const endTime = performance.now();
       const duration = ((endTime - startTime) / 1000).toFixed(1);
 
+      const adjustedFilters = this.adjustFiltersForDuplicatedPeriod(targetPeriod);
+
       // Clear cache and reload data
       this.cache.clear();
-      await Promise.all([this.loadTransactions(), this.loadTotals()]);
+      this.selectedRows.clear();
+      this.updateSelectionCount();
+      this.saveFiltersToStorage();
+      await Promise.all([this.loadTransactions(true), this.loadTotals(true)]);
 
       // Hide loading toast
       if (loadingToast) loadingToast.remove();
 
       this.showSuccess(
-        `✅ ${result.created} transactions duplicated successfully in ${duration}s`,
+        `${result.created} transactions duplicated successfully in ${duration}s${
+          adjustedFilters ? ` (showing ${targetPeriod})` : ""
+        }`,
       );
     } catch (error) {
       console.error("Bulk duplicate error:", error);
@@ -1538,6 +1587,139 @@ class TransactionManager {
     } finally {
       this.showLoading(false);
     }
+  }
+
+  getDefaultDuplicatePeriod() {
+    const selectedPeriod = String($("#filter-period").val() || "").trim();
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedPeriod)) {
+      return selectedPeriod;
+    }
+
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  setDateFilterValue(selector, value) {
+    const input = document.querySelector(selector);
+    if (!input) return;
+
+    if (input._flatpickr) {
+      input._flatpickr.setDate(value, false);
+      return;
+    }
+
+    $(input).val(value);
+  }
+
+  getPeriodBounds(periodValue) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodValue)) {
+      return null;
+    }
+
+    const [yearText, monthText] = periodValue.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const lastDay = new Date(year, month, 0).getDate();
+
+    return {
+      start: `${periodValue}-01`,
+      end: `${periodValue}-${String(lastDay).padStart(2, "0")}`,
+    };
+  }
+
+  adjustFiltersForDuplicatedPeriod(targetPeriod) {
+    const bounds = this.getPeriodBounds(targetPeriod);
+    if (!bounds) return false;
+
+    let changed = false;
+    const currentStart = String($("#date-start").val() || "").trim();
+    const currentEnd = String($("#date-end").val() || "").trim();
+    const currentPeriod = String($("#filter-period").val() || "").trim();
+
+    if (!currentStart || currentStart > bounds.start) {
+      this.setDateFilterValue("#date-start", bounds.start);
+      changed = true;
+    }
+
+    if (!currentEnd || currentEnd < bounds.end) {
+      this.setDateFilterValue("#date-end", bounds.end);
+      changed = true;
+    }
+
+    if (currentPeriod && currentPeriod !== targetPeriod) {
+      $("#filter-period").val(targetPeriod);
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  promptDuplicateTargetPeriod() {
+    const modalElement = document.getElementById("duplicateMonthModal");
+    const formElement = document.getElementById("duplicate-month-form");
+    const inputElement = document.getElementById("duplicate-target-month");
+    const countElement = document.getElementById("duplicate-selection-count");
+
+    if (
+      !modalElement ||
+      !formElement ||
+      !inputElement ||
+      typeof bootstrap === "undefined" ||
+      !bootstrap.Modal
+    ) {
+      const value = window.prompt(
+        "Which month should the duplicated transactions go to? Use YYYY-MM.",
+        this.getDefaultDuplicatePeriod(),
+      );
+      if (value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value.trim())) {
+        return Promise.resolve(value.trim());
+      }
+      return Promise.resolve(null);
+    }
+
+    inputElement.value = this.getDefaultDuplicatePeriod();
+    if (countElement) {
+      countElement.textContent = this.selectedRows.size;
+    }
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const cleanup = () => {
+        formElement.removeEventListener("submit", handleSubmit);
+        modalElement.removeEventListener("hidden.bs.modal", handleHidden);
+      };
+
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+
+      const handleSubmit = (event) => {
+        event.preventDefault();
+        if (!inputElement.value) {
+          inputElement.reportValidity();
+          return;
+        }
+
+        finish(inputElement.value);
+        modal.hide();
+      };
+
+      const handleHidden = () => {
+        finish(null);
+      };
+
+      formElement.addEventListener("submit", handleSubmit);
+      modalElement.addEventListener("hidden.bs.modal", handleHidden);
+
+      modal.show();
+      setTimeout(() => inputElement.focus(), 150);
+    });
   }
 
   async bulkDelete() {
@@ -1588,7 +1770,7 @@ class TransactionManager {
       this.updateSelectionCount();
 
       // Reload data
-      await Promise.all([this.loadTransactions(), this.loadTotals()]);
+      await Promise.all([this.loadTransactions(true), this.loadTotals(true)]);
 
       // Hide loading toast
       if (loadingToast) loadingToast.remove();
@@ -1609,8 +1791,9 @@ class TransactionManager {
     try {
       console.log("🔄 [refreshData] Refreshing data...");
 
-      const response = await fetch("/transactions/clear-cache/", {
+      const response = await fetch(`/transactions/clear-cache/?_ts=${Date.now()}`, {
         method: "GET",
+        cache: "no-store",
         headers: {
           "X-Requested-With": "XMLHttpRequest",
           "X-CSRFToken":
@@ -1849,14 +2032,17 @@ async function deleteTransaction(id) {
     const response = await fetch(`/transactions/${id}/delete/`, {
       method: "POST",
       headers: {
+        "X-Requested-With": "XMLHttpRequest",
         "X-CSRFToken": $("[name=csrfmiddlewaretoken]").val(),
       },
     });
 
     if (response.ok) {
+      transactionManager.selectedRows.delete(id);
+      transactionManager.updateSelectionCount();
       transactionManager.cache.clear();
-      transactionManager.loadTransactions();
-      transactionManager.loadTotals();
+      transactionManager.loadTransactions(true);
+      transactionManager.loadTotals(true);
       transactionManager.showSuccess("Transaction deleted successfully");
     } else {
       throw new Error("Failed to delete transaction");

@@ -1,4 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const csrfToken =
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
+    document.querySelector('[name="csrfmiddlewaretoken"]')?.value ||
+    "";
   // ───── Auto-hide flash messages ─────
   const alerts = document.querySelectorAll(".alert-dismissible");
   alerts.forEach(alert => {
@@ -25,6 +29,45 @@ document.addEventListener("DOMContentLoaded", () => {
   const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
   popoverTriggerList.forEach(el => {
     new bootstrap.Popover(el);
+  });
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-confirm-message]");
+    if (!trigger) {
+      return;
+    }
+
+    const message =
+      trigger.getAttribute("data-confirm-message") ||
+      "Are you sure you want to continue?";
+
+    if (!window.confirm(message)) {
+      event.preventDefault();
+      return;
+    }
+
+    const method = (trigger.getAttribute("data-confirm-method") || "GET").toUpperCase();
+    if (method !== "POST" || trigger.tagName !== "A") {
+      return;
+    }
+
+    event.preventDefault();
+
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = trigger.href;
+    form.style.display = "none";
+
+    if (csrfToken) {
+      const csrfInput = document.createElement("input");
+      csrfInput.type = "hidden";
+      csrfInput.name = "csrfmiddlewaretoken";
+      csrfInput.value = csrfToken;
+      form.appendChild(csrfInput);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
   });
 
   // Debug navigation issues

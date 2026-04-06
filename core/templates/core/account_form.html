@@ -20,7 +20,7 @@
       </div>
     {% endif %}
 
-    {# Campos do formulário #}
+    {# Form fields #}
     <div class="mb-3">
       <label for="{{ form.name.id_for_label }}" id="label-name" class="form-label">Name</label>
       {{ form.name|add_class:"form-control"|attr:"aria-labelledby:label-name" }}
@@ -40,19 +40,21 @@
     </div>
 
     <div class="d-flex gap-2">
-      {# Botão de guardar (submit) #}
+      {# Save button (submit) #}
       <button type="submit" class="btn btn-success">💾 Save</button>
 
       {% if form.instance.pk %}
-        {# Botão “Delete” passa a ser link para a view de confirmação #}
+        {# The Delete button links to the confirmation view #}
         <a href="{% url 'account_delete' form.instance.pk %}"
            class="btn btn-outline-danger"
-           title="Delete">
+           title="Delete"
+           data-confirm-message="Delete this account? This action cannot be undone."
+           data-confirm-method="post">
           🗑️ Delete
         </a>
       {% endif %}
 
-      {# Botão de voltar para a lista de contas #}
+      {# Back to account list button #}
       <a href="{% url 'account_list' %}" class="btn btn-secondary">← Back</a>
     </div>
   </form>

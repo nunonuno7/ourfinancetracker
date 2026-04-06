@@ -19,7 +19,7 @@ This repository contains the source code for **ourfinancetracker**, a Django app
 
 | Layer         | Technology                                |
 | ------------- | ----------------------------------------- |
-| Backend       | Django 5.2.1 · Python 3.12                |
+| Backend       | Django 5.1.11 · Python 3.12               |
 | Database      | PostgreSQL (via Supabase)                 |
 | Frontend      | Django Templates (initial phase)          |
 | Deployment    | Render.com (configured via `render.yaml`) |
@@ -73,7 +73,9 @@ pip install -r requirements.txt
 
 # Copy and configure environment variables
 cp .env.example .env
-# edit values as needed (set SUPABASE_DB_URL with your Supabase connection)
+# for local development, keep DEBUG=True
+# set SUPABASE_DB_URL only if you want to use Supabase Postgres;
+# otherwise the app falls back to a local SQLite database
 
 # Create the database and apply migrations
 python manage.py migrate
@@ -81,6 +83,16 @@ python manage.py migrate
 # Start the local server
 python manage.py runserver
 ```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+python manage.py migrate
+python manage.py runserver
+```
+
+Open `http://127.0.0.1:8000/` in your browser. Do not use `https://` with Django's built-in development server.
 
 ## 🌐 Additional domains
 

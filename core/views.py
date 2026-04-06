@@ -6,13 +6,13 @@ Core application views for ourfinancetracker
 Version: 2.1.0 (FINAL - June 2025)
 Complete security and performance optimizations
 
-PRINCIPAIS CORREÇÕES IMPLEMENTADAS:
-- Cache keys seguros com hash da SECRET_KEY
-- CSRF tokens gerados de forma segura
-- Validação consistente de permissões por utilizador
-- Tratamento robusto de exceções
-- Performance otimizada com queries SQL otimizadas
-- Headers de segurança implementados
+MAIN IMPROVEMENTS IMPLEMENTED:
+- Safe cache keys derived from SECRET_KEY hashes
+- Secure CSRF token generation
+- Consistent per-user permission validation
+- Robust exception handling
+- Optimized performance with tuned SQL queries
+- Security headers implemented
 """
 
 import hashlib
@@ -117,16 +117,15 @@ class HomeView(TemplateView):
 
 
 # ==============================================================================
-# UTILITÁRIOS DE CACHE SEGUROS
+# SAFE CACHE UTILITIES
 # ==============================================================================
 
 
 def _cache_key(user_id: int, start: date, end: date) -> str:
     """
-    Gera uma chave de cache segura combinando ``SECRET_KEY``, ``user_id``,
-    ``start`` e ``end`` através de um hash ``SHA256``. Desta forma,
-    diferentes utilizadores ou intervalos de datas produzem chaves
-    exclusivamente ligadas ao ambiente atual.
+    Build a cache key by hashing ``SECRET_KEY``, ``user_id``, ``start``, and
+    ``end`` with SHA256 so different users and date ranges stay isolated in
+    the current environment.
     """
     raw = f"{settings.SECRET_KEY}:{user_id}:{start}:{end}".encode()
     digest = hashlib.sha256(raw).hexdigest()
@@ -134,9 +133,7 @@ def _cache_key(user_id: int, start: date, end: date) -> str:
 
 
 def parse_safe_date(value: str | None, fallback: date) -> date:
-    """
-    Parse seguro de data com fallback para valor padrão.
-    """
+    """Safely parse a date and fall back to the default value."""
     if not value:
         return fallback
 
@@ -147,6 +144,20 @@ def parse_safe_date(value: str | None, fallback: date) -> date:
         except (ValueError, TypeError):
             continue
     return fallback
+
+
+def parse_optional_safe_date(value: str | None) -> date | None:
+    """Safely parse a date and return ``None`` when it is missing or invalid."""
+    if not value:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m"):
+        try:
+            parsed = datetime.strptime(value.strip(), fmt)
+            return parsed.date()
+        except (ValueError, TypeError):
+            continue
+    return None
 
 
 def _shift_period(period_yyyy_mm: str, delta_months: int) -> str:
@@ -243,6 +254,86 @@ def build_charts_history(qs):
     return []
 
 
+def _parse_period_param(period_value: str | None) -> tuple[int, int] | None:
+    """Parse a ``YYYY-MM`` string into ``(year, month)``."""
+    if not period_value or not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", period_value):
+        return None
+
+    year, month = map(int, period_value.split("-"))
+    return year, month
+
+
+def _apply_period_range(queryset, field_prefix: str, start_period: str | None, end_period: str | None):
+    """Filter a queryset by a ``DatePeriod`` foreign key range."""
+    start_tuple = _parse_period_param(start_period)
+    end_tuple = _parse_period_param(end_period)
+
+    if start_tuple:
+        start_year, start_month = start_tuple
+        queryset = queryset.filter(
+            Q(**{f"{field_prefix}__year__gt": start_year})
+            | Q(
+                **{
+                    f"{field_prefix}__year": start_year,
+                    f"{field_prefix}__month__gte": start_month,
+                }
+            )
+        )
+
+    if end_tuple:
+        end_year, end_month = end_tuple
+        queryset = queryset.filter(
+            Q(**{f"{field_prefix}__year__lt": end_year})
+            | Q(
+                **{
+                    f"{field_prefix}__year": end_year,
+                    f"{field_prefix}__month__lte": end_month,
+                }
+            )
+        )
+
+    return queryset
+
+
+def _period_key(year: int, month: int) -> str:
+    return f"{int(year):04d}-{int(month):02d}"
+
+
+def _period_label(year: int, month: int) -> str:
+    return date(int(year), int(month), 1).strftime("%b/%y")
+
+
+def _chunked(items, size: int):
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _as_decimal(value) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def _format_money(value) -> str:
+    return f"€ {_as_decimal(value):,.2f}"
+
+
+def _format_percent(value) -> str:
+    if value is None:
+        return "—"
+    return f"{_as_decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}%"
+
+
+def _value_tone(value) -> str:
+    decimal_value = _as_decimal(value)
+    if decimal_value > 0:
+        return "positive"
+    if decimal_value < 0:
+        return "negative"
+    return "neutral"
+
+
 @login_required
 def dashboard(request):
     """Dashboard supporting history and period modes."""
@@ -332,19 +423,417 @@ def dashboard(request):
     return response
 
 
+@login_required
+def dashboard_export(request):
+    """Dedicated export page for the history dashboard."""
+    start_period = request.GET.get("start_period") or request.GET.get("start")
+    end_period = request.GET.get("end_period") or request.GET.get("end")
+
+    transaction_qs = _apply_period_range(
+        Transaction.objects.filter(user=request.user, period__isnull=False),
+        "period",
+        start_period,
+        end_period,
+    )
+    balance_qs = _apply_period_range(
+        AccountBalance.objects.filter(account__user=request.user),
+        "period",
+        start_period,
+        end_period,
+    )
+
+    balance_matrix_map: dict[tuple[str, str], dict] = {}
+    transaction_map: dict[str, dict] = {}
+    balance_totals_map: dict[str, dict] = {}
+    period_keys: set[str] = set()
+
+    balance_rows = (
+        balance_qs.values(
+            "account__account_type__name",
+            "account__currency__code",
+            "period__year",
+            "period__month",
+        )
+        .annotate(total=Sum("reported_balance"))
+        .order_by(
+            "period__year",
+            "period__month",
+            "account__account_type__name",
+            "account__currency__code",
+        )
+    )
+
+    for row in balance_rows:
+        period_key = _period_key(row["period__year"], row["period__month"])
+        period_keys.add(period_key)
+
+        row_key = (
+            row["account__account_type__name"] or "Other",
+            row["account__currency__code"] or "—",
+        )
+        matrix_row = balance_matrix_map.setdefault(
+            row_key,
+            {
+                "type": row_key[0],
+                "currency": row_key[1],
+                "values": {},
+            },
+        )
+        matrix_row["values"][period_key] = _as_decimal(row["total"])
+
+    monthly_transactions = (
+        transaction_qs.values("period__year", "period__month")
+        .annotate(
+            income=Sum("amount", filter=Q(type=Transaction.Type.INCOME)),
+            expenses=Sum("amount", filter=Q(type=Transaction.Type.EXPENSE)),
+            investments=Sum("amount", filter=Q(type=Transaction.Type.INVESTMENT)),
+            estimated_expenses=Sum(
+                "amount",
+                filter=Q(type=Transaction.Type.EXPENSE, is_estimated=True),
+            ),
+            transaction_count=models.Count("id"),
+        )
+        .order_by("period__year", "period__month")
+    )
+
+    for row in monthly_transactions:
+        period_key = _period_key(row["period__year"], row["period__month"])
+        period_keys.add(period_key)
+        transaction_map[period_key] = {
+            "income": _as_decimal(row["income"]),
+            "expenses": _as_decimal(row["expenses"]),
+            "investments": _as_decimal(row["investments"]),
+            "estimated_expenses": _as_decimal(row["estimated_expenses"]),
+            "transaction_count": row["transaction_count"] or 0,
+        }
+
+    monthly_balance_totals = (
+        balance_qs.values("period__year", "period__month")
+        .annotate(
+            total_balance=Sum("reported_balance"),
+            investment_balance=Sum(
+                "reported_balance",
+                filter=Q(account__account_type__name__icontains="invest"),
+            ),
+        )
+        .order_by("period__year", "period__month")
+    )
+
+    for row in monthly_balance_totals:
+        period_key = _period_key(row["period__year"], row["period__month"])
+        period_keys.add(period_key)
+        balance_totals_map[period_key] = {
+            "total_balance": _as_decimal(row["total_balance"]),
+            "investment_balance": _as_decimal(row["investment_balance"]),
+        }
+
+    sorted_period_keys = sorted(period_keys)
+    period_sequence = []
+    for period_key in sorted_period_keys:
+        year, month = map(int, period_key.split("-"))
+        period_sequence.append(
+            {
+                "key": period_key,
+                "label": _period_label(year, month),
+                "year": str(year),
+                "month": date(year, month, 1).strftime("%b"),
+            }
+        )
+
+    balance_matrix_rows = []
+    for row in sorted(
+        balance_matrix_map.values(),
+        key=lambda item: (item["type"].lower(), item["currency"].lower()),
+    ):
+        row_total = sum(row["values"].values(), Decimal("0"))
+        balance_matrix_rows.append(
+            {
+                "type": row["type"],
+                "currency": row["currency"],
+                "values": row["values"],
+                "row_total": row_total,
+                "row_total_display": _format_money(row_total),
+            }
+        )
+
+    balance_tables = []
+    for index, period_chunk in enumerate(_chunked(period_sequence, 12), start=1):
+        chunk_keys = [period["key"] for period in period_chunk]
+        year_groups = []
+        for period in period_chunk:
+            if not year_groups or year_groups[-1]["year"] != period["year"]:
+                year_groups.append({"year": period["year"], "span": 0})
+            year_groups[-1]["span"] += 1
+
+        chunk_rows = []
+        for row in balance_matrix_rows:
+            cells = []
+            chunk_total = Decimal("0")
+            for period_key in chunk_keys:
+                amount = row["values"].get(period_key, Decimal("0"))
+                chunk_total += amount
+                cells.append(
+                    {
+                        "value": amount,
+                        "display": _format_money(amount),
+                        "tone": _value_tone(amount),
+                    }
+                )
+            chunk_rows.append(
+                {
+                    "type": row["type"],
+                    "currency": row["currency"],
+                    "cells": cells,
+                    "chunk_total": chunk_total,
+                    "chunk_total_display": _format_money(chunk_total),
+                }
+            )
+
+        totals = []
+        for period_key in chunk_keys:
+            total = sum(
+                (row["values"].get(period_key, Decimal("0")) for row in balance_matrix_rows),
+                Decimal("0"),
+            )
+            totals.append(
+                {
+                    "value": total,
+                    "display": _format_money(total),
+                    "tone": _value_tone(total),
+                }
+            )
+
+        balance_tables.append(
+            {
+                "index": index,
+                "is_split": len(sorted_period_keys) > 12,
+                "periods": period_chunk,
+                "year_groups": year_groups,
+                "rows": chunk_rows,
+                "totals": totals,
+            }
+        )
+
+    period_rows = []
+    valid_returns: list[Decimal] = []
+    previous_investment_balance: Decimal | None = None
+
+    for period in period_sequence:
+        period_key = period["key"]
+        tx_stats = transaction_map.get(period_key, {})
+        balance_stats = balance_totals_map.get(period_key, {})
+
+        income = tx_stats.get("income", Decimal("0"))
+        expenses = abs(tx_stats.get("expenses", Decimal("0")))
+        investments = tx_stats.get("investments", Decimal("0"))
+        estimated_expenses = abs(tx_stats.get("estimated_expenses", Decimal("0")))
+        total_balance = balance_stats.get("total_balance", Decimal("0"))
+        investment_balance = balance_stats.get("investment_balance", Decimal("0"))
+        net_cash = income - expenses
+        verified_pct = pct(expenses - estimated_expenses, expenses)
+
+        portfolio_return_value = None
+        if previous_investment_balance is not None:
+            portfolio_return_value = portfolio_return(
+                investment_balance,
+                previous_investment_balance,
+                investments,
+            )
+            if portfolio_return_value is not None:
+                valid_returns.append(portfolio_return_value)
+        previous_investment_balance = investment_balance
+
+        period_rows.append(
+            {
+                "label": period["label"],
+                "income_display": _format_money(income),
+                "income_tone": _value_tone(income),
+                "expenses_display": _format_money(expenses),
+                "expenses_tone": _value_tone(-expenses),
+                "investments_display": _format_money(investments),
+                "investments_tone": _value_tone(investments),
+                "net_cash_display": _format_money(net_cash),
+                "net_cash_tone": _value_tone(net_cash),
+                "balance_display": _format_money(total_balance),
+                "balance_tone": _value_tone(total_balance),
+                "verified_pct_display": _format_percent(verified_pct),
+                "portfolio_return_display": _format_percent(portfolio_return_value),
+                "portfolio_return_tone": _value_tone(
+                    portfolio_return_value or Decimal("0")
+                ),
+                "transaction_count": tx_stats.get("transaction_count", 0),
+                "income": income,
+                "expenses": expenses,
+                "investments": investments,
+                "net_cash": net_cash,
+                "balance": total_balance,
+            }
+        )
+
+    period_count = len(period_rows) or 1
+    total_income = sum((row["income"] for row in period_rows), Decimal("0"))
+    total_expenses = sum((row["expenses"] for row in period_rows), Decimal("0"))
+    total_investments = sum((row["investments"] for row in period_rows), Decimal("0"))
+    transaction_count = sum(row["transaction_count"] for row in period_rows)
+    average_return = (
+        sum(valid_returns, Decimal("0")) / Decimal(len(valid_returns))
+        if valid_returns
+        else None
+    )
+    latest_balance = period_rows[-1]["balance"] if period_rows else Decimal("0")
+    overall_verified_pct = pct(
+        total_expenses
+        - sum(
+            (
+                abs(stats.get("estimated_expenses", Decimal("0")))
+                for stats in transaction_map.values()
+            ),
+            Decimal("0"),
+        ),
+        total_expenses,
+    )
+
+    summary_cards = [
+        {
+            "title": "Current Net Worth",
+            "value": _format_money(latest_balance),
+            "detail": (
+                f"Latest balance snapshot: {period_sequence[-1]['label']}"
+                if period_sequence
+                else "No balances available"
+            ),
+            "tone": "success",
+        },
+        {
+            "title": "Average Income",
+            "value": _format_money(total_income / Decimal(period_count)),
+            "detail": f"{len(period_rows)} periods in scope",
+            "tone": "primary",
+        },
+        {
+            "title": "Average Expenses",
+            "value": _format_money(total_expenses / Decimal(period_count)),
+            "detail": "Monthly average for the selected range",
+            "tone": "danger",
+        },
+        {
+            "title": "Average Investment",
+            "value": _format_money(total_investments / Decimal(period_count)),
+            "detail": "Monthly investment flow",
+            "tone": "info",
+        },
+        {
+            "title": "Verified Expenses",
+            "value": _format_percent(overall_verified_pct),
+            "detail": f"{transaction_count} transactions analysed",
+            "tone": "dark",
+        },
+    ]
+
+    if average_return is not None:
+        summary_cards.append(
+            {
+                "title": "Average Portfolio Return",
+                "value": _format_percent(average_return),
+                "detail": "Average monthly return in the selected range",
+                "tone": "warning" if average_return < 0 else "success",
+            }
+        )
+
+    expense_categories = []
+    expense_category_rows = (
+        transaction_qs.filter(type=Transaction.Type.EXPENSE)
+        .values("category__name")
+        .annotate(total=Sum("amount"), count=models.Count("id"))
+    )
+
+    for row in expense_category_rows:
+        amount = abs(_as_decimal(row["total"]))
+        if amount <= 0:
+            continue
+        expense_categories.append(
+            {
+                "name": row["category__name"] or "Uncategorised",
+                "count": row["count"] or 0,
+                "amount": amount,
+            }
+        )
+
+    expense_categories.sort(key=lambda item: item["amount"], reverse=True)
+    for item in expense_categories:
+        item["amount_display"] = _format_money(item["amount"])
+        item["percentage_display"] = _format_percent(
+            pct(item["amount"], total_expenses)
+        )
+
+    latest_accounts = []
+    if period_sequence:
+        latest_year, latest_month = map(int, period_sequence[-1]["key"].split("-"))
+        latest_balances = (
+            AccountBalance.objects.filter(
+                account__user=request.user,
+                period__year=latest_year,
+                period__month=latest_month,
+                reported_balance__gt=0,
+            )
+            .select_related("account", "account__account_type", "account__currency")
+            .order_by("-reported_balance", "account__name")
+        )
+
+        latest_total = sum(
+            (balance.reported_balance for balance in latest_balances),
+            Decimal("0"),
+        )
+        for balance in latest_balances:
+            latest_accounts.append(
+                {
+                    "name": balance.account.name,
+                    "type": balance.account.account_type.name,
+                    "currency": balance.account.currency.code if balance.account.currency else "—",
+                    "balance_display": _format_money(balance.reported_balance),
+                    "share_display": _format_percent(
+                        pct(balance.reported_balance, latest_total)
+                    ),
+                }
+            )
+
+    if period_sequence:
+        selected_range_label = (
+            period_sequence[0]["label"]
+            if len(period_sequence) == 1
+            else f"{period_sequence[0]['label']} to {period_sequence[-1]['label']}"
+        )
+    else:
+        selected_range_label = "No period data available"
+
+    context = {
+        "generated_at": now(),
+        "selected_range_label": selected_range_label,
+        "selected_start_period": start_period,
+        "selected_end_period": end_period,
+        "summary_cards": summary_cards,
+        "period_rows": period_rows,
+        "balance_tables": balance_tables,
+        "expense_categories": expense_categories,
+        "latest_accounts": latest_accounts,
+        "has_data": bool(period_rows or balance_tables or expense_categories or latest_accounts),
+    }
+    return render(request, "core/dashboard_export.html", context)
+
+
 # ==============================================================================
-# MIXINS SEGUROS PARA VIEWS
+# SAFE VIEW MIXINS
 # ==============================================================================
 
 
 class OwnerQuerysetMixin(LoginRequiredMixin):
     """
-    Mixin seguro que limita queryset apenas a objetos do utilizador atual.
-    Inclui verificação adicional de segurança.
+    Safe mixin that limits the queryset to objects owned by the current user.
+    Includes an extra security check.
     """
 
     def get_queryset(self) -> QuerySet:
-        """Filtra queryset apenas para objetos do utilizador atual."""
+        """Filter the queryset to objects owned by the current user only."""
         if not self.request.user.is_authenticated:
             raise PermissionDenied("User must be authenticated")
 
@@ -368,7 +857,7 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
         return filtered_qs
 
     def get_object(self, queryset=None):
-        """Garante que o objeto pertence ao utilizador atual."""
+        """Ensure the object belongs to the current user."""
         obj = super().get_object(queryset)
 
         if hasattr(obj, "user") and obj.user != self.request.user:
@@ -377,13 +866,34 @@ class OwnerQuerysetMixin(LoginRequiredMixin):
         return obj
 
 
+class SimpleDeleteFlowMixin:
+    """Keep delete actions on the originating screen instead of rendering a confirmation page."""
+
+    success_message = None
+
+    def get(self, request, *args, **kwargs):
+        return redirect(self.success_url or self.get_success_url())
+
+    def form_valid(self, form):
+        self.object = self.get_object()
+        success_url = self.get_success_url()
+        self.object.delete()
+
+        if self.success_message:
+            messages.success(
+                self.request, self.success_message.format(object=self.object)
+            )
+
+        return redirect(success_url)
+
+
 # ==============================================================================
-# VIEWS DE DASHBOARD E CONFIGURAÇÃO
+# DASHBOARD AND CONFIGURATION VIEWS
 # ==============================================================================
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
-    """Dashboard principal com KPIs e resumos financeiros."""
+    """Main dashboard with KPIs and financial summaries."""
 
     template_name = "core/dashboard.html"
 
@@ -448,7 +958,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 """,
                 params,
             )
-            total_investido = float(cursor.fetchone()[0] or 0)
+            total_invested = float(cursor.fetchone()[0] or 0)
 
             cursor.execute(
                 f"""
@@ -461,56 +971,60 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 """,
                 params,
             )
-            total_expenses, estimated_expenses = cursor.fetchone()
+            total_expenses, estimated_expenses_total = cursor.fetchone()
 
-        patrimonio_mes = {p: float(inv or 0) for p, inv, _ in bal_rows}
+        net_worth_by_period = {p: float(inv or 0) for p, inv, _ in bal_rows}
         saving_mes = {p: float(save or 0) for p, _, save in bal_rows}
 
-        patrimonio_vals = list(patrimonio_mes.values())
-        patrimonio_final = patrimonio_vals[-1] if patrimonio_vals else 0
-        patrimonio_inicial = patrimonio_vals[0] if patrimonio_vals else 0
-        aumento_patrimonio = patrimonio_final - patrimonio_inicial
-        aumento_medio = (
-            sum(b - a for a, b in zip(patrimonio_vals, patrimonio_vals[1:]))
-            / (len(patrimonio_vals) - 1)
-            if len(patrimonio_vals) > 1
+        net_worth_values = list(net_worth_by_period.values())
+        net_worth_final = net_worth_values[-1] if net_worth_values else 0
+        net_worth_initial = net_worth_values[0] if net_worth_values else 0
+        net_worth_growth = net_worth_final - net_worth_initial
+        average_growth = (
+            sum(b - a for a, b in zip(net_worth_values, net_worth_values[1:]))
+            / (len(net_worth_values) - 1)
+            if len(net_worth_values) > 1
             else 0
         )
 
-        receita_mes = {p: float(t) for p, t in income_rows}
-        receita_media = (
-            sum(receita_mes.values()) / len(receita_mes) if receita_mes else 0
+        income_by_period = {p: float(t) for p, t in income_rows}
+        average_income = (
+            sum(income_by_period.values()) / len(income_by_period)
+            if income_by_period
+            else 0
         )
 
-        periods = sorted(set(receita_mes.keys()) & set(saving_mes.keys()))
-        despesas_estimadas = []
+        periods = sorted(set(income_by_period.keys()) & set(saving_mes.keys()))
+        estimated_expense_samples = []
         for i in range(len(periods) - 1):
             p, p1 = periods[i], periods[i + 1]
-            despesa = (
-                saving_mes.get(p, 0) - saving_mes.get(p1, 0) + receita_mes.get(p, 0)
+            expense = (
+                saving_mes.get(p, 0)
+                - saving_mes.get(p1, 0)
+                + income_by_period.get(p, 0)
             )
-            despesas_estimadas.append(despesa)
-        despesa_media = (
-            sum(despesas_estimadas) / len(despesas_estimadas)
-            if despesas_estimadas
+            estimated_expense_samples.append(expense)
+        average_expense = (
+            sum(estimated_expense_samples) / len(estimated_expense_samples)
+            if estimated_expense_samples
             else 0
         )
 
-        n_meses = max(len(receita_mes), 1)
-        poupanca_media = receita_media - despesa_media - total_investido / n_meses
+        month_count = max(len(income_by_period), 1)
+        average_savings = average_income - average_expense - total_invested / month_count
 
         ctx["kpis"] = {
-            "patrimonio": f"{patrimonio_final:,.0f} €",
-            "aumento": f"{aumento_patrimonio:,.0f} €",
-            "capital": f"{total_investido:,.0f} €",
-            "despesa_media": f"{despesa_media:,.0f} €",
-            "receita_media": f"{receita_media:,.0f} €",
-            "aumento_riqueza": f"{aumento_medio:,.0f} €",
-            "poupanca_media": f"{poupanca_media:,.0f} €",
+            "net_worth": f"{net_worth_final:,.0f} €",
+            "growth": f"{net_worth_growth:,.0f} €",
+            "invested_capital": f"{total_invested:,.0f} €",
+            "average_expense": f"{average_expense:,.0f} €",
+            "average_income": f"{average_income:,.0f} €",
+            "average_wealth_growth": f"{average_growth:,.0f} €",
+            "average_savings": f"{average_savings:,.0f} €",
         }
 
         total_expenses_dec = Decimal(str(abs(total_expenses)))
-        estimated_expenses_dec = Decimal(str(abs(estimated_expenses)))
+        estimated_expenses_dec = Decimal(str(abs(estimated_expenses_total)))
         verified_expenses_pct_dec = pct(
             total_expenses_dec - estimated_expenses_dec, total_expenses_dec
         )
@@ -529,7 +1043,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
 @login_required
 def menu_config(request):
-    """Configuração do menu para o utilizador atual."""
+    """Return menu configuration for the current user."""
     return json_response(
         {
             "username": request.user.username,
@@ -545,7 +1059,7 @@ def menu_config(request):
 
 @login_required
 def account_balances_pivot_json(request):
-    """Saldos agregados por tipo/moeda em formato pivot para gráficos."""
+    """Return balances aggregated by type/currency in pivot form for charts."""
     user_id = request.user.id
 
     # Check if specific period is requested
@@ -658,7 +1172,7 @@ def account_balances_pivot_json(request):
 
 
 # ==============================================================================
-# VIEWS DE TRANSAÇÕES
+# TRANSACTION VIEWS
 # ==============================================================================
 
 
@@ -671,14 +1185,14 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
     success_url = reverse_lazy("transaction_list_v2")
 
     def form_valid(self, form):
-        """Processar formulário válido e limpar cache."""
+        """Process a valid form submission and clear cache."""
         self.object = form.save()
-        logger.debug(f"📝 Criado: {self.object}")  # ✅ DEBUG no terminal
+        logger.debug(f"📝 Created: {self.object}")  # Debug in terminal
 
-        # Limpar cache imediatamente
+        # Clear cache immediately
         clear_tx_cache(self.request.user.id, force=True)
 
-        # Adicionar flag para JavaScript saber que deve recarregar
+        # Add a flag so JavaScript knows it should reload
         self.request.session["transaction_changed"] = True
 
         if self.request.headers.get("HX-Request") == "true":
@@ -688,14 +1202,14 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
         return redirect(self.get_success_url())
 
     def form_invalid(self, form):
-        """Processar formulário inválido."""
-        logger.debug(f"❌ Formulário inválido: {form.errors}")  # DEBUG
+        """Process an invalid form submission."""
+        logger.debug(f"Invalid form: {form.errors}")  # DEBUG
         if self.request.headers.get("HX-Request") == "true":
             return JsonResponse({"success": False, "errors": form.errors}, status=400)
         return super().form_invalid(form)
 
     def get_context_data(self, **kwargs):
-        """Adicionar contexto seguro."""
+        """Add safe context data."""
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
@@ -704,6 +1218,9 @@ class TransactionCreateView(LoginRequiredMixin, UserInFormKwargsMixin, CreateVie
             Category.objects.filter(user=user, blocked=False).values_list(
                 "name", flat=True
             )
+        )
+        context["tag_list"] = list(
+            Tag.objects.filter(user=user).values_list("name", flat=True)
         )
         return context
 
@@ -719,38 +1236,97 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
     def get_queryset(self):
         return super().get_queryset().prefetch_related("tags")
 
-    def get_object(self, queryset=None):
-        """Override to provide better error handling and prevent editing estimated transactions."""
+    def _build_unavailable_transaction_log_context(self, request, pk):
+        current_user_tx = (
+            Transaction.objects.filter(pk=pk, user=request.user)
+            .values("id", "editable", "is_estimated", "is_system", "updated_at")
+            .first()
+        )
+        any_user_tx = Transaction.objects.filter(pk=pk).values("user_id").first()
+
+        return {
+            "transaction_pk": pk,
+            "request_user_id": request.user.id,
+            "exists_for_current_user": current_user_tx is not None,
+            "exists_for_other_user": bool(
+                any_user_tx and any_user_tx["user_id"] != request.user.id
+            ),
+            "editable_for_current_user": (
+                current_user_tx["editable"] if current_user_tx else None
+            ),
+            "estimated_for_current_user": (
+                current_user_tx["is_estimated"] if current_user_tx else None
+            ),
+            "system_for_current_user": (
+                current_user_tx["is_system"] if current_user_tx else None
+            ),
+            "updated_at_for_current_user": (
+                current_user_tx["updated_at"].isoformat()
+                if current_user_tx and current_user_tx["updated_at"]
+                else None
+            ),
+            "method": request.method,
+            "path": request.path,
+            "referrer": request.META.get("HTTP_REFERER", ""),
+            "is_htmx": request.headers.get("HX-Request") == "true",
+            "is_ajax": request.headers.get("X-Requested-With") == "XMLHttpRequest",
+            "had_transaction_changed_flag": bool(
+                request.session.get("transaction_changed")
+            ),
+        }
+
+    def dispatch(self, request, *args, **kwargs):
         try:
-            obj = super().get_object(queryset)
-
-            # Prevent editing estimated transactions
-            if obj.is_estimated:
-                messages.error(
-                    self.request,
-                    "Estimated transactions cannot be edited directly. Use the estimation tool at /transactions/estimate/ instead.",
-                )
-                logger.warning(
-                    f"User {self.request.user.id} tried to edit estimated transaction {obj.id}"
-                )
-                raise PermissionDenied("Cannot edit estimated transaction")
-
-            return obj
-        except Transaction.DoesNotExist:
-            messages.error(
-                self.request,
-                f"Transaction with ID {self.kwargs.get('pk')} not found or you don't have permission to edit it.",
+            return super().dispatch(request, *args, **kwargs)
+        except Http404:
+            message = "The transaction no longer exists or is no longer available."
+            log_context = self._build_unavailable_transaction_log_context(
+                request, kwargs.get("pk")
             )
             logger.warning(
-                f"User {self.request.user.id} tried to access non-existent transaction {self.kwargs.get('pk')}"
+                "Unavailable transaction edit access: %s",
+                log_context,
             )
-            raise Http404("Transaction not found")
+            request.session["transaction_changed"] = True
+
+            if (
+                request.headers.get("HX-Request") == "true"
+                or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            ):
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": message,
+                        "redirect_url": reverse("transaction_list_v2"),
+                    },
+                    status=404,
+                )
+
+            messages.error(request, message)
+            return redirect("transaction_list_v2")
+
+    def get_object(self, queryset=None):
+        """Override to provide better error handling and prevent editing estimated transactions."""
+        obj = super().get_object(queryset)
+
+        # Prevent editing estimated transactions
+        if obj.is_estimated:
+            messages.error(
+                self.request,
+                "Estimated transactions cannot be edited directly. Use the estimation tool at /transactions/estimate/ instead.",
+            )
+            logger.warning(
+                f"User {self.request.user.id} tried to edit estimated transaction {obj.id}"
+            )
+            raise PermissionDenied("Cannot edit estimated transaction")
+
+        return obj
 
     def form_valid(self, form):
-        # Limpar cache imediatamente
+        # Clear cache immediately
         clear_tx_cache(self.request.user.id, force=True)
 
-        # Adicionar flag para JavaScript saber que deve recarregar
+        # Add a flag so JavaScript knows it should reload
         self.request.session["transaction_changed"] = True
 
         messages.success(self.request, "Transaction updated successfully!")
@@ -768,10 +1344,13 @@ class TransactionUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateVie
                 user=self.request.user, blocked=False
             ).values_list("name", flat=True)
         )
+        context["tag_list"] = list(
+            Tag.objects.filter(user=self.request.user).values_list("name", flat=True)
+        )
         return context
 
 
-class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
+class TransactionDeleteView(SimpleDeleteFlowMixin, OwnerQuerysetMixin, DeleteView):
     """Delete a transaction with owner validation."""
 
     model = Transaction
@@ -797,6 +1376,7 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
                 {"success": True, "message": "Transaction deleted successfully!"}
             )
 
+        request.session["transaction_changed"] = True
         messages.success(request, "Transaction deleted successfully!")
         return response
 
@@ -808,8 +1388,7 @@ class TransactionDeleteView(OwnerQuerysetMixin, DeleteView):
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return self.delete(request, *args, **kwargs)
 
-        # For regular requests, use standard flow
-        return super().post(request, *args, **kwargs)
+        return self.delete(request, *args, **kwargs)
 
 
 class RecurringTransactionListView(LoginRequiredMixin, ListView):
@@ -845,10 +1424,11 @@ class RecurringTransactionUpdateView(
         return RecurringTransaction.objects.filter(user=self.request.user)
 
 
-class RecurringTransactionDeleteView(OwnerQuerysetMixin, DeleteView):
+class RecurringTransactionDeleteView(SimpleDeleteFlowMixin, OwnerQuerysetMixin, DeleteView):
     model = RecurringTransaction
     template_name = "core/confirms/recurring_confirm_delete.html"
     success_url = reverse_lazy("recurring_list")
+    success_message = "Recurring transaction deleted successfully."
 
     def get_queryset(self):
         return RecurringTransaction.objects.filter(user=self.request.user)
@@ -856,10 +1436,10 @@ class RecurringTransactionDeleteView(OwnerQuerysetMixin, DeleteView):
 
 @login_required
 def transactions_json(request):
-    """API JSON para DataTables com cache e filtros dinâmicos."""
+    """JSON API for DataTables with cache and dynamic filters."""
     user_id = request.user.id
 
-    # Datas
+    # Dates
     raw_start = request.GET.get("date_start")
     raw_end = request.GET.get("date_end")
     start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
@@ -928,7 +1508,7 @@ def transactions_json(request):
             cache_key, {"df": df.copy(), "last_modified": last_modified}, timeout=300
         )
 
-    # Transformações e formatação
+    # Transformations and formatting
     df["date"] = df["date"].astype(str)
     df["period"] = (
         df["year"].astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
@@ -946,7 +1526,7 @@ def transactions_json(request):
         axis=1,
     )
 
-    # Filtros GET
+    # GET filters
     tx_type = request.GET.get("type", "").strip()
     category = request.GET.get("category", "").strip()
     account = request.GET.get("account", "").strip()
@@ -1046,7 +1626,7 @@ def transactions_json(request):
             df = df[df["tags"].str.contains(tag_pattern, case=False, na=False)]
             logger.debug(f"Applied tags filter: {tag_list}, remaining rows: {len(df)}")
 
-    # Filtros únicos dinâmicos - map backend types to display names for frontend
+    # Dynamic unique filters - map backend types to display names for frontend
     backend_types = sorted([t for t in df_for_type["type"].dropna().unique() if t])
     available_types = []
     type_mapping = {
@@ -1072,7 +1652,7 @@ def transactions_json(request):
         [p for p in df_for_period["period"].dropna().unique() if p], reverse=True
     )
 
-    # Ordenação
+    # Sorting
     order_col = request.GET.get("order[0][column]", "1")
     order_dir = request.GET.get("order[0][dir]", "desc")
     ascending = order_dir != "desc"
@@ -1092,7 +1672,7 @@ def transactions_json(request):
         except Exception as e:
             logger.warning(f"Failed to sort by '{sort_col}': {e}")
 
-    # Formatar montantes
+    # Format amounts
     df["amount"] = df.apply(
         lambda r: f"€ {r['amount_float']:,.2f}".replace(",", "X")
         .replace(".", ",")
@@ -1101,7 +1681,7 @@ def transactions_json(request):
         axis=1,
     )
 
-    # ✅ CORREÇÃO: criar ações como string HTML
+    # Create actions as an HTML string
     df["actions"] = df.apply(
         lambda r: f"""
         <div class='btn-group'>
@@ -1112,7 +1692,7 @@ def transactions_json(request):
         axis=1,
     )
 
-    # Paginação (DataTables)
+    # Pagination (DataTables)
     draw = int(request.GET.get("draw", 1))
     start = int(request.GET.get("start", 0))
     length = int(request.GET.get("length", 10))
@@ -1205,13 +1785,22 @@ def transaction_bulk_update(request):
 @require_POST
 @login_required
 def transaction_bulk_duplicate(request):
-    """Bulk duplicate transactions into the current month."""
+    """Bulk duplicate transactions into a selected month."""
     try:
         data = json.loads(request.body)
         transaction_ids = data.get("transaction_ids", [])
+        target_period_value = str(data.get("target_period") or "").strip()
 
         if not transaction_ids:
             return JsonResponse({"success": False, "error": "No transactions selected"})
+
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", target_period_value):
+            return JsonResponse(
+                {"success": False, "error": "Target month is required"},
+                status=400,
+            )
+
+        target_year, target_month = map(int, target_period_value.split("-"))
 
         # Get original transactions
         transactions = (
@@ -1226,11 +1815,10 @@ def transaction_bulk_duplicate(request):
             )
 
         created = 0
-        today = date.today()
-        current_period, _ = DatePeriod.objects.get_or_create(
-            year=today.year,
-            month=today.month,
-            defaults={"label": today.strftime("%B %Y")},
+        target_period, _ = DatePeriod.objects.get_or_create(
+            year=target_year,
+            month=target_month,
+            defaults={"label": date(target_year, target_month, 1).strftime("%B %Y")},
         )
 
         # Use atomic transaction for all operations
@@ -1238,16 +1826,18 @@ def transaction_bulk_duplicate(request):
             new_transactions = []
             for tx in transactions:
                 original_tags = list(tx.tags.all())
+                target_day = min(tx.date.day, monthrange(target_year, target_month)[1])
+                target_date = date(target_year, target_month, target_day)
 
-                # Create duplicate in current month
+                # Create duplicate in the selected month.
                 new_tx = Transaction.objects.create(
                     user=tx.user,
                     type=tx.type,
                     amount=tx.amount,
-                    date=today,
+                    date=target_date,
                     notes=f"Duplicate of transaction from {tx.date}",
                     is_estimated=tx.is_estimated,
-                    period=current_period,
+                    period=target_period,
                     account=tx.account,
                     category=tx.category,
                 )
@@ -1269,6 +1859,7 @@ def transaction_bulk_duplicate(request):
             {
                 "success": True,
                 "created": created,
+                "target_period": target_period_value,
                 "message": f"{created} transactions duplicated",
             }
         )
@@ -1480,40 +2071,107 @@ def task_status(request, task_id):
     return JsonResponse(data)
 
 
+def _transactions_export_dataframe(
+    user: User, start_date: date | None = None, end_date: date | None = None
+) -> pd.DataFrame:
+    """Build the transactions export dataframe with optional date filters."""
+    queryset = (
+        Transaction.objects.filter(user=user)
+        .select_related("category", "account")
+        .prefetch_related("tags")
+        .order_by("-date", "-id")
+    )
+
+    if start_date:
+        queryset = queryset.filter(date__gte=start_date)
+    if end_date:
+        queryset = queryset.filter(date__lte=end_date)
+
+    rows = []
+    for tx in queryset:
+        rows.append(
+            [
+                tx.date,
+                tx.type,
+                tx.amount,
+                tx.category.name if tx.category_id else "",
+                tx.account.name if tx.account_id else "",
+                ", ".join(sorted(tag.name for tag in tx.tags.all())),
+                tx.notes or "",
+            ]
+        )
+
+    return pd.DataFrame(
+        rows,
+        columns=["Date", "Type", "Amount", "Category", "Account", "Tags", "Notes"],
+    )
+
+
+def _account_balances_export_dataframe(user: User) -> pd.DataFrame:
+    """Build the account balances export dataframe."""
+    balances = (
+        AccountBalance.objects.filter(account__user=user)
+        .select_related("period", "account__account_type", "account__currency")
+        .order_by(
+            "-period__year",
+            "-period__month",
+            "account__account_type__name",
+            "account__name",
+        )
+    )
+
+    rows = []
+    for balance in balances:
+        account = balance.account
+        period = balance.period
+        rows.append(
+            [
+                period.year,
+                period.month,
+                f"{period.year}-{period.month:02d}",
+                account.name,
+                account.account_type.name if account.account_type_id else "",
+                account.currency.code if account.currency_id else "",
+                balance.reported_balance,
+            ]
+        )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "Year",
+            "Month",
+            "Period",
+            "Account_Name",
+            "Account_Type",
+            "Currency",
+            "Balance",
+        ],
+    )
+
+
+def _export_filename(prefix: str, start_date: date | None = None, end_date: date | None = None) -> str:
+    """Return a filename that reflects whether the export is filtered."""
+    if start_date and end_date:
+        return f"{prefix}_{start_date}_{end_date}.xlsx"
+    if start_date:
+        return f"{prefix}_{start_date}_onwards.xlsx"
+    if end_date:
+        return f"{prefix}_until_{end_date}.xlsx"
+    return f"{prefix}_all.xlsx"
+
+
 @login_required
 def export_transactions_xlsx(request):
     """Export transactions to Excel."""
-    user_id = request.user.id
-
     # Get date filters
     start_date = parse_safe_date(
         request.GET.get("date_start"), date(date.today().year, 1, 1)
     )
     end_date = parse_safe_date(request.GET.get("date_end"), date.today())
 
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT tx.date, tx.type, tx.amount,
-                   COALESCE(cat.name, '') AS category,
-                   COALESCE(acc.name, '') AS account,
-                   COALESCE(STRING_AGG(tag.name, ', '), '') AS tags,
-                   tx.notes
-            FROM core_transaction tx
-            LEFT JOIN core_category cat ON tx.category_id = cat.id
-            LEFT JOIN core_account acc ON tx.account_id = acc.id
-            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
-            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
-            WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
-            GROUP BY tx.id, tx.date, tx.type, tx.amount, cat.name, acc.name, tx.notes
-            ORDER BY tx.date DESC
-        """,
-            [user_id, start_date, end_date],
-        )
-        rows = cursor.fetchall()
-
-    df = pd.DataFrame(
-        rows, columns=["Date", "Type", "Amount", "Category", "Account", "Tags", "Notes"]
+    df = _transactions_export_dataframe(
+        request.user, start_date=start_date, end_date=end_date
     )
 
     # Create Excel file
@@ -1535,77 +2193,13 @@ def export_transactions_xlsx(request):
 @login_required
 def export_data_xlsx(request):
     """Export both transactions and account balances to a single Excel file."""
-    user_id = request.user.id
+    start_date = parse_optional_safe_date(request.GET.get("date_start"))
+    end_date = parse_optional_safe_date(request.GET.get("date_end"))
 
-    # Date range for transactions
-    start_date = parse_safe_date(
-        request.GET.get("date_start"), date(date.today().year, 1, 1)
+    tx_df = _transactions_export_dataframe(
+        request.user, start_date=start_date, end_date=end_date
     )
-    end_date = parse_safe_date(request.GET.get("date_end"), date.today())
-
-    # Fetch transactions
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT tx.date, tx.type, tx.amount,
-                   COALESCE(cat.name, '') AS category,
-                   COALESCE(acc.name, '') AS account,
-                   COALESCE(STRING_AGG(tag.name, ', '), '') AS tags,
-                   tx.notes
-            FROM core_transaction tx
-            LEFT JOIN core_category cat ON tx.category_id = cat.id
-            LEFT JOIN core_account acc ON tx.account_id = acc.id
-            LEFT JOIN core_transactiontag tt ON tt.transaction_id = tx.id
-            LEFT JOIN core_tag tag ON tt.tag_id = tag.id
-            WHERE tx.user_id = %s AND tx.date BETWEEN %s AND %s
-            GROUP BY tx.id, tx.date, tx.type, tx.amount, cat.name, acc.name, tx.notes
-            ORDER BY tx.date DESC
-            """,
-            [user_id, start_date, end_date],
-        )
-        tx_rows = cursor.fetchall()
-
-    tx_df = pd.DataFrame(
-        tx_rows,
-        columns=["Date", "Type", "Amount", "Category", "Account", "Tags", "Notes"],
-    )
-
-    # Fetch account balances for all periods
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT
-                dp.year,
-                dp.month,
-                CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) as period,
-                a.name as account_name,
-                at.name as account_type,
-                cur.code as currency,
-                ab.reported_balance
-            FROM core_accountbalance ab
-            INNER JOIN core_account a ON ab.account_id = a.id
-            INNER JOIN core_accounttype at ON a.account_type_id = at.id
-            INNER JOIN core_currency cur ON a.currency_id = cur.id
-            INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
-            WHERE a.user_id = %s
-            ORDER BY dp.year DESC, dp.month DESC, at.name, a.name;
-            """,
-            [user_id],
-        )
-        bal_rows = cursor.fetchall()
-
-    bal_df = pd.DataFrame(
-        bal_rows,
-        columns=[
-            "Year",
-            "Month",
-            "Period",
-            "Account_Name",
-            "Account_Type",
-            "Currency",
-            "Balance",
-        ],
-    )
+    bal_df = _account_balances_export_dataframe(request.user)
 
     # Write both datasets to Excel
     output = BytesIO()
@@ -1615,7 +2209,7 @@ def export_data_xlsx(request):
 
     output.seek(0)
 
-    filename = f"data_export_{start_date}_{end_date}.xlsx"
+    filename = _export_filename("data_export", start_date, end_date)
     response = HttpResponse(
         output.getvalue(),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1667,7 +2261,10 @@ def clear_session_flag(request):
 @login_required
 def transaction_list_v2(request):
     """Modern transaction list view."""
-    return render(request, "core/transaction_list_v2.html")
+    context = {
+        "force_refresh_once": request.session.pop("transaction_changed", False)
+    }
+    return render(request, "core/transaction_list_v2.html", context)
 
 
 @login_required
@@ -1747,15 +2344,26 @@ def transactions_json_v2(request):
         elif sort_field == "type":
             order_clause = f"tx.type {'DESC' if sort_direction == 'desc' else 'ASC'}"
 
+        period_expr = (
+            "CAST(dp.year AS TEXT) || '-' || printf('%02d', dp.month)"
+            if connection.vendor == "sqlite"
+            else "CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0'))"
+        )
+        tag_agg_expr = (
+            "GROUP_CONCAT(tag.name, ', ')"
+            if connection.vendor == "sqlite"
+            else "STRING_AGG(tag.name, ', ')"
+        )
+
         with connection.cursor() as cursor:
             query = f"""
                 SELECT tx.id, tx.date, dp.year, dp.month, tx.type, tx.amount,
                        COALESCE(cat.name, '') AS category,
                        COALESCE(acc.name, 'No account') AS account,
                        COALESCE(curr.symbol, '€') AS currency,
-                       COALESCE(STRING_AGG(tag.name, ', '), '') AS tags,
+                       COALESCE({tag_agg_expr}, '') AS tags,
                        tx.is_system, tx.editable, tx.is_estimated,
-                       CONCAT(dp.year, '-', LPAD(dp.month::text, 2, '0')) AS period
+                       {period_expr} AS period
                 FROM core_transaction tx
                 LEFT JOIN core_category cat ON tx.category_id = cat.id
                 LEFT JOIN core_account acc ON tx.account_id = acc.id
@@ -2150,11 +2758,11 @@ def transactions_json_v2(request):
     response_json = json.dumps(response_data, sort_keys=True, cls=DjangoJSONEncoder)
     etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
 
-    if request.headers.get("If-None-Match") == etag:
+    if not force_refresh and request.headers.get("If-None-Match") == etag:
         return HttpResponse(status=304)
 
     ims = request.headers.get("If-Modified-Since")
-    if ims:
+    if not force_refresh and ims:
         ims_ts = parse_http_date_safe(ims)
         if ims_ts is not None and int(last_modified.timestamp()) <= ims_ts:
             return HttpResponse(status=304)
@@ -2184,7 +2792,7 @@ def transactions_totals_v2(request):
         data = request.GET.dict()
 
     logger.debug(f"📋 [transactions_totals_v2] Request data: {data}")
-
+    force_refresh = str(data.get("force", "")).lower() in ["1", "true", "yes"]
     # Get date range with wider defaults if not provided
     raw_start = data.get("date_start", request.GET.get("date_start"))
     raw_end = data.get("date_end", request.GET.get("date_end"))
@@ -2387,11 +2995,11 @@ def transactions_totals_v2(request):
     response_json = json.dumps(totals, sort_keys=True, cls=DjangoJSONEncoder)
     etag = hashlib.md5(response_json.encode("utf-8")).hexdigest()
 
-    if request.headers.get("If-None-Match") == etag:
+    if not force_refresh and request.headers.get("If-None-Match") == etag:
         return HttpResponse(status=304)
 
     ims = request.headers.get("If-Modified-Since")
-    if ims:
+    if not force_refresh and ims:
         ims_ts = parse_http_date_safe(ims)
         if ims_ts is not None and int(last_modified.timestamp()) <= ims_ts:
             return HttpResponse(status=304)
@@ -2434,12 +3042,13 @@ class CategoryUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     success_url = reverse_lazy("category_list")
 
 
-class CategoryDeleteView(OwnerQuerysetMixin, DeleteView):
+class CategoryDeleteView(SimpleDeleteFlowMixin, OwnerQuerysetMixin, DeleteView):
     """Delete category."""
 
     model = Category
     template_name = "core/confirms/category_confirm_delete.html"
     success_url = reverse_lazy("category_list")
+    success_message = 'Category "{object}" deleted successfully.'
 
 
 @login_required
@@ -2455,10 +3064,11 @@ def category_autocomplete(request):
 @login_required
 def tag_autocomplete(request):
     """Autocomplete for tags."""
-    term = request.GET.get("term", "")
-    tags = Tag.objects.filter(user=request.user, name__icontains=term).values_list(
-        "name", flat=True
-    )[:10]
+    term = (request.GET.get("term") or request.GET.get("q") or "").strip()
+    tags = Tag.objects.filter(user=request.user)
+    if term:
+        tags = tags.filter(name__icontains=term)
+    tags = tags.order_by("name").values_list("name", flat=True)[:50]
     return JsonResponse(list(tags), safe=False)
 
 
@@ -2556,12 +3166,13 @@ class AccountUpdateView(OwnerQuerysetMixin, UserInFormKwargsMixin, UpdateView):
     success_url = reverse_lazy("account_list")
 
 
-class AccountDeleteView(OwnerQuerysetMixin, DeleteView):
+class AccountDeleteView(SimpleDeleteFlowMixin, OwnerQuerysetMixin, DeleteView):
     """Delete account."""
 
     model = Account
     template_name = "core/confirms/account_confirm_delete.html"
     success_url = reverse_lazy("account_list")
+    success_message = 'Account "{object}" deleted successfully.'
 
 
 class AccountMergeView(LoginRequiredMixin, View):
@@ -2655,10 +3266,10 @@ def account_reorder(request):
 
 
 def _merge_duplicate_accounts(user):
-    """Função auxiliar otimizada para fundir contas duplicadas por nome."""
-    # Usar raw SQL para melhor performance
+    """Optimized helper to merge duplicate accounts by name."""
+    # Use raw SQL for better performance
     with connection.cursor() as cursor:
-        # Encontrar contas duplicadas
+        # Find duplicate accounts
         cursor.execute(
             """
             SELECT LOWER(TRIM(name)) as normalized_name, 
@@ -2675,19 +3286,19 @@ def _merge_duplicate_accounts(user):
         duplicates = cursor.fetchall()
 
         if not duplicates:
-            return  # Sem duplicados
+            return  # No duplicates found
 
         logger.info(
             f"Found {len(duplicates)} sets of duplicate accounts for user {user.id}"
         )
 
         for normalized_name, account_ids, count in duplicates:
-            primary_id = account_ids[0]  # Manter a conta mais antiga
-            duplicate_ids = account_ids[1:]  # Contas a serem fundidas
+            primary_id = account_ids[0]  # Keep the oldest account
+            duplicate_ids = account_ids[1:]  # Accounts that will be merged
 
             logger.debug(f"Merging accounts {duplicate_ids} into {primary_id}")
 
-            # Atualizar saldos em bulk
+            # Update balances in bulk
             cursor.execute(
                 """
                 UPDATE core_accountbalance 
@@ -2697,7 +3308,7 @@ def _merge_duplicate_accounts(user):
                 [primary_id, duplicate_ids],
             )
 
-            # Atualizar transações em bulk
+            # Update transactions in bulk
             cursor.execute(
                 """
                 UPDATE core_transaction 
@@ -2707,7 +3318,7 @@ def _merge_duplicate_accounts(user):
                 [primary_id, duplicate_ids],
             )
 
-            # Eliminar contas duplicadas
+            # Delete duplicate accounts
             cursor.execute(
                 """
                 DELETE FROM core_account 
@@ -2726,8 +3337,8 @@ def _merge_duplicate_accounts(user):
 
 @login_required
 def account_balance_view(request):
-    """Vista principal ultra otimizada para gestão de saldos de contas com detecção de alterações."""
-    # Determinar mês/ano selecionado
+    """Optimized main view for account balance management with change detection."""
+    # Determine the selected month and year
     today = date.today()
     try:
         year = int(request.GET.get("year", today.year))
@@ -2743,7 +3354,7 @@ def account_balance_view(request):
     # Check cache first for GET requests
     cache_key = f"account_balance_ultra_{request.user.id}_{year}_{month}"
 
-    # Obter ou criar período correspondente
+    # Get or create the matching period
     period, period_created = DatePeriod.objects.get_or_create(
         year=year,
         month=month,
@@ -2974,13 +3585,13 @@ def account_balance_view(request):
                     if balance_id:  # Update existing
                         balance_id_int = int(balance_id)
 
-                        # ✨ DETECÇÃO DE ALTERAÇÕES: Só gravar se valor mudou
+                        # Only save when the value actually changed
                         if balance_id_int in current_balances:
                             current_amount = current_balances[balance_id_int][
                                 "current_amount"
                             ]
 
-                            # Comparar valores com precisão decimal
+                            # Compare values with decimal precision
                             if new_amount != current_amount:
                                 balance_updates.append(
                                     (
@@ -4434,9 +5045,9 @@ def dashboard_kpis_json(request):
         )
 
         # Calculate averages
-        receita_media = total_income / max(num_months, 1)
-        despesa_media = total_expenses / max(num_months, 1)
-        investimento_medio = total_investments / max(num_months, 1)
+        average_income = total_income / max(num_months, 1)
+        average_expenses = total_expenses / max(num_months, 1)
+        average_invested_value = total_investments / max(num_months, 1)
 
         # Calculate savings rate
         savings_rate = (
@@ -4452,7 +5063,7 @@ def dashboard_kpis_json(request):
             else 0
         )
 
-        # Get patrimonio from filtered periods or latest available
+        # Get net worth from filtered periods or the latest available period
         if balance_periods:
             # Use filtered periods
             with connection.cursor() as cursor:
@@ -4473,7 +5084,7 @@ def dashboard_kpis_json(request):
                 """,
                     [user_id, balance_periods, user_id, balance_periods],
                 )
-                patrimonio_total = float(cursor.fetchone()[0] or 0)
+                net_worth_total = float(cursor.fetchone()[0] or 0)
         else:
             # Use latest available balance
             with connection.cursor() as cursor:
@@ -4491,10 +5102,10 @@ def dashboard_kpis_json(request):
                 """,
                     [user_id],
                 )
-                patrimonio_total = float(cursor.fetchone()[0] or 0)
+                net_worth_total = float(cursor.fetchone()[0] or 0)
 
         logger.debug(
-            f"💎 [dashboard_kpis_json] Calculated patrimonio: {patrimonio_total}"
+            f"[dashboard_kpis_json] Calculated net worth: {net_worth_total}"
         )
 
         # Calculate additional metrics
@@ -4511,32 +5122,32 @@ def dashboard_kpis_json(request):
             + min(categorized_percentage, 20)  # Max 20 points for categorization
             + min(investment_rate, 25)  # Max 25 points for investment rate
             + (
-                25 if patrimonio_total > 10000 else patrimonio_total / 10000 * 25
+                25 if net_worth_total > 10000 else net_worth_total / 10000 * 25
             )  # Max 25 points for net worth
         )
 
         return JsonResponse(
             {
-                "patrimonio_total": f"{patrimonio_total:,.0f} €",
-                "receita_media": f"{receita_media:,.0f} €",
-                "despesa_estimada_media": f"{despesa_media:,.0f} €",
-                "valor_investido_medio": f"{investimento_medio:,.0f} €",
-                "despesas_justificadas_pct": non_estimated_expense_pct,
-                "despesas_justificadas_pct_str": f"{non_estimated_expense_pct_dec}%",
-                "taxa_poupanca": f"{savings_rate:.1f}%",
-                "rentabilidade_mensal_media": "+0.0%",  # Placeholder for now
+                "net_worth_total": f"{net_worth_total:,.0f} €",
+                "average_income": f"{average_income:,.0f} €",
+                "average_estimated_expenses": f"{average_expenses:,.0f} €",
+                "average_invested_value": f"{average_invested_value:,.0f} €",
+                "verified_expenses_pct": non_estimated_expense_pct,
+                "verified_expenses_pct_str": f"{non_estimated_expense_pct_dec}%",
+                "savings_rate": f"{savings_rate:.1f}%",
+                "average_monthly_return": "+0.0%",  # Placeholder for now
                 "investment_rate": f"{investment_rate:.1f}%",
                 "wealth_growth": "+0.0%",  # Placeholder for now
                 "avg_transaction": f"{avg_transaction:.0f} €",
                 "total_transactions": total_transactions,
-                "num_meses": num_months,
+                "month_count": num_months,
                 "financial_health_score": health_score,
                 "account_breakdown": {
                     "savings": 0,  # Placeholder
                     "investments": 0,  # Placeholder
                     "checking": 0,  # Placeholder
                 },
-                "metodo_calculo": "Enhanced calculation with comprehensive metrics",
+                "calculation_method": "Enhanced calculation with comprehensive metrics",
                 "period_info": {
                     "months_analyzed": num_months,
                     "period_filter": bool(start_period and end_period),
@@ -4549,8 +5160,8 @@ def dashboard_kpis_json(request):
                     "total_expenses": total_expenses,
                     "total_investments": total_investments,
                     "total_transactions": total_transactions,
-                    "patrimonio_total": patrimonio_total,
-                    "previous_patrimonio": 0,  # Placeholder
+                    "net_worth_total": net_worth_total,
+                    "previous_net_worth": 0,  # Placeholder
                     "savings_rate": savings_rate,
                     "categorized_percentage": categorized_percentage,
                     "estimated_expenses_sum": estimated_expenses_sum,
@@ -4565,22 +5176,22 @@ def dashboard_kpis_json(request):
             {
                 "status": "error",
                 "error": str(e),
-                "patrimonio_total": "0 €",
-                "receita_media": "0 €",
-                "despesa_estimada_media": "0 €",
-                "valor_investido_medio": "0 €",
-                "despesas_justificadas_pct": 0.0,
-                "despesas_justificadas_pct_str": "0%",
-                "taxa_poupanca": "0.0%",
-                "rentabilidade_mensal_media": "+0.0%",
+                "net_worth_total": "0 €",
+                "average_income": "0 €",
+                "average_estimated_expenses": "0 €",
+                "average_invested_value": "0 €",
+                "verified_expenses_pct": 0.0,
+                "verified_expenses_pct_str": "0%",
+                "savings_rate": "0.0%",
+                "average_monthly_return": "+0.0%",
                 "investment_rate": "0.0%",
                 "wealth_growth": "+0.0%",
                 "avg_transaction": "0 €",
                 "total_transactions": 0,
-                "num_meses": 0,
+                "month_count": 0,
                 "financial_health_score": 0,
                 "account_breakdown": {"savings": 0, "investments": 0, "checking": 0},
-                "metodo_calculo": "Error fallback",
+                "calculation_method": "Error fallback",
                 "period_info": {"months_analyzed": 0, "period_filter": False},
             },
             status=500,

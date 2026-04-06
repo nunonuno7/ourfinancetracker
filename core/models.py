@@ -1,6 +1,6 @@
 # flake8: noqa
 # isort: skip_file
-# models.py - Versão Corrigida
+# models.py - Corrected Version
 
 import logging
 from datetime import date
@@ -144,7 +144,7 @@ class Account(models.Model):
                 }
             )
 
-    # CORRIGIDO: Account.save() com tratamento de exceções
+    # Improved: Account.save() with exception handling
     def save(self, *args, **kwargs):
         """Ensure `account_type` and `currency` are not null when saving."""
         if not self.account_type_id:
@@ -272,16 +272,16 @@ class Category(models.Model):
     @classmethod
     def get_fallback(cls, user):
         """
-        Garante que existe a categoria 'Other' (em inglês),
-        usada como fallback ao eliminar ou fundir categorias.
+        Ensure the "Other" category exists so it can be used as a fallback
+        when categories are deleted or merged.
         """
         return cls.objects.get_or_create(user=user, name="Other")[0]
 
     @classmethod
     def get_default(cls, user):
         """
-        🔁 Compatibilidade retroativa com código antigo que usava 'Geral'.
-        Agora redireciona para 'Other'.
+        Backward-compatible helper for older code that used "General".
+        It now redirects to "Other".
         """
         return cls.get_fallback(user)
 
@@ -336,7 +336,7 @@ class Transaction(models.Model):
 
     tags = models.ManyToManyField(
         "Tag",
-        through="TransactionTag",  # 🔗 ligação explícita
+        through="TransactionTag",  # Explicit relation table
         blank=True,
         related_name="transactions",
     )
@@ -382,22 +382,22 @@ class Transaction(models.Model):
         return f"{self.date} {self.get_type_display()} {self.amount}"
 
     def save(self, *args, **kwargs):
-        """Aplica defaults à transação antes de guardar."""
+        """Apply default values before saving the transaction."""
 
-        # Validação para transações do sistema - permitir bypass administrativo
+        # Validate system transactions while still allowing admin overrides
         force_save = kwargs.pop("force_save", False)
         if not self.editable and self.pk and not force_save:
             raise ValidationError("System transaction is read-only.")
 
-        # 🔒 Transações estimadas não podem ser editáveis
+        # Estimated transactions should always be read-only
         if self.is_estimated:
             self.editable = False
 
-        # 🚫 Garante que pelo menos um dos dois está definido
+        # Require at least one of date or period
         if not self.date and not self.period:
             raise ValueError("Transaction must have either a date or a period defined.")
 
-        # 🔁 Preenche período com base na data
+        # Populate the period from the date when needed
         if not self.period and self.date:
             self.period, _ = DatePeriod.objects.get_or_create(
                 year=self.date.year,
@@ -405,7 +405,7 @@ class Transaction(models.Model):
                 defaults={"label": self.date.strftime("%B %Y")},
             )
 
-        # 🔁 Preenche data com base no período
+        # Populate the date from the period when needed
         if not self.date and self.period:
             self.date = date(self.period.year, self.period.month, 1)
 
@@ -416,7 +416,7 @@ class Transaction(models.Model):
         # Note: Adjustment transactions are now created as normal Income/Expense transactions
         # with is_system=True and category="adjustments"
 
-        # Atribui categoria mais usada se não houver
+        # Default to the most-used category when none is provided
         if not self.pk and not self.category_id:
             most_used = (
                 Category.objects.filter(user=self.user, blocked=False)
@@ -578,7 +578,7 @@ class ExchangeRate(models.Model):
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 
-# CORRIGIDO: DatePeriod com validação de mês
+# Improved: DatePeriod with month validation
 from django.db import models
 
 
@@ -632,7 +632,7 @@ class Tag(models.Model):
     name = models.CharField(max_length=100)
     position = models.PositiveIntegerField(default=0)
 
-    # 💡 NOVO: ligação opcional à categoria
+    # Optional relationship to a category
     category = models.ForeignKey(
         "Category",
         null=True,

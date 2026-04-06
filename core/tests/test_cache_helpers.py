@@ -13,6 +13,14 @@ def test_clear_tx_cache_removes_keys():
     assert cache.get(key) is None
 
 
+@pytest.mark.django_db
+def test_clear_tx_cache_removes_v2_keys_outside_recent_month_window():
+    key = "tx_v2_1_2025-08-01_2025-08-31_date_desc"
+    cache.set(key, {"rows": []})
+    clear_tx_cache(1, force=True)
+    assert cache.get(key) is None
+
+
 def test_clear_tx_cache_handles_missing_keys():
     mock_cache = MagicMock()
     mock_cache.get.return_value = None

@@ -5,33 +5,35 @@ from core.models import Transaction
 from collections import defaultdict
 
 class Command(BaseCommand):
-    help = 'Remove duplicate system adjustment transactions'
+    help = "Remove duplicate system adjustment transactions"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--dry-run',
-            action='store_true',
-            help='Show what would be deleted without actually deleting'
+            "--dry-run",
+            action="store_true",
+            help="Show what would be deleted without actually deleting",
         )
         parser.add_argument(
-            '--user-id',
+            "--user-id",
             type=int,
-            help='Clean duplicates for specific user only'
+            help="Clean duplicates for a specific user only",
         )
 
     def handle(self, *args, **options):
-        dry_run = options['dry_run']
-        user_id = options.get('user_id')
+        dry_run = options["dry_run"]
+        user_id = options.get("user_id")
         
         if dry_run:
             self.stdout.write(self.style.WARNING('🔍 DRY RUN - No changes will be made'))
         
         # Find duplicate system transactions
-        filters = {'is_system': True, 'type': Transaction.Type.AJUSTE}
+        filters = {"is_system": True, "type": Transaction.Type.ADJUSTMENT}
         if user_id:
-            filters['user_id'] = user_id
+            filters["user_id"] = user_id
             
-        system_transactions = Transaction.objects.filter(**filters).order_by('user_id', 'date', 'id')
+        system_transactions = Transaction.objects.filter(**filters).order_by(
+            "user_id", "date", "id"
+        )
         
         # Group by user and date
         duplicates_by_user_date = defaultdict(list)

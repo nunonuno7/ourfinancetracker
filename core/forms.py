@@ -1,6 +1,6 @@
 # flake8: noqa
 # isort: skip_file
-# forms.py - Versão Corrigida
+# forms.py - Corrected Version
 from __future__ import annotations
 
 import logging
@@ -76,7 +76,7 @@ class TransactionForm(forms.ModelForm):
             attrs={
                 "class": "form-control",
                 "id": "id_tags_input",
-                "placeholder": _("Optional tags…"),
+                "placeholder": _("Optional tags..."),
             }
         ),
     )
@@ -88,7 +88,7 @@ class TransactionForm(forms.ModelForm):
             attrs={
                 "class": "form-control",
                 "id": "id_category",
-                "placeholder": _("Enter category…"),
+                "placeholder": _("Enter category..."),
                 "data-category-list": "",
             }
         ),
@@ -135,8 +135,8 @@ class TransactionForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.fields["account"].required = False
-        self.fields["account"].empty_label = "— No account —"
-        # Filtrar para excluir "System adjustment" (AJ) do formulário
+        self.fields["account"].empty_label = "-- No account --"
+        # Exclude "System adjustment" (AJ) from the form choices
         self.fields["type"].choices = [
             (value, label) for value, label in Transaction.Type.choices if value != "AJ"
         ]
@@ -161,7 +161,7 @@ class TransactionForm(forms.ModelForm):
                     f"{self.instance.period.year}-{self.instance.period.month:02d}"
                 )
 
-            # Garantir que a data está no formato correto (YYYY-MM-DD)
+            # Ensure the date uses the correct format (YYYY-MM-DD)
             if self.instance.date:
                 self.initial["date"] = self.instance.date.strftime("%Y-%m-%d")
 
@@ -291,18 +291,18 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         if self.instance:
             self.instance.user = self.user
 
-    # CORRIGIDO: Validação melhorada para "Other"
+    # Improved validation for "Other"
     def clean_name(self) -> str:
         name = strip_tags(self.cleaned_data.get("name", "").strip())
 
-        # Impedir criação manual de categorias reservadas
+        # Prevent manual creation of reserved categories
         if name.lower() in ["other", "outro", "others", "estimated transaction"]:
             if not self.instance.pk:
                 raise ValidationError(
                     "Reserved category names cannot be created manually."
                 )
 
-        # Verificar duplicados
+        # Check for duplicates
         if (
             self.user
             and Category.objects.filter(user=self.user, name__iexact=name)
@@ -319,7 +319,7 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         self.instance.name = new_name
         self.instance.user = self.user
 
-        # 🔁 Verificar se já existe uma categoria com esse nome
+        # If a category with the same name already exists, merge into it
         existing = (
             Category.objects.filter(user=self.user, name__iexact=new_name)
             .exclude(pk=self.instance.pk)
@@ -327,16 +327,16 @@ class CategoryForm(UserAwareMixin, forms.ModelForm):
         )
 
         if existing:
-            # ❌ Proibir fusão com "Other"
+            # Do not allow merging into "Other"
             if existing.name.strip().lower() == "other":
                 raise ValidationError("You cannot merge another category into 'Other'.")
 
-            # 🔁 Fundir: mover transações e apagar categoria atual
+            # Merge by moving transactions and removing the current category
             Transaction.objects.filter(category=self.instance).update(category=existing)
             if self.instance.pk:
                 self.instance.delete()
 
-            # ✅ Guardar referência para feedback na view
+            # Store a reference for view-level feedback
             self._merged_category = existing
             return existing
 
@@ -349,7 +349,7 @@ class CustomUserCreationForm(UserCreationForm):
     username = forms.CharField(
         min_length=3,
         max_length=150,
-        help_text="Required – between 3 and 150 characters.",
+        help_text="Required - between 3 and 150 characters.",
         widget=forms.TextInput(attrs={"placeholder": "e.g. myusername"}),
     )
 
@@ -412,7 +412,7 @@ class AccountBalanceForm(forms.ModelForm):
         if isinstance(self.cleaned_data.get("account"), Account):
             instance.account = self.cleaned_data["account"]
 
-        # 🔐 Garante que o saldo é atualizado mesmo se já existir
+        # Ensure the balance is updated even when the record already exists
         reported = self.cleaned_data.get("reported_balance")
         if reported is not None:
             instance.reported_balance = reported
@@ -444,11 +444,12 @@ AccountBalanceFormSet = modelformset_factory(
 
 class AccountForm(UserAwareMixin, forms.ModelForm):
     """
-    Cria/edita contas. Se existir outra conta com mesmo nome (case-insensitive),
-    pede confirmação para fundir saldos, desde que moeda e tipo coincidam.
+    Create or edit accounts. If another account with the same name exists
+    (case-insensitive), require confirmation before merging balances when the
+    currency and account type match.
     """
 
-    # ✅ campo explícito em vez de olhar para request.POST["confirm_merge"]
+    # Explicit field instead of reading request.POST["confirm_merge"] directly
     confirm_merge = forms.BooleanField(
         required=False,
         widget=forms.HiddenInput,
@@ -506,18 +507,18 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
         ).exclude(pk=self.instance.pk)
 
         if not duplicate_qs.exists():
-            return  # → sem duplicados
+            return  # No duplicates found
 
         duplicate = duplicate_qs.first()
 
-        # Não permitir fundir com conta especial “Cash” (regra de negócio)
+        # Do not allow merging into the special "Cash" account
         if duplicate.name.lower() == "cash":
             raise ValidationError(
-                _("Merging with the ‘Cash’ account is not allowed."),
+                _('Merging with the "Cash" account is not allowed.'),
                 code="merge_cash_forbidden",
             )
 
-        # Moeda/tipo diferentes ⇒ bloqueio duro
+        # Different currency or account type means a hard stop
         if (
             duplicate.account_type_id != account_type.id
             or duplicate.currency_id != currency.id
@@ -530,17 +531,17 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
                 code="merge_incompatible",
             )
 
-        # Alerta suave se ainda não confirmou
+        # Show a soft warning until the merge is confirmed
         if not confirm_merge:
             raise ValidationError(
                 _(
                     "An account with this name already exists. "
-                    "Tick ‘confirm_merge’ to merge balances."
+                    "Do you want to merge the balances?"
                 ),
                 code="merge_confirmation_required",
             )
 
-        # A partir daqui consideramos merge confirmado → guardamos ref.
+        # From this point on, treat the merge as confirmed and keep a reference
         self._duplicate_to_merge: Account | None = duplicate  # type: ignore[attr-defined]
 
     # ------------------------------------------------------------------ #
@@ -548,12 +549,13 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     def save(self, commit=True):
         """
-        - Guarda a nova/actual conta normalmente.
-        - Se houver duplicado e confirm_merge, funde saldos de forma transacional.
+        Save the new or updated account normally.
+        If there is a duplicate and confirm_merge is set, merge balances
+        transactionally.
         """
         name = self.cleaned_data["name"].strip()
         self.instance.name = name
-        self.instance.user = self.user  # ← garante owner correcto
+        self.instance.user = self.user  # Ensure the correct owner is set
 
         duplicate = getattr(self, "_duplicate_to_merge", None)
 
@@ -577,16 +579,16 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
     # ------------------------------------------------------------------ #
     def _merge_into(self, target):
         """
-        Move saldos da `self.instance` para `target` (duplicado), somando
-        reported_balance quando já existe o mesmo periodo.
-        Tudo dentro de uma transacção atómica.
+        Move balances from `self.instance` into `target`, summing
+        `reported_balance` when the same period already exists.
+        Everything runs inside a single atomic transaction.
         """
         with transaction.atomic():
-            # Salva/actualiza self.instance para obter FK consistentes
+            # Save or update self.instance first to keep foreign keys consistent
             if not self.instance.pk:
                 self.instance.save()
 
-            # 1) fundir saldos
+            # 1) Merge balances
             balances_qs = AccountBalance.objects.select_for_update().filter(
                 account=self.instance
             )
@@ -604,7 +606,7 @@ class AccountForm(UserAwareMixin, forms.ModelForm):
                     merged.save(update_fields=["reported_balance"])
                 bal.delete()
 
-            # 2) eliminar conta antiga, se existia na BD
+            # 2) Delete the old account if it already existed in the database
             if self.instance.pk:
                 self.instance.delete()
 

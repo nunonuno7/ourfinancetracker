@@ -1,6 +1,16 @@
 // Enhanced Dashboard JavaScript with Advanced Charts and Analysis
 import { api } from '../core/js/http.js';
 document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-dashboard-action]");
+    if (!actionButton) return;
+
+    if (actionButton.dataset.dashboardAction === "reload-page") {
+      event.preventDefault();
+      window.location.reload();
+    }
+  });
+
   // Global variables
   let columns = [];
   let rows = [];
@@ -40,7 +50,13 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const showKPILoadingState = () => {
-    const kpiElements = ['receita-media', 'despesa-estimada', 'verified-expenses', 'valor-investido', 'patrimonio-total'];
+    const kpiElements = [
+      "average-income",
+      "average-expenses",
+      "verified-expenses",
+      "average-investment",
+      "net-worth-total",
+    ];
     kpiElements.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
@@ -660,7 +676,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle"></i>
             Year slider initialization failed.
-            <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()">
+            <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-dashboard-action="reload-page">
               Refresh Page
             </button>
           </div>
@@ -672,7 +688,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle"></i>
             Period slider initialization failed.
-            <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()">
+            <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-dashboard-action="reload-page">
               Refresh Page
             </button>
           </div>
@@ -736,7 +752,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Don't reload same parameters within 2 seconds (reduced from 5)
     if (currentParams === lastKPIParams && (Date.now() - lastKPITime) < 2000) {
-      console.log('🔄 Ignorando chamada duplicada de KPIs:', currentParams);
+      console.log('🔄 Ignoring duplicate KPI call:', currentParams);
       return cachedKPI?.data || {};
     }
 
@@ -763,7 +779,7 @@ document.addEventListener("DOMContentLoaded", () => {
         url += `?start_period=${start}&end_period=${end}`;
       }
 
-      console.log('📊 Carregando KPIs:', url);
+      console.log('📊 Loading KPIs:', url);
       const response = await fetch(url);
       if (!response.ok) {
         console.warn('⚠️ KPIs endpoint not available, using mock data');
@@ -773,7 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const data = await response.json();
-      console.log('📊 KPIs carregados');
+      console.log('📊 KPIs loaded');
 
       // Cache the result
       kpiCache.set(cacheKey, {
@@ -790,7 +806,7 @@ document.addEventListener("DOMContentLoaded", () => {
       updateKPICards(data);
       return data;
     } catch (error) {
-      console.error('❌ Erro ao carregar KPIs:', error);
+      console.error("Error loading KPIs:", error);
       const mockData = generateMockKPIs();
       updateKPICards(mockData);
       return mockData;
@@ -829,12 +845,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
 
-      const totalPatrimonio = totalSavings + totalInvestments;
-      const prevPatrimonio = prevSavings + prevInvestments;
+      const totalNetWorth = totalSavings + totalInvestments;
+      const previousNetWorth = prevSavings + prevInvestments;
 
       // Calculate approximate growth
-      const wealthGrowth = prevPatrimonio > 0 ?
-        ((totalPatrimonio - prevPatrimonio) / prevPatrimonio * 100) : 0;
+      const wealthGrowth = previousNetWorth > 0 ?
+        ((totalNetWorth - previousNetWorth) / previousNetWorth * 100) : 0;
 
       // Estimate monthly flows from balance changes
       const estimatedIncome = Math.max(totalSavings - prevSavings + totalInvestments - prevInvestments + 200, 0);
@@ -843,15 +859,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const months = Math.max(allPeriods.length, 1);
       return {
-        patrimonio_total: `${totalPatrimonio.toLocaleString('en-GB')} €`,
-        receita_media: `${Math.round(estimatedIncome).toLocaleString('en-GB')} €`,
-        despesa_estimada_media: `${Math.round(estimatedExpenses).toLocaleString('en-GB')} €`,
-        valor_investido_medio: `${Math.round(totalInvestments / months).toLocaleString('en-GB')} €`,
-        despesas_justificadas_pct: "95%", // Optimistic estimate
-        taxa_poupanca: `${savingsRate.toFixed(1)}%`,
+        net_worth_total: `${totalNetWorth.toLocaleString("en-GB")} €`,
+        average_income: `${Math.round(estimatedIncome).toLocaleString("en-GB")} €`,
+        average_estimated_expenses: `${Math.round(estimatedExpenses).toLocaleString("en-GB")} €`,
+        average_invested_value: `${Math.round(totalInvestments / months).toLocaleString("en-GB")} €`,
+        verified_expenses_pct: 95,
+        verified_expenses_pct_str: "95%",
+        savings_rate: `${savingsRate.toFixed(1)}%`,
         wealth_growth: `${wealthGrowth >= 0 ? '+' : ''}${wealthGrowth.toFixed(1)}%`,
-        investment_rate: totalPatrimonio > 0 ? `${(totalInvestments / totalPatrimonio * 100).toFixed(1)}%` : "0%",
-        status: 'fast_estimate'
+        investment_rate: totalNetWorth > 0 ? `${(totalInvestments / totalNetWorth * 100).toFixed(1)}%` : "0%",
+        status: "fast_estimate",
       };
     } catch (error) {
       console.warn('Failed to generate enhanced approximate KPIs:', error);
@@ -861,13 +878,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const generateMockKPIs = () => {
     return {
-      patrimonio_total: "12,500 €",
-      receita_media: "2,500 €",
-      despesa_estimada_media: "1,800 €",
-      valor_investido_medio: "8,500 €",
-      despesas_justificadas_pct: "85%",
-      rentabilidade_mensal_media: "+2.5%",
-      status: 'mock_data'
+      net_worth_total: "12,500 €",
+      average_income: "2,500 €",
+      average_estimated_expenses: "1,800 €",
+      average_invested_value: "8,500 €",
+      verified_expenses_pct: 85,
+      verified_expenses_pct_str: "85%",
+      average_monthly_return: "+2.5%",
+      status: "mock_data",
     };
   };
 
@@ -984,18 +1002,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // Enhanced UI Update functions
   const updateKPICards = (data) => {
     const elements = {
-      'receita-media': data.receita_media || data.patrimonio_total || '0 €',
-      'despesa-estimada': data.despesa_estimada_media || data.receita_media || '0 €',
-      'verified-expenses': data.despesas_justificadas_pct_str || '0%',
-      'valor-investido': data.valor_investido_medio || '0 €',
-      'patrimonio-total': data.patrimonio_total || '0 €'
+      "average-income": data.average_income || data.net_worth_total || "0 €",
+      "average-expenses":
+        data.average_estimated_expenses || data.average_income || "0 €",
+      "verified-expenses": data.verified_expenses_pct_str || "0%",
+      "average-investment": data.average_invested_value || "0 €",
+      "net-worth-total": data.net_worth_total || "0 €",
     };
 
     // Calculate savings rate with safe parsing
-    const income = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const expense = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
+    const income =
+      parseFloat((data.average_income || "0").replace(/[^\d.-]/g, "")) || 0;
+    const expense =
+      parseFloat(
+        (data.average_estimated_expenses || "0").replace(/[^\d.-]/g, ""),
+      ) || 0;
     const savingsRate = income > 0 ? ((income - expense) / income * 100) : 0;
-    elements['taxa-poupanca'] = `${savingsRate.toFixed(1)}%`;
+    elements["savings-rate"] = `${savingsRate.toFixed(1)}%`;
 
     Object.entries(elements).forEach(([id, value]) => {
       const element = document.getElementById(id);
@@ -1049,13 +1072,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Helper function to generate enhanced KPI tooltips
   const generateKPITooltip = (id, value, data) => {
-    const receita = parseFloat((data.receita_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const despesa = parseFloat((data.despesa_estimada_media || '0').replace(/[^\d.-]/g, '')) || 0;
-    const investido = parseFloat((data.valor_investido_medio || '0').replace(/[^\d.-]/g, '')) || 0;
-    const patrimonio = parseFloat((data.patrimonio_total || '0').replace(/[^\d.-]/g, '')) || 0;
+    const income =
+      parseFloat((data.average_income || "0").replace(/[^\d.-]/g, "")) || 0;
+    const expense =
+      parseFloat(
+        (data.average_estimated_expenses || "0").replace(/[^\d.-]/g, ""),
+      ) || 0;
+    const invested =
+      parseFloat((data.average_invested_value || "0").replace(/[^\d.-]/g, "")) || 0;
 
-    switch(id) {
-      case 'receita-media':
+    switch (id) {
+      case "average-income":
         return `
           <div class="text-start">
             <strong>💰 Average Income</strong><br>
@@ -1064,37 +1091,40 @@ document.addEventListener("DOMContentLoaded", () => {
             <small>💡 Tip: Higher income enables better investment opportunities</small>
           </div>
         `;
-      case 'despesa-estimada':
-        const expenseRatio = receita > 0 ? (despesa / receita * 100).toFixed(1) : 0;
+      case "average-expenses": {
+        const expenseRatio = income > 0 ? (expense / income * 100).toFixed(1) : 0;
         return `
           <div class="text-start">
             <strong>💸 Average Expenses</strong><br>
             Current: <span class="text-danger">${value}</span><br>
             <small>📊 ${expenseRatio}% of income</small><br>
-            <small>💡 ${expenseRatio < 70 ? 'Excellent expense control!' : 'Consider reducing expenses'}</small>
+            <small>💡 ${expenseRatio < 70 ? "Excellent expense control!" : "Consider reducing expenses"}</small>
           </div>
         `;
-      case 'taxa-poupanca':
-        const rate = parseFloat(value.replace('%', ''));
+      }
+      case "savings-rate": {
+        const rate = parseFloat(value.replace("%", ""));
         return `
           <div class="text-start">
             <strong>📈 Savings Rate</strong><br>
-            Current: <span class="${rate >= 20 ? 'text-success' : rate >= 10 ? 'text-warning' : 'text-danger'}">${value}</span><br>
+            Current: <span class="${rate >= 20 ? "text-success" : rate >= 10 ? "text-warning" : "text-danger"}">${value}</span><br>
             <small>🎯 Target: 20% or higher</small><br>
-            <small>💡 ${rate >= 20 ? 'Outstanding!' : rate >= 10 ? 'Good progress' : 'Room for improvement'}</small>
+            <small>💡 ${rate >= 20 ? "Outstanding!" : rate >= 10 ? "Good progress" : "Room for improvement"}</small>
           </div>
         `;
-      case 'valor-investido':
-        const investmentRatio = receita > 0 ? (investido / receita * 100).toFixed(1) : 0;
+      }
+      case "average-investment": {
+        const investmentRatio = income > 0 ? (invested / income * 100).toFixed(1) : 0;
         return `
           <div class="text-start">
-            <strong>📈 Average Investement</strong><br>
+            <strong>📈 Average Investment</strong><br>
             Amount: <span class="text-primary">${value}</span><br>
             <small>📊 ${investmentRatio}% of income</small><br>
-            <small>💡 ${investmentRatio > 20 ? 'Strong investing habit' : investmentRatio > 10 ? 'Good progress' : 'Could invest more'}</small>
+            <small>💡 ${investmentRatio > 20 ? "Strong investing habit" : investmentRatio > 10 ? "Good progress" : "Could invest more"}</small>
           </div>
         `;
-      case 'patrimonio-total':
+      }
+      case "net-worth-total":
         return `
           <div class="text-start">
             <strong>💎 Total Net Worth</strong><br>
@@ -1885,7 +1915,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="alert alert-warning">
           <i class="fas fa-exclamation-triangle"></i>
           Period slider could not be initialized.
-          <button class="btn btn-sm btn-outline-primary ms-2" onclick="location.reload()">
+          <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-dashboard-action="reload-page">
             Refresh Page
           </button>
         </div>
@@ -2146,7 +2176,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       tbody.appendChild(totalRow);
     } catch (error) {
-      console.error('❌ Erro ao atualizar tabela:', error);
+      console.error("Error updating table:", error);
     }
   };
 
@@ -2158,7 +2188,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!periodSlider || !rows.length || !isInitialized) return;
 
     try {
-      console.log('🔄 Atualizando dashboard...');
+      console.log('🔄 Updating dashboard...');
 
       // Get current filter settings
       const [start, end] = periodSlider.noUiSlider.get();
@@ -2194,7 +2224,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       console.log('✅ Dashboard atualizado');
     } catch (error) {
-      console.error('❌ Erro ao atualizar dashboard:', error);
+      console.error("Error updating dashboard:", error);
     }
   };
 
@@ -2210,7 +2240,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const element = document.getElementById(inputId);
     if (element) {
       element.addEventListener('change', (e) => {
-        console.log(`🔄 [${inputId}] Filtro alterado:`, e.target.checked || e.target.value);
+        console.log(`🔄 [${inputId}] Filter changed:`, e.target.checked || e.target.value);
         updateDashboard();
       });
     }
@@ -2414,6 +2444,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  const buildDashboardExportUrl = () => {
+    const params = new URLSearchParams();
+
+    if (periodSlider?.noUiSlider) {
+      const [start, end] = periodSlider.noUiSlider.get();
+      const formatPeriodForApi = (period) => {
+        const [month, year] = period.split('/');
+        const fullYear = 2000 + parseInt(year, 10);
+        const monthNum = getMonthNumberInt(month);
+        const monthString = monthNum.toString().padStart(2, '0');
+        return `${fullYear}-${monthString}`;
+      };
+
+      params.set('start_period', formatPeriodForApi(start));
+      params.set('end_period', formatPeriodForApi(end));
+    }
+
+    const query = params.toString();
+    return query ? `/dashboard/export/?${query}` : '/dashboard/export/';
+  };
+
   // Export functions
   document.getElementById('export-excel')?.addEventListener('click', () => {
     if (periodSlider?.noUiSlider) {
@@ -2434,7 +2485,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById('export-pdf')?.addEventListener('click', () => {
-    window.print();
+    window.open(buildDashboardExportUrl(), '_blank', 'noopener');
   });
 
   document.getElementById('backup-data')?.addEventListener('click', () => {

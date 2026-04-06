@@ -30,3 +30,18 @@ def test_account_balance_prev_next_links_rollover_correctly(
     html = response.content.decode()
     assert f'href="?year={prev_year}&month={prev_month}"' in html
     assert f'href="?year={next_year}&month={next_month}"' in html
+
+
+@pytest.mark.django_db
+def test_account_balance_period_card_shows_first_day_of_selected_month(
+    client, django_user_model
+):
+    user = django_user_model.objects.create_user(username="period-user", password="p")
+    client.force_login(user)
+
+    response = client.get(reverse("account_balance"), {"year": 2026, "month": 6})
+
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert '>1 Jun 2026<' in html
+    assert 'type="month" id="selector" value="2026-06"' in html

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% load filtros %}
+{% load filters %}
 {% now "Y-m-d" as today %}
 
 {% block extra_head %}
@@ -444,11 +444,71 @@
       </div>
     </div>
   </div>
+
+  <div
+    class="modal fade"
+    id="duplicateMonthModal"
+    tabindex="-1"
+    aria-labelledby="duplicateMonthModalLabel"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="duplicate-month-form">
+          <div class="modal-header">
+            <h5 class="modal-title" id="duplicateMonthModalLabel">
+              Duplicate Transactions
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-3">
+              Choose the target month for the
+              <strong id="duplicate-selection-count">0</strong>
+              selected transaction(s).
+            </p>
+            <label for="duplicate-target-month" class="form-label"
+              >Target month</label
+            >
+            <input
+              type="month"
+              id="duplicate-target-month"
+              class="form-control"
+              required
+            />
+            <div class="form-text">
+              The original day will be kept when possible. If that day does not
+              exist in the selected month, the last day of that month will be
+              used.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Duplicate
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script nonce="{{ request.csp_nonce }}">
   // Ensure CSRF token is available for AJAX calls
   window.csrfToken = "{{ csrf_token }}";
+  window.transactionListShouldForceRefresh = {{ force_refresh_once|yesno:"true,false" }};
 </script>
 
 <!-- Page-specific dependencies -->

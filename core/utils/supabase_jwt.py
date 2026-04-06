@@ -7,7 +7,7 @@ def generate_supabase_jwt(user_id: int, role: str = "authenticated",
     now = datetime.datetime.utcnow()
     payload: Dict[str, Any] = {
         "sub": str(user_id),
-        "user_id": user_id,         # <= é este campo que a função SQL lê
+        "user_id": user_id,         # <= this is the field read by the SQL function
         "role": role,
         "iat": now,
         "exp": now + datetime.timedelta(minutes=expires_minutes),

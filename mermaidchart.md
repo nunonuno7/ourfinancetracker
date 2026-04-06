@@ -6,7 +6,7 @@ config:
 ---
 erDiagram
 
-%% === AUTENTICAÇÃO E PERMISSÕES ===
+%% === AUTHENTICATION AND PERMISSIONS ===
 
 auth_user{
 
@@ -98,7 +98,7 @@ django_content_type{
 
 }
 
-%% === LOG DE AÇÕES ADMIN ===
+%% === ADMIN ACTION LOG ===
 
 django_admin_log{
 
@@ -122,7 +122,7 @@ django_admin_log{
 
 }
 
-%% === ENTIDADES FINANCEIRAS ===
+%% === FINANCIAL ENTITIES ===
 
 core_account{
 
@@ -162,7 +162,7 @@ core_currency{
 
     varchar code
 
-    %% símbolo monetário, varchar(4)
+    %% currency symbol, varchar(4)
 
     varchar symbol
 
@@ -386,7 +386,7 @@ date_period{
 
 }
 
-%% === RELAÇÕES ENTRE ENTIDADES ===
+%% === ENTITY RELATIONSHIPS ===
 
 auth_user||--o{auth_user_groups: has_groups
 

@@ -1,7 +1,9 @@
 import pytest
-from django.urls import reverse
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.urls import reverse
+
+from accounts.views import _login_attempt_cache_keys
 
 
 @pytest.mark.django_db
@@ -24,9 +26,10 @@ def test_login_success_resets_failed_attempts(client, settings):
     cache.clear()
     User.objects.create_user(username="tester", password="secret")
     url = reverse("accounts:login")
+    attempts_key, _ = _login_attempt_cache_keys("tester")
     for _ in range(4):
         client.post(url, {"username": "tester", "password": "wrong"})
-    assert cache.get("failed_tester") == 4
+    assert cache.get(attempts_key) == 4
     response = client.post(url, {"username": "tester", "password": "secret"})
     assert response.status_code == 302
-    assert cache.get("failed_tester") is None
+    assert cache.get(attempts_key) is None

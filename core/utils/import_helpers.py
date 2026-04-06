@@ -91,7 +91,7 @@ class BulkTransactionImporter:
         logger.debug(f"📋 [BulkTransactionImporter] Input columns: {list(df.columns)}")
 
         # Required columns
-        required_cols = ['Date', 'Type', 'Amount', 'Category', 'Account']
+        required_cols = ['Date', 'Type', 'Amount', 'Category']
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             logger.error(f"❌ [BulkTransactionImporter] Missing columns: {missing_cols}")
@@ -105,7 +105,16 @@ class BulkTransactionImporter:
         rows_after_dropna = len(df_clean)
         logger.info(f"🔢 [BulkTransactionImporter] Rows after dropna: {initial_rows} → {rows_after_dropna}")
 
-        df_clean['Account'] = df_clean['Account'].astype(str).str.strip()
+        if 'Account' not in df_clean.columns:
+            df_clean['Account'] = ''
+
+        df_clean['Account'] = (
+            df_clean['Account']
+            .fillna('')
+            .astype(str)
+            .str.strip()
+            .replace({'nan': '', 'none': '', 'null': '', 'None': ''})
+        )
         df_clean['Category'] = df_clean['Category'].astype(str).str.strip()
 
         logger.debug(f"🏦 [BulkTransactionImporter] Unique accounts: {df_clean['Account'].nunique()}")
@@ -128,11 +137,11 @@ class BulkTransactionImporter:
             logger.debug(f"📊 [BulkTransactionImporter] Original types: {original_types}")
 
             df_clean['Type'] = df_clean['Type'].astype(str).str.strip().str.upper()
-            df_clean.loc[df_clean['Type'].isin(['INVESTMENT', 'INVEST', 'IV', 'INVESTIMENTO']), 'Type'] = 'IV'
-            df_clean.loc[df_clean['Type'].isin(['INCOME', 'IN', 'RECEITA', 'RENDIMENTO']), 'Type'] = 'IN'
-            df_clean.loc[df_clean['Type'].isin(['EXPENSE', 'EX', 'DESPESA', 'GASTO']), 'Type'] = 'EX'
-            df_clean.loc[df_clean['Type'].isin(['TRANSFER', 'TR', 'TRANSFERENCIA']), 'Type'] = 'TR'
-            df_clean.loc[df_clean['Type'].isin(['ADJUSTMENT', 'AJ', 'AJUSTE']), 'Type'] = 'AJ'
+            df_clean.loc[df_clean['Type'].isin(['INVESTMENT', 'INVEST', 'IV']), 'Type'] = 'IV'
+            df_clean.loc[df_clean['Type'].isin(['INCOME', 'IN']), 'Type'] = 'IN'
+            df_clean.loc[df_clean['Type'].isin(['EXPENSE', 'EX']), 'Type'] = 'EX'
+            df_clean.loc[df_clean['Type'].isin(['TRANSFER', 'TR']), 'Type'] = 'TR'
+            df_clean.loc[df_clean['Type'].isin(['ADJUSTMENT', 'AJ']), 'Type'] = 'AJ'
 
         except Exception as e:
             logger.error(f"❌ [BulkTransactionImporter] Data conversion error: {str(e)}")
@@ -212,7 +221,7 @@ class BulkTransactionImporter:
 
     def _bulk_create_accounts(self, df: pd.DataFrame) -> Dict:
         """Bulk create accounts."""
-        unique_accounts = df['Account'].unique()
+        unique_accounts = [name for name in df['Account'].unique() if name]
 
         # Check existing accounts
         existing_accounts = {
@@ -262,11 +271,12 @@ class BulkTransactionImporter:
 
                 # Get objects from lookups
                 period = period_lookup.get((year, month))
-                account = account_lookup.get(row['Account'])
+                account_name = row.get('Account', '')
+                account = account_lookup.get(account_name) if account_name else None
                 category = category_lookup.get(row['Category'])
 
-                if not (period and account and category):
-                    logger.warning(f"Skipping row {index}: missing period, account, or category")
+                if not (period and category):
+                    logger.warning(f"Skipping row {index}: missing period or category")
                     continue
 
                 # Ensure Income and Expense amounts are positive

@@ -11,7 +11,7 @@
       <td>{{ obj.next_run_at }}</td>
       <td>
         <a href="{% url 'recurring_update' obj.pk %}">Edit</a>
-        <a href="{% url 'recurring_delete' obj.pk %}">Delete</a>
+        <a href="{% url 'recurring_delete' obj.pk %}" data-confirm-message="Delete this recurring transaction? This action cannot be undone." data-confirm-method="post">Delete</a>
       </td>
     </tr>
     {% empty %}

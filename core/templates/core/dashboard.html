@@ -1,4 +1,4 @@
-{% extends "base.html" %} {% load static filtros %} {% block title %}Advanced Financial
+{% extends "base.html" %} {% load static filters %} {% block title %}Advanced Financial
 Dashboard{% endblock %} {% block extra_head %}
 <!-- Mobile-specific optimizations -->
 <meta name="format-detection" content="telephone=no">
@@ -34,12 +34,12 @@ Dashboard{% endblock %} {% block extra_head %}
          title="Next period">
         <i class="fas fa-chevron-right"></i>
       </a>
-      <button type="button" 
-              class="btn btn-outline-info btn-sm" 
-              onclick="window.location.href='/dashboard/?mode=period'"
-              title="Go to default period">
+      <a href="/dashboard/?mode=period"
+         class="btn btn-outline-info btn-sm"
+         title="Go to default period"
+         aria-label="Go to default period">
         <i class="fas fa-home"></i>
-      </button>
+      </a>
     </div>
   </div>
   {% if mode == 'period' %}
@@ -208,11 +208,11 @@ Dashboard{% endblock %} {% block extra_head %}
                   </small>
                 </div>
                 <div class="progress progress-thin">
-                  <div class="progress-bar bg-{% if savings_rate > 20 %}success{% elif savings_rate > 10 %}warning{% else %}danger{% endif %} savings-rate-bar"></div>
+                  <div
+                    class="progress-bar bg-{% if savings_rate > 20 %}success{% elif savings_rate > 10 %}warning{% else %}danger{% endif %} savings-rate-bar"
+                    data-progress-width="{% if savings_rate > 0 %}{{ savings_rate }}{% else %}0{% endif %}"
+                  ></div>
                 </div>
-                <style nonce="{{ request.csp_nonce }}">
-                  .savings-rate-bar { width: {% if savings_rate > 0 %}{{ savings_rate }}{% else %}0{% endif %}% }
-                </style>
               </div>
 
               {% widthratio kpis.investments kpis.income 100 as investment_rate %}
@@ -222,11 +222,11 @@ Dashboard{% endblock %} {% block extra_head %}
                   <small class="fw-bold text-primary">{{ investment_rate }}%</small>
                 </div>
                 <div class="progress progress-thin">
-                  <div class="progress-bar bg-primary investment-rate-bar"></div>
+                  <div
+                    class="progress-bar bg-primary investment-rate-bar"
+                    data-progress-width="{{ investment_rate }}"
+                  ></div>
                 </div>
-                <style nonce="{{ request.csp_nonce }}">
-                  .investment-rate-bar { width: {{ investment_rate }}% }
-                </style>
               </div>
 
               {% if savings_rate > 20 %}
@@ -273,10 +273,10 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
           <h5 class="mb-0"><i class="fas fa-tags"></i> Expenses by Category</h5>
           <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" onclick="toggleChartView('list')">
+            <button type="button" class="btn btn-outline-secondary" data-chart-view-toggle="list" aria-pressed="false">
               <i class="fas fa-list"></i> List
             </button>
-            <button class="btn btn-outline-secondary active" onclick="toggleChartView('chart')">
+            <button type="button" class="btn btn-outline-secondary active" data-chart-view-toggle="chart" aria-pressed="true">
               <i class="fas fa-chart-bar"></i> Chart
             </button>
           </div>
@@ -320,10 +320,10 @@ Dashboard{% endblock %} {% block extra_head %}
                       <div class="progress mt-2 progress-thin">
                         {% if kpis.expenses > 0 %}
                         {% widthratio item.total kpis.expenses 100 as progress_pct %}
-                        <div class="progress-bar bg-danger category-progress-{{ forloop.counter }}"></div>
-                        <style nonce="{{ request.csp_nonce }}">
-                          .category-progress-{{ forloop.counter }} { width: {{ progress_pct }}% }
-                        </style>
+                        <div
+                          class="progress-bar bg-danger"
+                          data-progress-width="{{ progress_pct }}"
+                        ></div>
                         {% endif %}
                       </div>
                     </div>
@@ -352,6 +352,13 @@ Dashboard{% endblock %} {% block extra_head %}
   <script nonce="{{ request.csp_nonce }}">
     document.addEventListener('DOMContentLoaded', function() {
       console.log('🎯 Period mode dashboard loading...');
+
+      document.querySelectorAll('[data-progress-width]').forEach(function(bar) {
+        const width = bar.dataset.progressWidth;
+        if (width !== undefined && width !== '') {
+          bar.style.width = `${width}%`;
+        }
+      });
 
       // Wait for Chart.js to be available
       if (typeof Chart === 'undefined') {
@@ -727,23 +734,35 @@ Dashboard{% endblock %} {% block extra_head %}
       console.log('✅ Period mode dashboard loaded successfully');
     });
 
-    function toggleChartView(view) {
+    function toggleChartView(view, button) {
       const chartView = document.getElementById('chart-view');
       const listView = document.getElementById('list-view');
-      const buttons = document.querySelectorAll('.btn-group button');
+      const buttons = document.querySelectorAll('[data-chart-view-toggle]');
 
-      buttons.forEach(btn => btn.classList.remove('active'));
+      buttons.forEach(btn => {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+      });
 
       if (view === 'chart') {
-        if (chartView) chartView.style.display = 'block';
-        if (listView) listView.style.display = 'none';
-        event.target.classList.add('active');
+        if (chartView) chartView.classList.remove('d-none');
+        if (listView) listView.classList.add('d-none');
       } else {
-        if (chartView) chartView.style.display = 'none';
-        if (listView) listView.style.display = 'block';
-        event.target.classList.add('active');
+        if (chartView) chartView.classList.add('d-none');
+        if (listView) listView.classList.remove('d-none');
+      }
+
+      if (button) {
+        button.classList.add('active');
+        button.setAttribute('aria-pressed', 'true');
       }
     }
+
+    document.querySelectorAll('[data-chart-view-toggle]').forEach(button => {
+      button.addEventListener('click', function() {
+        toggleChartView(this.dataset.chartViewToggle, this);
+      });
+    });
   </script>
   {% else %}
   <!-- Header with Advanced Controls -->
@@ -865,7 +884,7 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="d-flex justify-content-between align-items-center">
             <div>
               <h6 class="card-title kpi-title text-success mb-1">⬆️ Average Income</h6>
-              <h4 class="card-text kpi-value mb-0" id="receita-media">€ 0</h4>
+              <h4 class="card-text kpi-value mb-0" id="average-income">€ 0</h4>
               <small class="text-muted kpi-subtitle">Monthly</small>
             </div>
             <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="avg_income" data-kpi-mode="higher" aria-label="Configure Average Income">⚙️</button>
@@ -873,10 +892,10 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-success w-0"
-              id="receita-progress"
+              id="income-progress"
             ></div>
           </div>
-          <small class="text-muted kpi-footer" id="receita-change">-</small>
+          <small class="text-muted kpi-footer" id="income-change">-</small>
         </div>
       </div>
     </div>
@@ -886,7 +905,7 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="d-flex justify-content-between align-items-center">
             <div>
               <h6 class="card-title kpi-title text-danger mb-1">⬇️ Expenses</h6>
-              <h4 class="card-text kpi-value mb-0" id="despesa-estimada">€ 0</h4>
+              <h4 class="card-text kpi-value mb-0" id="average-expenses">€ 0</h4>
               <small class="text-muted kpi-subtitle">Calculated</small>
             </div>
             <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="avg_expense" data-kpi-mode="lower" aria-label="Configure Expenses">⚙️</button>
@@ -894,10 +913,10 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-danger w-0"
-              id="despesa-progress"
+              id="expense-progress"
             ></div>
           </div>
-          <small class="text-muted kpi-footer" id="despesa-change">-</small>
+          <small class="text-muted kpi-footer" id="expense-change">-</small>
         </div>
       </div>
     </div>
@@ -914,8 +933,8 @@ Dashboard{% endblock %} {% block extra_head %}
         <div class="card-body text-center p-3">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="card-title kpi-title text-info mb-1">📈 Average Investement</h6>
-              <h4 class="card-text kpi-value mb-0" id="valor-investido">€ 0</h4>
+              <h6 class="card-title kpi-title text-info mb-1">📈 Average Investment</h6>
+              <h4 class="card-text kpi-value mb-0" id="average-investment">€ 0</h4>
               <small class="text-muted kpi-subtitle">Monthly Avg</small>
             </div>
             <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="invested_amount" data-kpi-mode="higher" aria-label="Configure Invested Amount">⚙️</button>
@@ -923,10 +942,10 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-info w-0"
-              id="investido-progress"
+              id="investment-progress"
             ></div>
           </div>
-          <small class="text-muted kpi-footer" id="investido-change">-</small>
+          <small class="text-muted kpi-footer" id="investment-change">-</small>
         </div>
       </div>
     </div>
@@ -936,7 +955,7 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="d-flex justify-content-between align-items-center">
             <div>
               <h6 class="card-title kpi-title text-purple mb-1">⚖️ Total Net Worth</h6>
-              <h4 class="card-text kpi-value mb-0" id="patrimonio-total">€ 0</h4>
+              <h4 class="card-text kpi-value mb-0" id="net-worth-total">€ 0</h4>
               <small class="text-muted kpi-subtitle">Current</small>
             </div>
             <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="net_worth" data-kpi-mode="higher" aria-label="Configure Total Net Worth">⚙️</button>
@@ -944,10 +963,10 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-purple w-0"
-              id="patrimonio-progress"
+              id="net-worth-progress"
             ></div>
           </div>
-          <small class="text-muted kpi-footer" id="patrimonio-change">-</small>
+          <small class="text-muted kpi-footer" id="net-worth-change">-</small>
         </div>
       </div>
     </div>
@@ -957,7 +976,7 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="d-flex justify-content-between align-items-center">
             <div>
               <h6 class="card-title kpi-title text-dark mb-1">⚖️ Savings Rate</h6>
-              <h4 class="card-text kpi-value mb-0" id="taxa-poupanca">0%</h4>
+              <h4 class="card-text kpi-value mb-0" id="savings-rate">0%</h4>
               <small class="text-muted kpi-subtitle">of income</small>
             </div>
             <button class="btn btn-sm btn-link p-0 kpi-config-btn" data-kpi-key="savings_rate" data-kpi-mode="higher" aria-label="Configure Savings Rate">⚙️</button>
@@ -965,10 +984,10 @@ Dashboard{% endblock %} {% block extra_head %}
           <div class="progress kpi-progress mt-2 progress-xthin">
             <div
               class="progress-bar bg-dark w-0"
-              id="poupanca-progress"
+              id="savings-progress"
             ></div>
           </div>
-          <small class="text-muted kpi-footer" id="poupanca-change">-</small>
+          <small class="text-muted kpi-footer" id="savings-change">-</small>
         </div>
       </div>
     </div>
@@ -1045,7 +1064,7 @@ Dashboard{% endblock %} {% block extra_head %}
               <i class="fas fa-file-excel"></i> Excel
             </button>
             <button class="btn btn-outline-secondary" id="export-pdf">
-              <i class="fas fa-file-pdf"></i> PDF
+              <i class="fas fa-file-lines"></i> Report
             </button>
           </div>
         </div>

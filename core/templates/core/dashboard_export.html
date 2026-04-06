@@ -1,0 +1,544 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Export{% endblock %}
+
+{% block navbar %}{% endblock navbar %}
+
+{% block extra_head %}
+<style nonce="{{ request.csp_nonce }}">
+  .dashboard-export-page {
+    max-width: 1280px;
+    margin: 0 auto;
+    color: #24282c;
+  }
+
+  .export-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .export-hero {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #24282c 0%, #3b4b52 100%);
+    color: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 12px 28px rgba(36, 40, 44, 0.18);
+  }
+
+  .export-hero h1 {
+    margin: 0 0 0.4rem;
+    font-size: 2rem;
+    line-height: 1.1;
+  }
+
+  .export-hero p {
+    margin: 0;
+    max-width: 54ch;
+    color: rgba(255, 255, 255, 0.84);
+  }
+
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .hero-meta-card {
+    padding: 0.9rem 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+  }
+
+  .hero-meta-label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.68);
+  }
+
+  .hero-meta-value {
+    display: block;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .summary-card {
+    padding: 1rem 1.1rem;
+    background: #ffffff;
+    border: 1px solid #d9dbdd;
+    border-top: 5px solid #a0a4a8;
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(36, 40, 44, 0.08);
+  }
+
+  .summary-card.tone-success {
+    border-top-color: #3ab49e;
+  }
+
+  .summary-card.tone-primary {
+    border-top-color: #0d6efd;
+  }
+
+  .summary-card.tone-danger {
+    border-top-color: #dc3545;
+  }
+
+  .summary-card.tone-info {
+    border-top-color: #17a2b8;
+  }
+
+  .summary-card.tone-dark {
+    border-top-color: #24282c;
+  }
+
+  .summary-card.tone-warning {
+    border-top-color: #ffc107;
+  }
+
+  .summary-title {
+    display: block;
+    margin-bottom: 0.55rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5c656c;
+  }
+
+  .summary-value {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 1.45rem;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  .summary-detail {
+    display: block;
+    font-size: 0.84rem;
+    color: #5c656c;
+  }
+
+  .report-layout {
+    display: grid;
+    gap: 1.2rem;
+  }
+
+  .section-card {
+    background: #ffffff;
+    border: 1px solid #d9dbdd;
+    border-radius: 18px;
+    padding: 1.1rem 1.2rem 1.2rem;
+    box-shadow: 0 8px 18px rgba(36, 40, 44, 0.06);
+  }
+
+  .section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.95rem;
+  }
+
+  .section-heading h2 {
+    margin: 0 0 0.2rem;
+    font-size: 1.15rem;
+  }
+
+  .section-heading p,
+  .section-heading span {
+    margin: 0;
+    font-size: 0.88rem;
+    color: #5c656c;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e3e7e9;
+    border-radius: 14px;
+  }
+
+  .report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    background: #ffffff;
+  }
+
+  .report-table th,
+  .report-table td {
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #e3e7e9;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .report-table thead th {
+    background: #24282c;
+    color: #ffffff;
+    font-weight: 700;
+    text-align: left;
+  }
+
+  .report-table thead .year-group {
+    background: #e9e5db;
+    color: #24282c;
+    text-align: center;
+  }
+
+  .report-table tbody tr:nth-child(odd) {
+    background: #fafbfb;
+  }
+
+  .report-table .align-right {
+    text-align: right;
+  }
+
+  .report-table .total-row td,
+  .report-table .total-row th {
+    background: #fff5d8;
+    font-weight: 700;
+  }
+
+  .report-table .total-cell {
+    font-weight: 700;
+  }
+
+  .tone-positive {
+    color: #227c6a;
+  }
+
+  .tone-negative {
+    color: #b02a37;
+  }
+
+  .tone-neutral {
+    color: #5c656c;
+  }
+
+  .empty-copy {
+    margin: 0;
+    color: #5c656c;
+  }
+
+  .empty-state {
+    padding: 2rem;
+    background: #ffffff;
+    border: 1px solid #d9dbdd;
+    border-radius: 18px;
+    text-align: center;
+  }
+
+  .page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  @media (max-width: 900px) {
+    .export-hero {
+      grid-template-columns: 1fr;
+    }
+
+    .hero-meta {
+      grid-template-columns: 1fr;
+    }
+
+    .export-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+
+  @media print {
+    body {
+      margin: 0;
+      background: #ffffff !important;
+    }
+
+    .container {
+      max-width: none !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    .no-print {
+      display: none !important;
+    }
+
+    .dashboard-export-page {
+      max-width: none;
+    }
+
+    .export-hero,
+    .summary-card,
+    .section-card {
+      box-shadow: none;
+    }
+
+    .section-card,
+    .summary-card,
+    .table-wrap {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .report-table thead {
+      display: table-header-group;
+    }
+  }
+</style>
+{% endblock extra_head %}
+
+{% block content %}
+<div class="dashboard-export-page">
+  <div class="export-actions no-print">
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i> Dashboard
+    </a>
+    <button type="button" class="btn btn-primary" id="print-export-page">
+      <i class="fas fa-print"></i> Print / Save PDF
+    </button>
+  </div>
+
+  <header class="export-hero">
+    <div>
+      <h1>Financial Export</h1>
+      <p>
+        Clean report page for exporting the dashboard without the sliders, charts controls
+        and layout noise from the interactive screen.
+      </p>
+    </div>
+    <div class="hero-meta">
+      <div class="hero-meta-card">
+        <span class="hero-meta-label">Range</span>
+        <span class="hero-meta-value">{{ selected_range_label }}</span>
+      </div>
+      <div class="hero-meta-card">
+        <span class="hero-meta-label">Generated</span>
+        <span class="hero-meta-value">{{ generated_at|date:"d/m/Y H:i" }}</span>
+      </div>
+      <div class="hero-meta-card">
+        <span class="hero-meta-label">Start Period</span>
+        <span class="hero-meta-value">{{ selected_start_period|default:"Auto" }}</span>
+      </div>
+      <div class="hero-meta-card">
+        <span class="hero-meta-label">End Period</span>
+        <span class="hero-meta-value">{{ selected_end_period|default:"Auto" }}</span>
+      </div>
+    </div>
+  </header>
+
+  {% if has_data %}
+  <section class="summary-grid">
+    {% for card in summary_cards %}
+    <article class="summary-card tone-{{ card.tone }}">
+      <span class="summary-title">{{ card.title }}</span>
+      <strong class="summary-value">{{ card.value }}</strong>
+      <span class="summary-detail">{{ card.detail }}</span>
+    </article>
+    {% endfor %}
+  </section>
+
+  <div class="report-layout">
+    <section class="section-card">
+      <div class="section-heading">
+        <div>
+          <h2>Monthly Performance</h2>
+          <p>Cash flow and net worth evolution for the selected period range.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="align-right">Income</th>
+              <th class="align-right">Expenses</th>
+              <th class="align-right">Investments</th>
+              <th class="align-right">Net Cash</th>
+              <th class="align-right">Net Worth</th>
+              <th class="align-right">Verified Expenses</th>
+              <th class="align-right">Portfolio Return</th>
+              <th class="align-right">Transactions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in period_rows %}
+            <tr>
+              <th scope="row">{{ row.label }}</th>
+              <td class="align-right tone-{{ row.income_tone }}">{{ row.income_display }}</td>
+              <td class="align-right tone-{{ row.expenses_tone }}">{{ row.expenses_display }}</td>
+              <td class="align-right tone-{{ row.investments_tone }}">{{ row.investments_display }}</td>
+              <td class="align-right tone-{{ row.net_cash_tone }}">{{ row.net_cash_display }}</td>
+              <td class="align-right tone-{{ row.balance_tone }}">{{ row.balance_display }}</td>
+              <td class="align-right">{{ row.verified_pct_display }}</td>
+              <td class="align-right tone-{{ row.portfolio_return_tone }}">{{ row.portfolio_return_display }}</td>
+              <td class="align-right">{{ row.transaction_count }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if balance_tables %}
+      {% for table in balance_tables %}
+      <section class="section-card {% if forloop.counter > 1 %}page-break{% endif %}">
+        <div class="section-heading">
+          <div>
+            <h2>Detailed Balance Matrix{% if table.is_split %} {{ table.index }}{% endif %}</h2>
+            <p>Account balances grouped by account type and currency.</p>
+          </div>
+          {% if table.is_split %}
+          <span>Chunk {{ table.index }} of {{ balance_tables|length }}</span>
+          {% endif %}
+        </div>
+        <div class="table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th rowspan="2">Type</th>
+                <th rowspan="2">Currency</th>
+                {% for group in table.year_groups %}
+                <th colspan="{{ group.span }}" class="year-group">{{ group.year }}</th>
+                {% endfor %}
+                <th rowspan="2" class="align-right">Chunk Total</th>
+              </tr>
+              <tr>
+                {% for period in table.periods %}
+                <th>{{ period.month }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in table.rows %}
+              <tr>
+                <th scope="row">{{ row.type }}</th>
+                <td>{{ row.currency }}</td>
+                {% for cell in row.cells %}
+                <td class="align-right tone-{{ cell.tone }}">{{ cell.display }}</td>
+                {% endfor %}
+                <td class="align-right total-cell">{{ row.chunk_total_display }}</td>
+              </tr>
+              {% endfor %}
+              <tr class="total-row">
+                <th scope="row" colspan="2">Grand Total</th>
+                {% for total in table.totals %}
+                <td class="align-right tone-{{ total.tone }}">{{ total.display }}</td>
+                {% endfor %}
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% endfor %}
+    {% endif %}
+
+    <section class="section-card">
+      <div class="section-heading">
+        <div>
+          <h2>Expense Breakdown</h2>
+          <p>Categories ranked by total spending in the selected range.</p>
+        </div>
+      </div>
+      {% if expense_categories %}
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="align-right">Transactions</th>
+              <th class="align-right">Amount</th>
+              <th class="align-right">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in expense_categories %}
+            <tr>
+              <th scope="row">{{ item.name }}</th>
+              <td class="align-right">{{ item.count }}</td>
+              <td class="align-right">{{ item.amount_display }}</td>
+              <td class="align-right">{{ item.percentage_display }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-copy">No expense data is available for this range.</p>
+      {% endif %}
+    </section>
+
+    <section class="section-card">
+      <div class="section-heading">
+        <div>
+          <h2>Latest Account Snapshot</h2>
+          <p>Positive balances from the most recent month in the export range.</p>
+        </div>
+      </div>
+      {% if latest_accounts %}
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Type</th>
+              <th>Currency</th>
+              <th class="align-right">Balance</th>
+              <th class="align-right">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in latest_accounts %}
+            <tr>
+              <th scope="row">{{ item.name }}</th>
+              <td>{{ item.type }}</td>
+              <td>{{ item.currency }}</td>
+              <td class="align-right">{{ item.balance_display }}</td>
+              <td class="align-right">{{ item.share_display }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-copy">No balance snapshot was found for the latest month in scope.</p>
+      {% endif %}
+    </section>
+  </div>
+  {% else %}
+  <section class="empty-state">
+    <h2>No data available for export</h2>
+    <p class="empty-copy">Adjust the selected range in the dashboard and open this report again.</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script nonce="{{ request.csp_nonce }}">
+  document.getElementById('print-export-page')?.addEventListener('click', () => {
+    window.print();
+  });
+</script>
+{% endblock extra_js %}

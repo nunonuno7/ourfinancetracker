@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% load widget_tweaks %}
-{% load filtros %}
+{% load filters %}
 
 {% block title %}
 {% if form.instance.pk %}Edit Transaction{% else %}New Transaction{% endif %} - OurFinanceTracker
@@ -108,7 +108,14 @@
         <!-- TAGS -->
         <div class="mb-3" id="tags-field">
           {{ form.tags_input.label_tag }}
-          {{ form.tags_input|add_class:"form-control" }}
+          <input
+            type="text"
+            name="{{ form.tags_input.name }}"
+            id="{{ form.tags_input.id_for_label }}"
+            value="{{ form.tags_input.value|default_if_none:'' }}"
+            class="form-control"
+            data-tags-list="{{ tag_list|join:', '|escape }}">
+          {% if form.tags_input.errors %}<div class="text-danger small">{{ form.tags_input.errors.0 }}</div>{% endif %}
         </div>
 
         <!-- ACCOUNT -->

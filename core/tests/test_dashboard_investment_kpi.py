@@ -37,7 +37,7 @@ class TestDashboardInvestmentKPI(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         avg = float(
-            data["valor_investido_medio"]
+            data["average_invested_value"]
             .replace("€", "")
             .replace(",", "")
             .strip()  # noqa: E501

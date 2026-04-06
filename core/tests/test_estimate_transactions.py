@@ -5,7 +5,6 @@ from datetime import date
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from django.db import connection
 
 from core.models import (
     AccountType,
@@ -119,10 +118,6 @@ def test_estimate_creates_single_estimated_transaction_for_period(
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(
-    connection.vendor == "sqlite",
-    reason="transactions_json_v2 uses PostgreSQL-specific SQL",
-)
 def test_estimated_transaction_is_visible_on_transactions_v2_page(
     client, user, savings_account
 ):
@@ -191,10 +186,6 @@ def test_manual_transaction_after_estimate_triggers_reestimate_warning(
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(
-    connection.vendor == "sqlite",
-    reason="transactions_json_v2 uses PostgreSQL-specific SQL",
-)
 def test_reestimate_replaces_previous_estimate_and_keeps_single_per_period(
     client, user, savings_account, category
 ):
