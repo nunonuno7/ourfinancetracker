@@ -1,115 +1,61 @@
-# ──────────────────────────────
-# Python / Django environment
-# ──────────────────────────────
-# Virtual env (if it exists inside the repository)
-venv/
+# Python / Django
 .venv/
-
-# Python-generated dependencies
+venv/
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.pyc
-
-# Local database
-db.sqlite3
-
-# Incomplete migration files
 *.py,cover
 *.py,orig
 
-# Dotenv
+# Local env / secrets
 .env
 .env_*
 .env.*
 .env_production
-.env.example
-
-# Only templates without secrets
-!.env.template
+!.env.example
 !.env.sample
+!.env.template
 
-# Redundant but explicit:
-.env_production
-# Log & runtime files
+# Local databases
+db.sqlite3
+testdb.sqlite3
+
+# Logs / runtime files
 *.log
-*.pot
 *.pid
+*.pot
 
-# ──────────────────────────────
-# Tools / IDEs
-# ──────────────────────────────
+# Test / tool caches
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build / generated assets
+/staticfiles/
+/media/
+/tmp/
+/output/
+
+# Editors / IDEs
 .vscode/
 .idea/
 *.code-workspace
 
-# ──────────────────────────────
-# Operating systems & backups
-# ──────────────────────────────
+# Operating system / backup files
 .DS_Store
 Thumbs.db
 *.swp
 *.bak
 *.tmp
 
-# ──────────────────────────────
-# Optional project content
-# (notebooks, docs, roadmaps, etc.)
-# ──────────────────────────────
+# Optional local work files
 *.ipynb
 notebook.py
 roadmap_notebook.py
 notas.txt
-
-# ──────────────────────────────
-# Git command noise files
-# ──────────────────────────────
-h git switch --detach *
-# Accidental file from previous git command
-h git switch --detach 8f10c2a
-
-# ──────────────────────────────
-# Build / static files
-#  (keep these if you run collectstatic
-#   in the repository itself; otherwise
-#   ignore them)
-# ──────────────────────────────
-/staticfiles/
-/media/
-
-# Dotenv
-.env
-.env_*
-!.env.example
-!.env.template
-!.env.sample
-.env_production
-
-# Dotenv
-.env
-.env_*
-.env.*
-.env_production
-!.env.template
-!.env.sample
-!.env.example
-!.env.example
-
-# Keep the example environment file versioned
-!.env.example
-
-# Keep the example environment file versioned
-!.env.example
-
-# Test artifacts
-.hypothesis/
-
-# Dotenv
-.env
-.env_*
-.env.*
-.env_production
-!.env.template
-!.env.sample
-!.env.example
