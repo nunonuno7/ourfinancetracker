@@ -68,6 +68,7 @@ class TestDashboardPeriodMode(TestCase):
         expected_query = urlencode(
             {
                 "type": Transaction.Type.EXPENSE,
+                "category_id": self.category.id,
                 "category": self.category.name,
                 "period": "2025-01",
                 "date_start": "2025-01-01",

@@ -65,6 +65,64 @@ def _account_balances_export_dataframe(user: User) -> pd.DataFrame:
     )
 
 
+def _copy_previous_balances_portable(
+    *,
+    user: User,
+    target_period: DatePeriod,
+    prev_year: int,
+    prev_month: int,
+) -> tuple[int, int, int]:
+    """Copy balances with ORM primitives for databases without PostgreSQL upserts."""
+    source_balances = list(
+        AccountBalance.objects.filter(
+            account__user=user,
+            period__year=prev_year,
+            period__month=prev_month,
+        )
+        .only("account_id", "reported_balance")
+        .order_by("account_id")
+    )
+
+    account_ids = [balance.account_id for balance in source_balances]
+    existing_balances = {
+        balance.account_id: balance
+        for balance in AccountBalance.objects.filter(
+            account__user=user,
+            period=target_period,
+            account_id__in=account_ids,
+        ).only("id", "account_id", "reported_balance")
+    }
+
+    balances_to_create = []
+    balances_to_update = []
+    updated_count = 0
+
+    for source_balance in source_balances:
+        existing_balance = existing_balances.get(source_balance.account_id)
+        if existing_balance is None:
+            balances_to_create.append(
+                AccountBalance(
+                    account_id=source_balance.account_id,
+                    period=target_period,
+                    reported_balance=source_balance.reported_balance,
+                )
+            )
+            continue
+
+        if existing_balance.reported_balance != source_balance.reported_balance:
+            existing_balance.reported_balance = source_balance.reported_balance
+            balances_to_update.append(existing_balance)
+        updated_count += 1
+
+    if balances_to_create:
+        AccountBalance.objects.bulk_create(balances_to_create)
+
+    if balances_to_update:
+        AccountBalance.objects.bulk_update(balances_to_update, ["reported_balance"])
+
+    return len(balances_to_create), updated_count, len(source_balances)
+
+
 @login_required
 def account_balance_view(request):
     """Optimized main view for account balance management with change detection."""
@@ -772,40 +830,51 @@ def copy_previous_balances_view(request):
                 defaults={"label": f"{date(year, month, 1).strftime('%B %Y')}"},
             )
 
-            # Use bulk upsert with raw SQL for maximum performance
-            cursor.execute(
-                """
-                WITH source_data AS (
+            if connection.vendor == "postgresql":
+                # Use a single bulk upsert on PostgreSQL, where the CTE and RETURNING
+                # logic are fully supported and materially faster on larger datasets.
+                cursor.execute(
+                    """
+                    WITH source_data AS (
+                        SELECT
+                            ab.account_id,
+                            ab.reported_balance,
+                            %s as target_period_id
+                        FROM core_accountbalance ab
+                        INNER JOIN core_account a ON ab.account_id = a.id
+                        INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
+                        WHERE a.user_id = %s AND dp.year = %s AND dp.month = %s
+                    ),
+                    upsert AS (
+                        INSERT INTO core_accountbalance (account_id, period_id, reported_balance)
+                        SELECT account_id, target_period_id, reported_balance
+                        FROM source_data
+                        ON CONFLICT (account_id, period_id)
+                        DO UPDATE SET reported_balance = EXCLUDED.reported_balance
+                        RETURNING
+                            CASE WHEN xmax = 0 THEN 1 ELSE 0 END as is_insert,
+                            account_id
+                    )
                     SELECT
-                        ab.account_id,
-                        ab.reported_balance,
-                        %s as target_period_id
-                    FROM core_accountbalance ab
-                    INNER JOIN core_account a ON ab.account_id = a.id
-                    INNER JOIN core_dateperiod dp ON ab.period_id = dp.id
-                    WHERE a.user_id = %s AND dp.year = %s AND dp.month = %s
-                ),
-                upsert AS (
-                    INSERT INTO core_accountbalance (account_id, period_id, reported_balance)
-                    SELECT account_id, target_period_id, reported_balance
-                    FROM source_data
-                    ON CONFLICT (account_id, period_id)
-                    DO UPDATE SET reported_balance = EXCLUDED.reported_balance
-                    RETURNING
-                        CASE WHEN xmax = 0 THEN 1 ELSE 0 END as is_insert,
-                        account_id
+                        SUM(is_insert) as created_count,
+                        COUNT(*) - SUM(is_insert) as updated_count,
+                        COUNT(*) as total_count
+                    FROM upsert
+                """,
+                    [target_period.id, request.user.id, prev_year, prev_month],
                 )
-                SELECT
-                    SUM(is_insert) as created_count,
-                    COUNT(*) - SUM(is_insert) as updated_count,
-                    COUNT(*) as total_count
-                FROM upsert
-            """,
-                [target_period.id, request.user.id, prev_year, prev_month],
-            )
 
-            result = cursor.fetchone()
-            created_count, updated_count, total_count = result
+                result = cursor.fetchone()
+                created_count, updated_count, total_count = result
+            else:
+                created_count, updated_count, total_count = (
+                    _copy_previous_balances_portable(
+                        user=request.user,
+                        target_period=target_period,
+                        prev_year=prev_year,
+                        prev_month=prev_month,
+                    )
+                )
 
             logger.info(
                 f"Copy operation completed: {created_count} created, {updated_count} updated"

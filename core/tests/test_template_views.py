@@ -5,7 +5,13 @@ import pytest
 from django.db import connection
 from django.urls import reverse
 
-from core.models import Tag, Transaction
+from core.models import (
+    Account,
+    Tag,
+    Transaction,
+    get_default_account_type,
+    get_default_currency,
+)
 
 
 @pytest.mark.django_db
@@ -55,11 +61,19 @@ def test_transaction_list_v2_bootstraps_initial_filters_from_query_string(
 ):
     user = django_user_model.objects.create_user(username="list-filters-user", password="p")
     client.force_login(user)
+    account = Account.objects.create(
+        user=user,
+        name="Wallet",
+        account_type=get_default_account_type(),
+        currency=get_default_currency(),
+    )
+    category = user.categories.create(name="Groceries")
 
     response = client.get(
         reverse("transaction_list_v2"),
         {
-            "category": "Groceries",
+            "account_id": account.id,
+            "category_id": category.id,
             "period": "2025-01",
             "date_start": "2025-01-01",
             "date_end": "2025-01-31",
@@ -69,9 +83,16 @@ def test_transaction_list_v2_bootstraps_initial_filters_from_query_string(
 
     assert response.status_code == 200
     html = response.content.decode()
+    assert response.context["initial_filters"]["account_id"] == account.id
+    assert response.context["initial_filters"]["account"] == account.name
+    assert response.context["initial_filters"]["category_id"] == category.id
+    assert response.context["initial_filters"]["category"] == category.name
     assert f'action="{reverse("transaction_list_v2")}"' in html
     assert 'id="transaction-list-initial-filters"' in html
-    assert '"category": "Groceries"' in html
+    assert f'"account_id": {account.id}' in html
+    assert f'"category_id": {category.id}' in html
+    assert f'"account": "{account.name}"' in html
+    assert f'"category": "{category.name}"' in html
     assert '"period": "2025-01"' in html
     assert '"date_start": "2025-01-01"' in html
     assert '"date_end": "2025-01-31"' in html
@@ -102,3 +123,14 @@ def test_transaction_list_v2_uses_shared_default_date_range(
     assert 'id="transaction-list-defaults"' in html
     assert '"date_start": "2024-01-01"' in html
     assert '"date_end": "2026-04-06"' in html
+
+
+@pytest.mark.django_db
+def test_transactions_v2_legacy_path_redirects_to_transactions(client, django_user_model):
+    user = django_user_model.objects.create_user(username="list-legacy-user", password="p")
+    client.force_login(user)
+
+    response = client.get("/transactions-v2/")
+
+    assert response.status_code == 302
+    assert response.url == reverse("transaction_list")

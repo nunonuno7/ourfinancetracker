@@ -296,3 +296,93 @@ def test_estimation_summaries_year_filter_returns_january_to_december(
     labels = [summary["period"] for summary in payload["summaries"]]
     assert "2025-01" in labels
     assert "2025-12" in labels
+
+
+@pytest.mark.django_db
+def test_delete_estimated_transaction_by_period_only_removes_current_period_estimates(
+    user, savings_account, category
+):
+    period_aug = make_period("2025-08")
+    period_sep = make_period("2025-09")
+
+    estimated_aug = make_tx(
+        user=user,
+        account=savings_account,
+        category=category,
+        period=period_aug,
+        amount=Decimal("200"),
+        tx_type="EX",
+        is_estimated=True,
+    )
+    make_tx(
+        user=user,
+        account=savings_account,
+        category=category,
+        period=period_aug,
+        amount=Decimal("25"),
+        tx_type="EX",
+        is_estimated=False,
+    )
+    estimated_sep = make_tx(
+        user=user,
+        account=savings_account,
+        category=category,
+        period=period_sep,
+        amount=Decimal("150"),
+        tx_type="EX",
+        is_estimated=True,
+    )
+
+    service = FinanceEstimationService(user)
+    deleted_count = service.delete_estimated_transaction_by_period(period_aug)
+
+    assert deleted_count == 1
+    assert not Transaction.objects.filter(id=estimated_aug.id).exists()
+    assert Transaction.objects.filter(id=estimated_sep.id).exists()
+    assert (
+        Transaction.objects.filter(
+            user=user,
+            period=period_aug,
+            is_estimated=False,
+        ).count()
+        == 1
+    )
+
+
+@pytest.mark.django_db
+def test_estimate_transaction_for_period_skips_small_missing_amounts(
+    user, savings_account
+):
+    period_aug = make_period("2025-08")
+    period_sep = make_period("2025-09")
+    set_balance(savings_account, period_aug, Decimal("1000"))
+    set_balance(savings_account, period_sep, Decimal("990"))
+
+    service = FinanceEstimationService(user)
+    estimated_tx = service.estimate_transaction_for_period(period_aug)
+
+    assert estimated_tx is None
+    assert not Transaction.objects.filter(
+        user=user,
+        period=period_aug,
+        is_estimated=True,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_estimation_summary_returns_error_status_when_balance_lookup_fails(
+    user, savings_account, monkeypatch
+):
+    period_aug = make_period("2025-08")
+    service = FinanceEstimationService(user)
+
+    def boom(_period):
+        raise RuntimeError("balance lookup failed")
+
+    monkeypatch.setattr(service, "get_period_balances", boom)
+
+    summary = service.get_estimation_summary(period_aug)
+
+    assert summary["status"] == "error"
+    assert summary["estimated_amount"] == 0
+    assert summary["details"] == {}

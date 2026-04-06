@@ -8,7 +8,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from core.models import Account, Category, Tag, Transaction
+from core.models import Account, Category, DatePeriod, Tag, Transaction
 from core.views import transactions_json_v2, transactions_totals_v2
 
 
@@ -16,7 +16,9 @@ def _cash_account_for(user):
     return Account.objects.get(user=user, name="Cash")
 
 
-def _make_transaction(*, user, account, category, amount, tx_type, tx_date):
+def _make_transaction(
+    *, user, account, category, amount, tx_type, tx_date, period=None
+):
     return Transaction.objects.create(
         user=user,
         account=account,
@@ -24,6 +26,7 @@ def _make_transaction(*, user, account, category, amount, tx_type, tx_date):
         amount=Decimal(amount),
         type=tx_type,
         date=tx_date,
+        period=period,
     )
 
 
@@ -81,7 +84,9 @@ def test_transactions_json_v2_paginates_sorted_results(client, django_user_model
     assert payload["page_size"] == 1
     assert [tx["id"] for tx in payload["transactions"]] == [tx_mid.id]
     assert payload["transactions"][0]["amount"] == float(tx_mid.amount)
-    assert payload["filters"]["categories"] == ["General"]
+    assert payload["filters"]["categories"] == [
+        {"value": category.id, "label": "General"}
+    ]
 
 
 @pytest.mark.django_db
@@ -103,6 +108,7 @@ def test_transactions_json_v2_filter_options_follow_other_active_filters(
 
     groceries = Category.objects.create(user=user, name="Groceries")
     rent = Category.objects.create(user=user, name="Rent")
+    feb_2024 = DatePeriod.objects.create(year=2024, month=2, label="2024-02")
 
     wallet_expense = _make_transaction(
         user=user,
@@ -111,6 +117,7 @@ def test_transactions_json_v2_filter_options_follow_other_active_filters(
         amount="45.00",
         tx_type=Transaction.Type.EXPENSE,
         tx_date=date(2024, 2, 1),
+        period=feb_2024,
     )
     _make_transaction(
         user=user,
@@ -119,6 +126,71 @@ def test_transactions_json_v2_filter_options_follow_other_active_filters(
         amount="800.00",
         tx_type=Transaction.Type.EXPENSE,
         tx_date=date(2024, 2, 2),
+        period=feb_2024,
+    )
+    _make_transaction(
+        user=user,
+        account=cash,
+        category=groceries,
+        amount="2500.00",
+        tx_type=Transaction.Type.INCOME,
+        tx_date=date(2024, 2, 3),
+        period=feb_2024,
+    )
+
+    response = client.get(
+        reverse("transactions_json_v2"),
+        {
+            "date_start": "2024-01-01",
+            "date_end": "2024-12-31",
+            "type": Transaction.Type.EXPENSE,
+            "account_id": cash.id,
+            "include_system": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert [tx["id"] for tx in payload["transactions"]] == [wallet_expense.id]
+    assert payload["transactions"][0]["account_id"] == cash.id
+    assert payload["transactions"][0]["category_id"] == groceries.id
+    assert payload["filters"]["types"] == [
+        {"value": Transaction.Type.EXPENSE, "label": "Expense"},
+        {"value": Transaction.Type.INCOME, "label": "Income"},
+    ]
+    assert payload["filters"]["categories"] == [
+        {"value": groceries.id, "label": "Groceries"}
+    ]
+    assert payload["filters"]["accounts"] == [
+        {"value": cash.id, "label": "Cash"},
+        {"value": second_account.id, "label": "Savings Pot"},
+    ]
+    assert payload["filters"]["periods"] == [
+        {"value": "2024-02", "label": "2024-02"}
+    ]
+
+
+@pytest.mark.django_db
+def test_transactions_json_v2_keeps_legacy_name_filters_compatible(
+    client, django_user_model
+):
+    user = django_user_model.objects.create_user(
+        username="json-v2-legacy-filters", password="p"
+    )
+    client.force_login(user)
+
+    cash = _cash_account_for(user)
+    groceries = Category.objects.create(user=user, name="Groceries")
+    Category.objects.create(user=user, name="Rent")
+
+    matching_expense = _make_transaction(
+        user=user,
+        account=cash,
+        category=groceries,
+        amount="45.00",
+        tx_type=Transaction.Type.EXPENSE,
+        tx_date=date(2024, 2, 1),
     )
     _make_transaction(
         user=user,
@@ -136,16 +208,14 @@ def test_transactions_json_v2_filter_options_follow_other_active_filters(
             "date_end": "2024-12-31",
             "type": Transaction.Type.EXPENSE,
             "account": "Cash",
+            "category": "Grocer",
             "include_system": "true",
         },
     )
 
     assert response.status_code == 200
     payload = response.json()
-
-    assert [tx["id"] for tx in payload["transactions"]] == [wallet_expense.id]
-    assert payload["filters"]["categories"] == ["Groceries"]
-    assert payload["filters"]["accounts"] == ["Cash", "Savings Pot"]
+    assert [tx["id"] for tx in payload["transactions"]] == [matching_expense.id]
 
 
 @pytest.mark.django_db

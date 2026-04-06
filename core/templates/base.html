@@ -226,7 +226,7 @@
           </li>
           <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' or request.resolver_match.url_name == 'transaction_list_v2' %}active{% endif %}"
-               href="{% url 'transaction_list_v2' %}">
+               href="{% url 'transaction_list' %}">
               <i class="bi bi-table me-1"></i> Transactions
             </a>
           </li>

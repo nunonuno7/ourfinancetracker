@@ -20,7 +20,7 @@
         class="d-flex justify-content-between align-items-center flex-wrap gap-3"
       >
         <div>
-          <h1 class="mb-1">💳 Transactions 2.0</h1>
+          <h1 class="mb-1">💳 Transactions</h1>
           <small class="text-muted" id="total-count"
             >Loading transactions...</small
           >
@@ -61,7 +61,7 @@
     </div>
     <div class="collapse show" id="filtersCollapse">
       <div class="card-body py-3">
-        <form id="filter-form" method="get" action="{% url 'transaction_list_v2' %}">
+        <form id="filter-form" method="get" action="{% url 'transaction_list' %}">
           <!-- Primary Filters Row - Always visible -->
           <div class="row g-2 mb-3">
             <div class="col-lg-3 col-md-6">
@@ -88,10 +88,11 @@
               <label class="form-label fw-bold small">📊 Type</label>
               <select id="filter-type" class="form-select form-select-sm">
                 <option value="">All Types</option>
-                <option value="Expense">💸 Expense</option>
-                <option value="Income">💰 Income</option>
-                <option value="Investment">📈 Investment</option>
-                <option value="Transfer">🔁 Transfer</option>
+                <option value="EX">Expense</option>
+                <option value="IN">Income</option>
+                <option value="IV">Investment</option>
+                <option value="TR">Transfer</option>
+                <option value="AJ">Adjustment</option>
               </select>
             </div>
             <div class="col-lg-2 col-md-3 col-6">
@@ -526,6 +527,8 @@
 />
 
 <!-- Custom JavaScript -->
+<script src="{% static 'js/transaction_list_filter_utils.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
+<script src="{% static 'js/transaction_list_state_utils.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
 <script src="{% static 'js/transaction_list_v2.js' %}" defer nonce="{{ request.csp_nonce }}"></script>
 
 {% endblock %}

@@ -86,12 +86,13 @@ def build_charts_for_period(tx):
     """Return expense totals grouped by category for charting."""
     expense_rows = (
         tx.filter(type=Transaction.Type.EXPENSE)
-        .values("category__name")
+        .values("category__id", "category__name")
         .annotate(total=Sum("amount"))
         .order_by("-total")
     )
     return [
         {
+            "category_id": row["category__id"],
             "category": row["category__name"] or "Uncategorised",
             "category_filter": row["category__name"] or "",
             "label": row["category__name"] or "Uncategorised",
@@ -245,6 +246,7 @@ def dashboard(request):
                     + urlencode(
                         {
                             "type": Transaction.Type.EXPENSE,
+                            "category_id": chart["category_id"],
                             "category": chart["category_filter"],
                             "period": period,
                             "date_start": period_start,

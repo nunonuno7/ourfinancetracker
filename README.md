@@ -94,6 +94,12 @@ python manage.py runserver
 
 Open `http://127.0.0.1:8000/` in your browser. Do not use `https://` with Django's built-in development server.
 
+## Database support
+
+- PostgreSQL is the primary runtime target for production and CI parity.
+- SQLite is still supported for local development, quick test feedback, and fallback setups where no database URL is configured.
+- Some high-traffic views contain PostgreSQL-optimized SQL paths. SQLite should be treated as a convenience environment, not as the source of truth for production behavior.
+
 ## 🌐 Additional domains
 
 To authorise new domains in `ALLOWED_HOSTS` or the list of CSRF trusted origins, set additional environment variables:
@@ -125,8 +131,33 @@ Distributed under the MIT licence. See the `LICENSE` file for more details.
 ## 🧪 Running tests
 
 ```bash
-DATABASE_URL=sqlite:////tmp/testdb.sqlite3 pytest
+# Quick local run (SQLite, default in settings_test)
+pytest
+
+# PostgreSQL parity run
+TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/ourfinancetracker_ci pytest
 ```
+
+`settings_test.py` prefers `TEST_DATABASE_URL` when present and otherwise falls back to SQLite. GitHub Actions runs both variants.
+
+## Compatibility notes
+
+- New transaction list links and integrations should send `account_id` and `category_id`.
+- Legacy name-based filters (`account` and `category`) are still accepted temporarily for older deep links and stored session state, but they should be treated as transitional compatibility only.
+
+## Browser smoke tests
+
+Smoke tests use Playwright against Django's static live server and are intentionally isolated from the default `pytest` run.
+
+```bash
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+RUN_BROWSER_SMOKE=1 pytest -q core/tests/test_browser_smoke.py
+```
+
+For PostgreSQL parity, set `TEST_DATABASE_URL` before the command above. The CI workflow runs these browser smoke tests on Ubuntu with PostgreSQL.
+
+When you run browser smoke tests on local SQLite, only the non-AJAX flows are expected to run reliably. The full browser suite is validated in CI against PostgreSQL.
 
 To ensure the test suite passes before code is pushed, install the
 `pre-commit` hook that runs tests on the `pre-push` stage:

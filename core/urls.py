@@ -1,5 +1,5 @@
 from django.urls import path
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 
 from . import views
 from .views import HomeView, healthz  # Home; Health check
@@ -102,10 +102,13 @@ urlpatterns = [
     path("dashboard/", dashboard, name="dashboard"),
     path("dashboard/export/", dashboard_export, name="dashboard_export"),
     # Transactions
+    path("transactions/", transaction_list_v2, name="transaction_list"),
+    path("transactions/", transaction_list_v2, name="transaction_list_v2"),
     path(
-        "transactions/", transaction_list_v2, name="transaction_list"
-    ),  # Alias for backward compatibility
-    path("transactions-v2/", transaction_list_v2, name="transaction_list_v2"),
+        "transactions-v2/",
+        RedirectView.as_view(pattern_name="transaction_list", permanent=False),
+        name="transaction_list_v2_legacy",
+    ),
     path(
         "transactions/new/", TransactionCreateView.as_view(), name="transaction_create"
     ),

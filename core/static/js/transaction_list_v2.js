@@ -1,4 +1,4 @@
-// Transactions 2.0 JavaScript - Advanced functionality
+// Transactions JavaScript - Advanced functionality
 const DynamicCSS = (() => {
   let sheet;
   const created = new Set();
@@ -48,70 +48,30 @@ function escapeHtml(str) {
   }[s]));
 }
 
-function readJsonScript(id, fallback = {}) {
-  const payload = document.getElementById(id);
-  if (!payload) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(payload.textContent || "{}");
-  } catch (error) {
-    console.error(`[readJsonScript] Failed to parse ${id}`, error);
-    return fallback;
-  }
+const transactionListFilters = window.TransactionListFilterUtils;
+if (!transactionListFilters) {
+  throw new Error("TransactionListFilterUtils must be loaded before transaction_list_v2.js");
 }
 
-function buildFallbackTransactionListDefaults() {
-  const today = new Date();
-  return {
-    date_start: `${today.getFullYear() - 2}-01-01`,
-    date_end: today.toISOString().split("T")[0],
-  };
+const transactionListState = window.TransactionListStateUtils;
+if (!transactionListState) {
+  throw new Error("TransactionListStateUtils must be loaded before transaction_list_v2.js");
 }
 
-const TRANSACTION_TYPE_CODE_TO_LABEL = {
-  IN: "Income",
-  EX: "Expense",
-  IV: "Investment",
-  TR: "Transfer",
-  AJ: "Adjustment",
-};
-
-const TRANSACTION_TYPE_LABEL_TO_CODE = Object.fromEntries(
-  Object.entries(TRANSACTION_TYPE_CODE_TO_LABEL).map(([code, label]) => [
-    label,
-    code,
-  ]),
-);
-
-const FILTER_FIELD_SELECTORS = {
-  date_start: "#date-start",
-  date_end: "#date-end",
-  type: "#filter-type",
-  account: "#filter-account",
-  category: "#filter-category",
-  period: "#filter-period",
-  amount_min: "#filter-amount-min",
-  amount_max: "#filter-amount-max",
-  tags: "#filter-tags",
-  search: "#global-search",
-};
-
-const NON_ACTIVE_FILTER_KEYS = new Set([
-  "page",
-  "page_size",
-  "sort_field",
-  "sort_direction",
-  "include_system",
-]);
+const console = transactionListState.createLogger().consoleProxy;
+const TRANSACTION_TYPE_CODE_TO_LABEL =
+  transactionListFilters.transactionTypeCodeToLabel;
+const TRANSACTION_TYPE_LABEL_TO_CODE =
+  transactionListFilters.transactionTypeLabelToCode;
+const FILTER_FIELD_SELECTORS = transactionListFilters.filterFieldSelectors;
+const NON_ACTIVE_FILTER_KEYS = transactionListFilters.nonActiveFilterKeys;
 
 class TransactionManager {
   constructor() {
     console.log("🚀 [TransactionManager] Initializing Transaction Manager...");
-    this.filterDefaults = readJsonScript(
+    this.filterDefaults = transactionListFilters.readJsonScript(
       "transaction-list-defaults",
-      buildFallbackTransactionListDefaults(),
+      transactionListFilters.buildFallbackTransactionListDefaults(),
     );
     this.currentPage = 1;
     this.pageSize = 25;
@@ -218,10 +178,10 @@ class TransactionManager {
     return {
       date_start:
         this.filterDefaults?.date_start ||
-        buildFallbackTransactionListDefaults().date_start,
+        transactionListFilters.buildFallbackTransactionListDefaults().date_start,
       date_end:
         this.filterDefaults?.date_end ||
-        buildFallbackTransactionListDefaults().date_end,
+        transactionListFilters.buildFallbackTransactionListDefaults().date_end,
     };
   }
 
@@ -242,29 +202,18 @@ class TransactionManager {
   }
 
   ensureSelectOption(selector, value, label = value) {
-    const element = $(selector);
-    if (!element.length || !element.is("select") || value === "") {
-      return;
-    }
-
-    const normalizedValue = String(value);
-    const hasOption =
-      element.find("option").filter((_index, option) => option.value === normalizedValue)
-        .length > 0;
-
-    if (!hasOption) {
-      element.append(new Option(label, normalizedValue, false, false));
-    }
+    transactionListFilters.ensureSelectOption(selector, value, label);
   }
 
   applyFilterState(filters) {
-    if (!filters || typeof filters !== "object") {
+    const normalizedFilters = transactionListFilters.normalizeFilterState(filters);
+    if (!Object.keys(normalizedFilters).length) {
       return false;
     }
 
     let applied = false;
 
-    Object.entries(filters).forEach(([key, rawValue]) => {
+    Object.entries(normalizedFilters).forEach(([key, rawValue]) => {
       if (rawValue === "" || rawValue === null || rawValue === undefined) {
         return;
       }
@@ -312,10 +261,7 @@ class TransactionManager {
         return;
       }
 
-      let value = String(rawValue);
-      if (key === "type") {
-        value = TRANSACTION_TYPE_CODE_TO_LABEL[value] || value;
-      }
+      const value = String(rawValue);
 
       if (key === "date_start" || key === "date_end") {
         this.setDateFilterValue(FILTER_FIELD_SELECTORS[key], value);
@@ -324,7 +270,17 @@ class TransactionManager {
       }
 
       if (element.is("select")) {
-        this.ensureSelectOption(FILTER_FIELD_SELECTORS[key], value);
+        let optionLabel = value;
+        if (key === "type") {
+          optionLabel = TRANSACTION_TYPE_CODE_TO_LABEL[value] || value;
+        }
+        if (key === "account_id" && normalizedFilters.account) {
+          optionLabel = String(normalizedFilters.account);
+        }
+        if (key === "category_id" && normalizedFilters.category) {
+          optionLabel = String(normalizedFilters.category);
+        }
+        this.ensureSelectOption(FILTER_FIELD_SELECTORS[key], value, optionLabel);
       }
 
       element.val(value);
@@ -335,18 +291,14 @@ class TransactionManager {
   }
 
   loadInitialFiltersFromPage() {
-    const payload = document.getElementById("transaction-list-initial-filters");
-    if (!payload) {
+    const filters = transactionListFilters.readJsonScript(
+      "transaction-list-initial-filters",
+      null,
+    );
+    if (!filters) {
       return false;
     }
-
-    try {
-      const filters = JSON.parse(payload.textContent || "{}");
-      return this.applyFilterState(filters);
-    } catch (error) {
-      console.error("[loadInitialFiltersFromPage] Failed to parse initial filters", error);
-      return false;
-    }
+    return this.applyFilterState(filters);
   }
 
   bindEvents() {
@@ -615,8 +567,8 @@ class TransactionManager {
       type: $("#filter-type").val(),
       typeMapped:
         TRANSACTION_TYPE_LABEL_TO_CODE[$("#filter-type").val()] || $("#filter-type").val(),
-      account: $("#filter-account").val(),
-      category: $("#filter-category").val(),
+      accountId: $("#filter-account").val(),
+      categoryId: $("#filter-category").val(),
       period: $("#filter-period").val(),
       amountMin: $("#filter-amount-min").val(),
       amountMax: $("#filter-amount-max").val(),
@@ -659,134 +611,46 @@ class TransactionManager {
   }
 
   showFilterFeedback() {
-    // Add visual feedback to show filters are active (Excel-style)
-    const filters = this.getFilters();
-    const activeFilters = Object.keys(filters).filter((key) => {
-      return (
-        !NON_ACTIVE_FILTER_KEYS.has(key) &&
-        filters[key] &&
-        filters[key] !== "" &&
-        !this.isDefaultFilterValue(key, filters[key])
-      );
+    transactionListState.updateFilterFeedback({
+      filters: this.getFilters(),
+      nonActiveFilterKeys: NON_ACTIVE_FILTER_KEYS,
+      isDefaultFilterValue: (key, value) => this.isDefaultFilterValue(key, value),
     });
-    
-    const countElement = $("#active-filters-count");
-    const collapseButton = $('[data-bs-target="#filtersCollapse"]');
-    const chevron = collapseButton.find('.fa-chevron-down, .fa-chevron-up');
-
-    if (activeFilters.length > 0) {
-      countElement.text(`${activeFilters.length} active filter${activeFilters.length > 1 ? 's' : ''}`);
-      countElement.removeClass('text-muted').addClass('text-primary fw-bold');
-    } else {
-      countElement.text('No active filters');
-      countElement.removeClass('text-primary fw-bold').addClass('text-muted');
-    }
-
-    // Update collapse button chevron based on actual state
-    const isCollapsed = !$('#filtersCollapse').hasClass('show');
-    const filtersChevron = $('#filters-chevron');
-    if (isCollapsed) {
-      filtersChevron.removeClass('fa-chevron-up').addClass('fa-chevron-down');
-      $('#filters-toggle').attr('aria-expanded', 'false');
-    } else {
-      filtersChevron.removeClass('fa-chevron-down').addClass('fa-chevron-up');
-      $('#filters-toggle').attr('aria-expanded', 'true');
-    }
   }
 
   getFilters() {
-    const selectedType = $("#filter-type").val();
-    const mappedType =
-      TRANSACTION_TYPE_LABEL_TO_CODE[selectedType] || selectedType;
-
-    const filters = {
-      date_start: $("#date-start").val(),
-      date_end: $("#date-end").val(),
-      type: mappedType,
-      account: $("#filter-account").val(),
-      category: $("#filter-category").val(),
-      period: $("#filter-period").val(),
-      amount_min: $("#filter-amount-min").val(),
-      amount_max: $("#filter-amount-max").val(),
-      tags: $("#filter-tags").val(),
-      search: $("#global-search").val(),
-      page: this.currentPage,
-      page_size: this.pageSize,
-      sort_field: this.sortField,
-      sort_direction: this.sortDirection,
-      include_system: true,
-    };
-
-    // Filter out empty values to prevent backend filter issues
-    const cleanFilters = {};
-    Object.keys(filters).forEach((key) => {
-      const value = filters[key];
-      if (value !== "" && value !== null && value !== undefined) {
-        cleanFilters[key] = value;
-      }
+    return transactionListState.buildFilters({
+      currentPage: this.currentPage,
+      pageSize: this.pageSize,
+      sortField: this.sortField,
+      sortDirection: this.sortDirection,
+      filterSelectors: FILTER_FIELD_SELECTORS,
+      typeLabelToCode: TRANSACTION_TYPE_LABEL_TO_CODE,
     });
-
-    // Always include required pagination and sorting params
-    cleanFilters.page = this.currentPage;
-    cleanFilters.page_size = this.pageSize;
-    cleanFilters.sort_field = this.sortField;
-    cleanFilters.sort_direction = this.sortDirection;
-    cleanFilters.include_system = true;
-
-    return cleanFilters;
   }
 
   buildQueryParams(filters, extraParams = {}) {
-    const params = new URLSearchParams();
-
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== "" && value !== null && value !== undefined) {
-        params.append(key, value);
-      }
-    });
-
-    Object.entries(extraParams).forEach(([key, value]) => {
-      if (value !== "" && value !== null && value !== undefined) {
-        params.append(key, value);
-      }
-    });
-
-    return params;
+    return transactionListFilters.buildQueryParams(filters, extraParams);
   }
 
   getTotalsFilters(force = false) {
-    const totalsFilters = { ...this.getFilters() };
-    delete totalsFilters.page;
-    delete totalsFilters.page_size;
-    delete totalsFilters.sort_field;
-    delete totalsFilters.sort_direction;
-
-    if (force) {
-      totalsFilters.force = true;
-    }
-
-    return totalsFilters;
+    return transactionListState.buildTotalsFilters(this.getFilters(), { force });
   }
 
   saveFiltersToStorage() {
-    const filters = this.getFilters();
-    sessionStorage.setItem("transaction_filters_v2", JSON.stringify(filters));
+    transactionListState.saveFilters(this.getFilters());
   }
 
   loadFiltersFromStorage() {
-    const saved = sessionStorage.getItem("transaction_filters_v2");
-    if (!saved) {
+    const { filters, error } = transactionListState.loadFilters();
+    if (error) {
+      console.error("[loadFiltersFromStorage] Failed to parse saved filters", error);
+    }
+    if (!filters) {
       return false;
     }
 
-    try {
-      const filters = JSON.parse(saved);
-      return this.applyFilterState(filters);
-    } catch (error) {
-      console.error("[loadFiltersFromStorage] Failed to parse saved filters", error);
-      sessionStorage.removeItem("transaction_filters_v2");
-      return false;
-    }
+    return this.applyFilterState(filters);
   }
 
   logEditNavigation(id) {
@@ -804,27 +668,12 @@ class TransactionManager {
 
   clearFilters() {
     this.resetFiltersToDefaults();
-    sessionStorage.removeItem("transaction_filters_v2");
+    transactionListState.clearSavedFilters();
     this.currentPage = 1;
     this.cache.clear(); // Clear cache when clearing filters
     this.showFilterFeedback();
     this.loadTransactions();
     this.loadTotals();
-  }
-
-  generateCacheKey() {
-    const filters = this.getFilters();
-    const key = Object.keys(filters)
-      .sort()
-      .map((k) => `${k}:${filters[k]}`)
-      .join("|");
-    const cacheKey = `tx_v2_${btoa(key)}`;
-    console.log("🔑 [generateCacheKey] Cache key gerada:", {
-      filters: filters,
-      keyString: key,
-      finalCacheKey: cacheKey,
-    });
-    return cacheKey;
   }
 
   async loadTransactions(force = false) {
@@ -1451,12 +1300,12 @@ class TransactionManager {
     this.updateSelectOptions(
       "#filter-category",
       filters.categories || [],
-      "category",
+      "category_id",
     );
     this.updateSelectOptions(
       "#filter-account",
       filters.accounts || [],
-      "account",
+      "account_id",
     );
     this.updateSelectOptions("#filter-period", filters.periods || [], "period");
 
@@ -1479,22 +1328,19 @@ class TransactionManager {
       options,
     );
 
-    // Clear and rebuild options
-    select.empty();
-    select.append(
-      `<option value="">All ${filterType ? filterType.charAt(0).toUpperCase() + filterType.slice(1) + "s" : "Options"}</option>`,
-    );
-
-    // Add available options (Excel-style - only those with data in current filter context)
-    options.forEach((option) => {
-      const selected = option === currentValue ? " selected" : "";
-      select.append(`<option value="${option}"${selected}>${option}</option>`);
+    const { reset, selectedValue } = transactionListFilters.updateSelectOptions({
+      selector,
+      options,
+      currentValue,
+      filterType,
     });
 
-    // Excel behavior: Keep current selection if it exists in filtered data
-    // Only clear if the current value is not in the available options
-    if (currentValue && !options.includes(currentValue)) {
-      select.val("");
+    if (selectedValue && selectedValue !== currentValue) {
+      select.val(selectedValue);
+    }
+
+    // Excel behavior: keep current selection when it still maps to an option.
+    if (reset) {
       console.log(
         `🔄 [updateSelectOptions] Filter ${filterType} reset - value '${currentValue}' not present in filtered data (Excel-style)`,
       );
@@ -1506,9 +1352,9 @@ class TransactionManager {
         );
         select.trigger("change");
       }, 100);
-    } else if (currentValue && options.includes(currentValue)) {
+    } else if (select.val()) {
       console.log(
-        `✅ [updateSelectOptions] Filter ${filterType} kept - value '${currentValue}' exists in filtered data`,
+        `✅ [updateSelectOptions] Filter ${filterType} kept - value '${select.val()}' exists in filtered data`,
       );
     }
 
@@ -2332,11 +2178,3 @@ function getCookie(name) {
   return cookieValue;
 }
 
-// Type mapping
-const typeMapping = {
-  IN: "Income",
-  EX: "Expense",
-  IV: "Investment",
-  TR: "Transfer",
-  AJ: "Adjustment",
-};

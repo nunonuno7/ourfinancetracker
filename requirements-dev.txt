@@ -31,3 +31,6 @@ gunicorn==23.0.0
 
 # ───── Fuzz testing ─────
 hypothesis==6.138.2
+
+# Browser smoke tests
+playwright>=1.45,<2

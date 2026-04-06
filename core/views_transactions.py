@@ -32,7 +32,7 @@ from django.shortcuts import render
 from django.utils.http import http_date, parse_http_date_safe
 from django.utils.timezone import now
 
-from .models import Tag, Transaction
+from .models import Account, Category, Tag, Transaction
 from .utils.date_helpers import parse_safe_date, period_key
 
 logger = logging.getLogger(__name__)
@@ -113,6 +113,22 @@ def _parse_decimal_filter(value, label: str) -> Decimal | None:
         return None
 
 
+def _parse_positive_int_filter(value, label: str) -> int | None:
+    """Parse an optional positive integer filter and log invalid input once."""
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s value '%s'", label, value)
+        return None
+
+    if parsed <= 0:
+        logger.warning("Invalid %s value '%s'", label, value)
+        return None
+    return parsed
+
+
 def _normalize_transaction_filters(data: dict) -> dict:
     """Normalize request parameters for the transactions v2 endpoints."""
     raw_start = data.get("date_start", data.get("start_date"))
@@ -165,7 +181,11 @@ def _normalize_transaction_filters(data: dict) -> dict:
         "sort_direction": sort_direction,
         "include_system": _request_bool(data.get("include_system"), default=False),
         "type": str(data.get("type", "") or "").strip(),
+        "category_id": _parse_positive_int_filter(
+            data.get("category_id"), "category_id"
+        ),
         "category": str(data.get("category", "") or "").strip(),
+        "account_id": _parse_positive_int_filter(data.get("account_id"), "account_id"),
         "account": str(data.get("account", "") or "").strip(),
         "period": period_value,
         "period_tuple": parsed_period,
@@ -175,6 +195,33 @@ def _normalize_transaction_filters(data: dict) -> dict:
         "tags_terms": tags_terms,
         "force_refresh": _request_bool(data.get("force"), default=False),
     }
+
+
+def _hydrate_initial_filter_labels(user_id: int, initial_filters: dict) -> dict:
+    """Add human-readable labels when only filter IDs were explicitly provided."""
+    hydrated = dict(initial_filters)
+
+    category_id = hydrated.get("category_id")
+    if category_id and not hydrated.get("category"):
+        category_name = (
+            Category.objects.filter(user_id=user_id, pk=category_id)
+            .values_list("name", flat=True)
+            .first()
+        )
+        if category_name:
+            hydrated["category"] = category_name
+
+    account_id = hydrated.get("account_id")
+    if account_id and not hydrated.get("account"):
+        account_name = (
+            Account.objects.filter(user_id=user_id, pk=account_id)
+            .values_list("name", flat=True)
+            .first()
+        )
+        if account_name:
+            hydrated["account"] = account_name
+
+    return hydrated
 
 
 def _initial_transaction_filters_for_view(request) -> dict:
@@ -193,7 +240,9 @@ def _initial_transaction_filters_for_view(request) -> dict:
 
     for key in (
         "type",
+        "account_id",
         "account",
+        "category_id",
         "category",
         "period",
         "amount_min",
@@ -208,7 +257,7 @@ def _initial_transaction_filters_for_view(request) -> dict:
         if key in request_data and normalized.get(key) not in (None, ""):
             initial_filters[key] = normalized[key]
 
-    return initial_filters
+    return _hydrate_initial_filter_labels(request.user.id, initial_filters)
 
 
 def _matching_transaction_type_codes(term: str) -> list[str]:
@@ -236,10 +285,18 @@ def _apply_transactions_v2_filters(
     if filters["type"] and "type" not in excluded:
         queryset = queryset.filter(type=filters["type"])
 
-    if filters["category"] and "category" not in excluded:
+    if filters["category_id"] and "category" not in excluded:
+        queryset = queryset.filter(category_id=filters["category_id"])
+    elif filters["category"] and "category" not in excluded:
+        # Temporary compatibility for older deep links/session state.
+        # New callers should send category_id instead of partial names.
         queryset = queryset.filter(category__name__icontains=filters["category"])
 
-    if filters["account"] and "account" not in excluded:
+    if filters["account_id"] and "account" not in excluded:
+        queryset = queryset.filter(account_id=filters["account_id"])
+    elif filters["account"] and "account" not in excluded:
+        # Temporary compatibility for older deep links/session state.
+        # New callers should send account_id instead of partial names.
         queryset = queryset.filter(account__name__icontains=filters["account"])
 
     if filters["period_tuple"] and "period" not in excluded:
@@ -292,7 +349,9 @@ def _transactions_v2_cache_key(
         "date_end": filters["date_end"].isoformat(),
         "include_system": filters["include_system"],
         "type": filters["type"],
+        "category_id": filters["category_id"],
         "category": filters["category"],
+        "account_id": filters["account_id"],
         "account": filters["account"],
         "period": filters["period"],
         "search": filters["search"],
@@ -443,33 +502,50 @@ def _transactions_v2_filter_options(user_id: int, filters: dict) -> dict:
     def filtered_qs(excluded_filter: str):
         return _apply_transactions_v2_filters(base_qs, filters, {excluded_filter})
 
-    type_values = sorted(
+    type_values = [
         {
-            TRANSACTION_TYPE_LABELS.get(code, code)
-            for code in filtered_qs("type").values_list("type", flat=True).distinct()
+            "value": code,
+            "label": TRANSACTION_TYPE_LABELS.get(code, code),
         }
-    )
+        for code in sorted(
+            {
+                code
+                for code in filtered_qs("type").values_list("type", flat=True).distinct()
+                if code
+            },
+            key=lambda code: TRANSACTION_TYPE_LABELS.get(code, code),
+        )
+    ]
 
-    category_values = list(
-        filtered_qs("category")
-        .exclude(category__name__isnull=True)
-        .exclude(category__name="")
-        .values_list("category__name", flat=True)
-        .order_by("category__name")
-        .distinct()
-    )
+    category_values = [
+        {"value": category_id, "label": category_name}
+        for category_id, category_name in (
+            filtered_qs("category")
+            .exclude(category__name__isnull=True)
+            .exclude(category__name="")
+            .values_list("category__id", "category__name")
+            .order_by("category__name")
+            .distinct()
+        )
+    ]
 
-    account_values = list(
-        filtered_qs("account")
-        .exclude(account__name__isnull=True)
-        .exclude(account__name="")
-        .values_list("account__name", flat=True)
-        .order_by("account__name")
-        .distinct()
-    )
+    account_values = [
+        {"value": account_id, "label": account_name}
+        for account_id, account_name in (
+            filtered_qs("account")
+            .exclude(account__name__isnull=True)
+            .exclude(account__name="")
+            .values_list("account__id", "account__name")
+            .order_by("account__name")
+            .distinct()
+        )
+    ]
 
     period_values = [
-        period_key(year, month)
+        {
+            "value": period_key(year, month),
+            "label": period_key(year, month),
+        }
         for year, month in (
             filtered_qs("period")
             .exclude(period__year__isnull=True)
@@ -523,7 +599,9 @@ def _serialize_transactions_v2(transactions) -> list[dict]:
                 "amount_formatted": _format_transaction_amount_v2(
                     tx.amount, currency_symbol
                 ),
+                "category_id": tx.category_id,
                 "category": tx.category.name if tx.category else "",
+                "account_id": tx.account_id,
                 "account": tx.account.name if tx.account else "No account",
                 "currency": currency_symbol,
                 "tags": ", ".join(sorted(tag.name for tag in tx.tags.all())),
