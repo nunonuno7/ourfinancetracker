@@ -46,6 +46,15 @@ TRANSACTION_TYPE_LABELS = {
 }
 
 
+def get_transaction_list_default_date_range(
+    today_value: date | None = None,
+) -> tuple[date, date]:
+    """Return the shared default date range for the transactions list."""
+    today_value = today_value or date.today()
+    # Keep the initial view focused on recent history without aging a hard-coded year.
+    return date(today_value.year - 2, 1, 1), today_value
+
+
 def _parse_period_param(period_value: str | None) -> tuple[int, int] | None:
     """Parse a ``YYYY-MM`` string into ``(year, month)``."""
     if not period_value or not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", period_value):
@@ -108,13 +117,14 @@ def _normalize_transaction_filters(data: dict) -> dict:
     """Normalize request parameters for the transactions v2 endpoints."""
     raw_start = data.get("date_start", data.get("start_date"))
     raw_end = data.get("date_end", data.get("end_date"))
+    default_start, default_end = get_transaction_list_default_date_range()
 
     if not raw_start and not raw_end:
-        start_date = date(2020, 1, 1)
-        end_date = date(2030, 12, 31)
+        start_date = default_start
+        end_date = default_end
     else:
-        start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
-        end_date = parse_safe_date(raw_end, date.today())
+        start_date = parse_safe_date(raw_start, default_start)
+        end_date = parse_safe_date(raw_end, default_end)
 
     sort_field = str(data.get("sort_field", "date") or "date").strip().lower()
     if sort_field not in {
@@ -165,6 +175,40 @@ def _normalize_transaction_filters(data: dict) -> dict:
         "tags_terms": tags_terms,
         "force_refresh": _request_bool(data.get("force"), default=False),
     }
+
+
+def _initial_transaction_filters_for_view(request) -> dict:
+    """Return only explicitly requested filters for the HTML page bootstrap."""
+    if request.method != "GET" or not request.GET:
+        return {}
+
+    request_data = _parse_transaction_request_data(request)
+    normalized = _normalize_transaction_filters(request_data)
+    initial_filters = {}
+
+    if "date_start" in request_data or "start_date" in request_data:
+        initial_filters["date_start"] = normalized["date_start"].isoformat()
+    if "date_end" in request_data or "end_date" in request_data:
+        initial_filters["date_end"] = normalized["date_end"].isoformat()
+
+    for key in (
+        "type",
+        "account",
+        "category",
+        "period",
+        "amount_min",
+        "amount_max",
+        "tags",
+        "search",
+        "page",
+        "page_size",
+        "sort_field",
+        "sort_direction",
+    ):
+        if key in request_data and normalized.get(key) not in (None, ""):
+            initial_filters[key] = normalized[key]
+
+    return initial_filters
 
 
 def _matching_transaction_type_codes(term: str) -> list[str]:
@@ -504,8 +548,16 @@ def clear_session_flag(request):
 @login_required
 def transaction_list_v2(request):
     """Modern transaction list view."""
+    default_start, default_end = get_transaction_list_default_date_range()
     context = {
         "force_refresh_once": request.session.pop("transaction_changed", False),
+        "initial_filters": _initial_transaction_filters_for_view(request),
+        "filter_defaults": {
+            "date_start": default_start.isoformat(),
+            "date_end": default_end.isoformat(),
+        },
+        "default_date_start": default_start.isoformat(),
+        "default_date_end": default_end.isoformat(),
     }
     return render(request, "core/transaction_list_v2.html", context)
 

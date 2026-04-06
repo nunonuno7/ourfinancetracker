@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
 {% load filters %}
-{% now "Y-m-d" as today %}
 
 {% block extra_head %}
   {{ block.super }}
@@ -54,7 +53,7 @@
         </button>
         <div class="d-flex gap-2">
           <small class="text-muted align-self-center" id="active-filters-count">No active filters</small>
-          <button class="btn btn-sm btn-outline-danger" id="clear-filters-btn">
+          <button type="button" class="btn btn-sm btn-outline-danger" id="clear-filters-btn">
             <i class="fas fa-times"></i> Clear
           </button>
         </div>
@@ -62,7 +61,7 @@
     </div>
     <div class="collapse show" id="filtersCollapse">
       <div class="card-body py-3">
-        <form id="filter-form" method="get" action="{% url 'transaction_create' %}">
+        <form id="filter-form" method="get" action="{% url 'transaction_list_v2' %}">
           <!-- Primary Filters Row - Always visible -->
           <div class="row g-2 mb-3">
             <div class="col-lg-3 col-md-6">
@@ -73,7 +72,7 @@
                   id="date-start"
                   class="form-control"
                   placeholder="Start"
-                  value="2024-01-01"
+                  value="{{ default_date_start }}"
                 />
                 <span class="input-group-text px-2">to</span>
                 <input
@@ -81,7 +80,7 @@
                   id="date-end"
                   class="form-control"
                   placeholder="End"
-                  value="{{ today }}"
+                  value="{{ default_date_end }}"
                 />
               </div>
             </div>
@@ -165,7 +164,7 @@
                   />
                 </div>
                 <div class="col-lg-2 col-md-6 d-flex align-items-end">
-                  <button class="btn btn-primary btn-sm w-100" id="apply-filters-btn">
+                  <button type="submit" class="btn btn-primary btn-sm w-100" id="apply-filters-btn">
                     <i class="fas fa-search"></i> Apply
                   </button>
                 </div>
@@ -504,6 +503,9 @@
     </div>
   </div>
 </div>
+
+{{ filter_defaults|json_script:"transaction-list-defaults" }}
+{{ initial_filters|json_script:"transaction-list-initial-filters" }}
 
 <script nonce="{{ request.csp_nonce }}">
   // Ensure CSRF token is available for AJAX calls

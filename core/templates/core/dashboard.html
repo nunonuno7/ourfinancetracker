@@ -306,26 +306,25 @@ Dashboard{% endblock %} {% block extra_head %}
                       <div class="d-flex justify-content-between align-items-center">
                         <div>
                           <h6 class="mb-1">{{ item.category }}</h6>
-                          <small class="text-muted">
-                            {% if kpis.expenses > 0 %}
-                            {% widthratio item.total kpis.expenses 100 as category_pct %}
-                            {{ category_pct }}% of total expenses
-                            {% endif %}
-                          </small>
+                          <small class="text-muted">{{ item.share_display }}</small>
                         </div>
                         <div class="text-end">
-                          <span class="h5 mb-0 fw-bold text-danger">€ {{ item.total|floatformat:2 }}</span>
+                          <span class="h5 mb-0 fw-bold text-danger">{{ item.total_display }}</span>
                         </div>
                       </div>
                       <div class="progress mt-2 progress-thin">
-                        {% if kpis.expenses > 0 %}
-                        {% widthratio item.total kpis.expenses 100 as progress_pct %}
                         <div
                           class="progress-bar bg-danger"
-                          data-progress-width="{{ progress_pct }}"
+                          data-progress-width="{{ item.percentage }}"
                         ></div>
-                        {% endif %}
                       </div>
+                      {% if item.transaction_url %}
+                      <div class="mt-3">
+                        <a href="{{ item.transaction_url }}" class="btn btn-sm btn-outline-secondary">
+                          <i class="fas fa-list me-1"></i> View transactions
+                        </a>
+                      </div>
+                      {% endif %}
                     </div>
                   </div>
                 </div>
@@ -688,7 +687,7 @@ Dashboard{% endblock %} {% block extra_head %}
         new Chart(expenseCtx, {
           type: 'bar',
           data: {
-            labels: [{% for item in charts %}'{{ item.category }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+            labels: [{% for item in charts %}'{{ item.category|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}],
             datasets: [{
               label: 'Expenses',
               data: [{% for item in charts %}{{ item.total }}{% if not forloop.last %},{% endif %}{% endfor %}],

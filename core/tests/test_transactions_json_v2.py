@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.core.cache import cache
@@ -189,6 +190,53 @@ def test_transactions_json_v2_search_matches_type_display_label(
     assert response.status_code == 200
     payload = response.json()
     assert [tx["id"] for tx in payload["transactions"]] == [investment.id]
+
+
+@patch(
+    "core.views_transactions.get_transaction_list_default_date_range",
+    return_value=(date(2024, 1, 1), date(2026, 4, 6)),
+)
+@pytest.mark.django_db
+def test_transactions_json_v2_uses_shared_default_range_when_dates_omitted(
+    _mocked_range,
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(
+        username="json-v2-default-range", password="p"
+    )
+    client.force_login(user)
+
+    cash = _cash_account_for(user)
+    category = Category.objects.create(user=user, name="General")
+
+    old_tx = _make_transaction(
+        user=user,
+        account=cash,
+        category=category,
+        amount="10.00",
+        tx_type=Transaction.Type.EXPENSE,
+        tx_date=date(2023, 12, 31),
+    )
+    in_range_tx = _make_transaction(
+        user=user,
+        account=cash,
+        category=category,
+        amount="20.00",
+        tx_type=Transaction.Type.EXPENSE,
+        tx_date=date(2024, 1, 1),
+    )
+
+    response = client.get(
+        reverse("transactions_json_v2"),
+        {"include_system": "true"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_count"] == 1
+    assert [tx["id"] for tx in payload["transactions"]] == [in_range_tx.id]
+    assert old_tx.id not in [tx["id"] for tx in payload["transactions"]]
 
 
 @pytest.mark.django_db

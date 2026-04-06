@@ -7,6 +7,7 @@ import re
 from calendar import monthrange
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -91,7 +92,10 @@ def build_charts_for_period(tx):
     )
     return [
         {
+            "category": row["category__name"] or "Uncategorised",
+            "category_filter": row["category__name"] or "",
             "label": row["category__name"] or "Uncategorised",
+            "total": abs(row["total"] or Decimal("0")),
             "value": abs(row["total"] or Decimal("0")),
         }
         for row in expense_rows
@@ -223,6 +227,33 @@ def dashboard(request):
             total_expenses - estimated_expenses,
             total_expenses,
         )
+        period_start = date(year, month, 1).isoformat()
+        period_end = date(year, month, monthrange(year, month)[1]).isoformat()
+        transaction_list_url = reverse("transaction_list_v2")
+
+        for chart in charts:
+            chart_total = _as_decimal(chart["total"])
+            chart_pct = pct(chart_total, total_expenses)
+            chart["total_display"] = _format_money(chart_total)
+            chart["percentage"] = chart_pct
+            chart["percentage_display"] = _format_percent(chart_pct)
+            chart["share_display"] = f"{_format_percent(chart_pct)} of total expenses"
+
+            if chart["category_filter"]:
+                chart["transaction_url"] = (
+                    f"{transaction_list_url}?"
+                    + urlencode(
+                        {
+                            "type": Transaction.Type.EXPENSE,
+                            "category": chart["category_filter"],
+                            "period": period,
+                            "date_start": period_start,
+                            "date_end": period_end,
+                        }
+                    )
+                )
+            else:
+                chart["transaction_url"] = ""
 
         kpis["non_estimated_expenses_pct"] = round(float(verified_expenses_pct_dec))
         kpis["verified_expenses_pct"] = float(verified_expenses_pct_dec)

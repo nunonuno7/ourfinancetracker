@@ -48,9 +48,71 @@ function escapeHtml(str) {
   }[s]));
 }
 
+function readJsonScript(id, fallback = {}) {
+  const payload = document.getElementById(id);
+  if (!payload) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(payload.textContent || "{}");
+  } catch (error) {
+    console.error(`[readJsonScript] Failed to parse ${id}`, error);
+    return fallback;
+  }
+}
+
+function buildFallbackTransactionListDefaults() {
+  const today = new Date();
+  return {
+    date_start: `${today.getFullYear() - 2}-01-01`,
+    date_end: today.toISOString().split("T")[0],
+  };
+}
+
+const TRANSACTION_TYPE_CODE_TO_LABEL = {
+  IN: "Income",
+  EX: "Expense",
+  IV: "Investment",
+  TR: "Transfer",
+  AJ: "Adjustment",
+};
+
+const TRANSACTION_TYPE_LABEL_TO_CODE = Object.fromEntries(
+  Object.entries(TRANSACTION_TYPE_CODE_TO_LABEL).map(([code, label]) => [
+    label,
+    code,
+  ]),
+);
+
+const FILTER_FIELD_SELECTORS = {
+  date_start: "#date-start",
+  date_end: "#date-end",
+  type: "#filter-type",
+  account: "#filter-account",
+  category: "#filter-category",
+  period: "#filter-period",
+  amount_min: "#filter-amount-min",
+  amount_max: "#filter-amount-max",
+  tags: "#filter-tags",
+  search: "#global-search",
+};
+
+const NON_ACTIVE_FILTER_KEYS = new Set([
+  "page",
+  "page_size",
+  "sort_field",
+  "sort_direction",
+  "include_system",
+]);
+
 class TransactionManager {
   constructor() {
     console.log("🚀 [TransactionManager] Initializing Transaction Manager...");
+    this.filterDefaults = readJsonScript(
+      "transaction-list-defaults",
+      buildFallbackTransactionListDefaults(),
+    );
     this.currentPage = 1;
     this.pageSize = 25;
     this.totalRecords = 0;
@@ -88,8 +150,13 @@ class TransactionManager {
     console.log("📄 [init] Page size loaded from storage");
 
     this.loadFiltersFromStorage();
+    const hasInitialFilters = this.loadInitialFiltersFromPage();
+    if (hasInitialFilters) {
+      this.saveFiltersToStorage();
+    }
     console.log("💾 [init] Filters loaded from storage");
 
+    this.showFilterFeedback();
     this.bindEvents();
     console.log("🔗 [init] Event listeners connected");
 
@@ -132,17 +199,154 @@ class TransactionManager {
   }
 
   initDatePickers() {
+    const defaultDates = this.getDefaultDateRange();
+
     flatpickr("#date-start", {
       dateFormat: "Y-m-d",
-      defaultDate: "2025-01-01",
+      defaultDate: defaultDates.date_start,
       onChange: () => this.onFilterChange(),
     });
 
     flatpickr("#date-end", {
       dateFormat: "Y-m-d",
-      defaultDate: new Date(),
+      defaultDate: defaultDates.date_end,
       onChange: () => this.onFilterChange(),
     });
+  }
+
+  getDefaultDateRange() {
+    return {
+      date_start:
+        this.filterDefaults?.date_start ||
+        buildFallbackTransactionListDefaults().date_start,
+      date_end:
+        this.filterDefaults?.date_end ||
+        buildFallbackTransactionListDefaults().date_end,
+    };
+  }
+
+  resetFiltersToDefaults() {
+    const defaultDates = this.getDefaultDateRange();
+    this.setDateFilterValue("#date-start", defaultDates.date_start);
+    this.setDateFilterValue("#date-end", defaultDates.date_end);
+    $("#filter-type, #filter-account, #filter-category, #filter-period").val("");
+    $("#filter-amount-min, #filter-amount-max, #filter-tags, #global-search").val("");
+  }
+
+  getFilterElement(key) {
+    const selector = FILTER_FIELD_SELECTORS[key];
+    if (!selector) {
+      return $();
+    }
+    return $(selector);
+  }
+
+  ensureSelectOption(selector, value, label = value) {
+    const element = $(selector);
+    if (!element.length || !element.is("select") || value === "") {
+      return;
+    }
+
+    const normalizedValue = String(value);
+    const hasOption =
+      element.find("option").filter((_index, option) => option.value === normalizedValue)
+        .length > 0;
+
+    if (!hasOption) {
+      element.append(new Option(label, normalizedValue, false, false));
+    }
+  }
+
+  applyFilterState(filters) {
+    if (!filters || typeof filters !== "object") {
+      return false;
+    }
+
+    let applied = false;
+
+    Object.entries(filters).forEach(([key, rawValue]) => {
+      if (rawValue === "" || rawValue === null || rawValue === undefined) {
+        return;
+      }
+
+      if (key === "page") {
+        const parsedPage = parseInt(rawValue, 10);
+        if (!Number.isNaN(parsedPage) && parsedPage > 0) {
+          this.currentPage = parsedPage;
+          applied = true;
+        }
+        return;
+      }
+
+      if (key === "page_size") {
+        const parsedSize = parseInt(rawValue, 10);
+        if (String(rawValue) === "all" || (!Number.isNaN(parsedSize) && parsedSize >= this.maxPageSize)) {
+          this.pageSize = this.maxPageSize;
+          $("#page-size-selector").val("all");
+          applied = true;
+          return;
+        }
+
+        if (!Number.isNaN(parsedSize) && parsedSize > 0) {
+          this.pageSize = parsedSize;
+          $("#page-size-selector").val(String(parsedSize));
+          applied = true;
+        }
+        return;
+      }
+
+      if (key === "sort_field") {
+        this.sortField = String(rawValue);
+        applied = true;
+        return;
+      }
+
+      if (key === "sort_direction") {
+        this.sortDirection = String(rawValue).toLowerCase() === "asc" ? "asc" : "desc";
+        applied = true;
+        return;
+      }
+
+      const element = this.getFilterElement(key);
+      if (!element.length) {
+        return;
+      }
+
+      let value = String(rawValue);
+      if (key === "type") {
+        value = TRANSACTION_TYPE_CODE_TO_LABEL[value] || value;
+      }
+
+      if (key === "date_start" || key === "date_end") {
+        this.setDateFilterValue(FILTER_FIELD_SELECTORS[key], value);
+        applied = true;
+        return;
+      }
+
+      if (element.is("select")) {
+        this.ensureSelectOption(FILTER_FIELD_SELECTORS[key], value);
+      }
+
+      element.val(value);
+      applied = true;
+    });
+
+    return applied;
+  }
+
+  loadInitialFiltersFromPage() {
+    const payload = document.getElementById("transaction-list-initial-filters");
+    if (!payload) {
+      return false;
+    }
+
+    try {
+      const filters = JSON.parse(payload.textContent || "{}");
+      return this.applyFilterState(filters);
+    } catch (error) {
+      console.error("[loadInitialFiltersFromPage] Failed to parse initial filters", error);
+      return false;
+    }
   }
 
   bindEvents() {
@@ -159,7 +363,10 @@ class TransactionManager {
       "input",
       this.debounce(() => this.onFilterChange(), 300),
     );
-    
+    $("#filter-form").on("submit", (e) => {
+      e.preventDefault();
+      this.onFilterChange();
+    });
 
     // Page size selector
     $("#page-size-selector").on("change", (e) =>
@@ -174,7 +381,10 @@ class TransactionManager {
     });
 
     // Buttons
-    $("#apply-filters-btn").on("click", () => this.loadTransactions());
+    $("#apply-filters-btn").on("click", (e) => {
+      e.preventDefault();
+      this.onFilterChange();
+    });
     $("#clear-filters-btn").on("click", () => this.clearFilters());
     $("#refresh-btn").on("click", () => this.refreshData());
 
@@ -397,20 +607,14 @@ class TransactionManager {
     console.log("🎯 CURRENT FILTERS:");
     console.table(currentFilters);
 
-    const typeMapping = {
-      'Income': 'IN',
-      'Expense': 'EX', 
-      'Investment': 'IV',
-      'Transfer': 'TR',
-      'Adjustment': 'AJ'
-    };
     
     console.log("🔧 DOM ELEMENT VALUES:");
     console.table({
       dateStart: $("#date-start").val(),
       dateEnd: $("#date-end").val(),
       type: $("#filter-type").val(),
-      typeMapped: typeMapping[$("#filter-type").val()] || $("#filter-type").val(),
+      typeMapped:
+        TRANSACTION_TYPE_LABEL_TO_CODE[$("#filter-type").val()] || $("#filter-type").val(),
       account: $("#filter-account").val(),
       category: $("#filter-category").val(),
       period: $("#filter-period").val(),
@@ -443,13 +647,27 @@ class TransactionManager {
     console.groupEnd();
   }
 
+  isDefaultFilterValue(key, value) {
+    const defaultDates = this.getDefaultDateRange();
+    if (key === "date_start") {
+      return value === defaultDates.date_start;
+    }
+    if (key === "date_end") {
+      return value === defaultDates.date_end;
+    }
+    return false;
+  }
+
   showFilterFeedback() {
     // Add visual feedback to show filters are active (Excel-style)
     const filters = this.getFilters();
     const activeFilters = Object.keys(filters).filter((key) => {
-      // Exclude pagination and system params
-      const excludeKeys = ['page', 'page_size', 'sort_field', 'sort_direction', 'include_system'];
-      return !excludeKeys.includes(key) && filters[key] && filters[key] !== "";
+      return (
+        !NON_ACTIVE_FILTER_KEYS.has(key) &&
+        filters[key] &&
+        filters[key] !== "" &&
+        !this.isDefaultFilterValue(key, filters[key])
+      );
     });
     
     const countElement = $("#active-filters-count");
@@ -477,22 +695,14 @@ class TransactionManager {
   }
 
   getFilters() {
-    // Map frontend display values to backend enum values
-    const typeMapping = {
-      'Income': 'IN',
-      'Expense': 'EX', 
-      'Investment': 'IV',
-      'Transfer': 'TR',
-      'Adjustment': 'AJ'
-    };
-
     const selectedType = $("#filter-type").val();
-    const mappedType = typeMapping[selectedType] || selectedType;
+    const mappedType =
+      TRANSACTION_TYPE_LABEL_TO_CODE[selectedType] || selectedType;
 
     const filters = {
       date_start: $("#date-start").val(),
       date_end: $("#date-end").val(),
-      type: mappedType, // Use mapped type
+      type: mappedType,
       account: $("#filter-account").val(),
       category: $("#filter-category").val(),
       period: $("#filter-period").val(),
@@ -526,6 +736,38 @@ class TransactionManager {
     return cleanFilters;
   }
 
+  buildQueryParams(filters, extraParams = {}) {
+    const params = new URLSearchParams();
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== "" && value !== null && value !== undefined) {
+        params.append(key, value);
+      }
+    });
+
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value !== "" && value !== null && value !== undefined) {
+        params.append(key, value);
+      }
+    });
+
+    return params;
+  }
+
+  getTotalsFilters(force = false) {
+    const totalsFilters = { ...this.getFilters() };
+    delete totalsFilters.page;
+    delete totalsFilters.page_size;
+    delete totalsFilters.sort_field;
+    delete totalsFilters.sort_direction;
+
+    if (force) {
+      totalsFilters.force = true;
+    }
+
+    return totalsFilters;
+  }
+
   saveFiltersToStorage() {
     const filters = this.getFilters();
     sessionStorage.setItem("transaction_filters_v2", JSON.stringify(filters));
@@ -533,14 +775,17 @@ class TransactionManager {
 
   loadFiltersFromStorage() {
     const saved = sessionStorage.getItem("transaction_filters_v2");
-    if (saved) {
+    if (!saved) {
+      return false;
+    }
+
+    try {
       const filters = JSON.parse(saved);
-      Object.keys(filters).forEach((key) => {
-        const element = $(`#${key.replace("_", "-")}`);
-        if (element.length && filters[key]) {
-          element.val(filters[key]);
-        }
-      });
+      return this.applyFilterState(filters);
+    } catch (error) {
+      console.error("[loadFiltersFromStorage] Failed to parse saved filters", error);
+      sessionStorage.removeItem("transaction_filters_v2");
+      return false;
     }
   }
 
@@ -558,14 +803,11 @@ class TransactionManager {
   }
 
   clearFilters() {
-    $("#date-start").val("2024-01-01");
-    $("#date-end").val(new Date().toISOString().split("T")[0]);
-    $("#filter-type, #filter-account, #filter-category, #filter-period").val("");
-    $("#filter-amount-min, #filter-amount-max, #filter-tags, #global-search").val("");
-
+    this.resetFiltersToDefaults();
     sessionStorage.removeItem("transaction_filters_v2");
     this.currentPage = 1;
     this.cache.clear(); // Clear cache when clearing filters
+    this.showFilterFeedback();
     this.loadTransactions();
     this.loadTotals();
   }
@@ -592,23 +834,10 @@ class TransactionManager {
       this.showLoader(true);
 
       const filters = this.getFilters();
-      const params = new URLSearchParams();
-
-      // Add all filters to params
-      Object.keys(filters).forEach((key) => {
-        if (
-          filters[key] !== "" &&
-          filters[key] !== null &&
-          filters[key] !== undefined
-        ) {
-          params.append(key, filters[key]);
-        }
-      });
-
-      if (force) {
-        params.append("force", "true");
-        params.append("_ts", Date.now().toString());
-      }
+      const params = this.buildQueryParams(
+        filters,
+        force ? { force: "true", _ts: Date.now().toString() } : {},
+      );
       const url = `/transactions/json-v2/?${params.toString()}`;
       console.log("🌐 [loadTransactions] Request URL:", url);
 
@@ -677,20 +906,11 @@ class TransactionManager {
   async loadTotals(force = false) {
     console.log("💰 [loadTotals] Starting totals load...");
     try {
-      const filters = this.getFilters();
+      const totalsFilters = this.getTotalsFilters(force);
       
-      // Remove pagination and sorting params for totals calculation
-      const totalsFilters = { ...filters };
-      delete totalsFilters.page;
-      delete totalsFilters.page_size;
-      delete totalsFilters.sort_field;
-      delete totalsFilters.sort_direction;
       
       console.log("🔍 [loadTotals] Filters for totals (cleaned):", totalsFilters);
 
-      if (force) {
-        totalsFilters.force = true;
-      }
       const csrfToken =
         document.querySelector("[name=csrfmiddlewaretoken]")?.value ||
         getCookie("csrftoken");
@@ -1838,7 +2058,7 @@ class TransactionManager {
 
   exportData() {
     const filters = this.getFilters();
-    const params = new URLSearchParams(filters);
+    const params = this.buildQueryParams(filters);
     window.open(`/transactions/export-excel/?${params}`, "_blank");
   }
 
