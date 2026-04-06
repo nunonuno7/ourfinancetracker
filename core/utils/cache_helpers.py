@@ -5,11 +5,12 @@ Helpers for managing transaction cache safely and efficiently.
 
 import hashlib
 import logging
+from contextlib import contextmanager
 from fnmatch import fnmatch
 from typing import Optional
-from contextlib import contextmanager
-from django.core.cache import cache
+
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ def clear_tx_cache(user_id: int, force: bool = False) -> None:
         # Use Redis pattern matching when available
         try:
             from django.core.cache.backends.redis import RedisCache
+
             if isinstance(cache, RedisCache):
                 # Redis supports wildcard matching
                 keys = cache._cache.get_client().keys(pattern)
@@ -147,10 +149,11 @@ def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
 
     # Generate keys for the last 12 months
     from datetime import date, timedelta
+
     today = date.today()
 
     for i in range(12):
-        month_date = today - timedelta(days=i*30)
+        month_date = today - timedelta(days=i * 30)
         start_date = month_date.replace(day=1)
         end_date = month_date
 
@@ -169,11 +172,15 @@ def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
                 cache_keys_to_clear.append(tx_v2_key)
 
         # Balance keys
-        balance_key = f"ourfinance:account_balance_user_{user_id}_{start_date}:{secret_hash}"
+        balance_key = (
+            f"ourfinance:account_balance_user_{user_id}_{start_date}:{secret_hash}"
+        )
         cache_keys_to_clear.append(balance_key)
 
         # Category keys
-        category_key = f"ourfinance:category_cache_user_{user_id}_{start_date}:{secret_hash}"
+        category_key = (
+            f"ourfinance:category_cache_user_{user_id}_{start_date}:{secret_hash}"
+        )
         cache_keys_to_clear.append(category_key)
 
     # Clear every collected key
@@ -184,14 +191,14 @@ def _clear_specific_cache_keys(user_id: int, secret_hash: str) -> None:
             pass  # Ignore individual delete failures
 
 
-def get_cache_key_for_transactions(user_id: int, start_date: str, end_date: str) -> str:
+def get_cache_key_for_transactions(user_id: int, start_date, end_date) -> str:
     """
     Generate a cache key for a user's transactions within a date range.
 
     Args:
         user_id: User ID
-        start_date: Start date (string)
-        end_date: End date (string)
+        start_date: Start date or ISO-like string
+        end_date: End date or ISO-like string
 
     Returns:
         Safe cache key

@@ -1,0 +1,663 @@
+"""Transaction list v2 views and helpers.
+
+This module keeps the transactions v2 table endpoints together so
+``core.views`` can focus on the remaining areas of the application.
+"""
+
+import hashlib
+import json
+import logging
+import re
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
+
+from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    Max,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
+from django.db.models.functions import Coalesce, Lower
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
+from django.utils.http import http_date, parse_http_date_safe
+from django.utils.timezone import now
+
+from .models import Tag, Transaction
+from .utils.date_helpers import parse_safe_date, period_key
+
+logger = logging.getLogger(__name__)
+
+TRANSACTION_TYPE_LABELS = {
+    Transaction.Type.INCOME: "Income",
+    Transaction.Type.EXPENSE: "Expense",
+    Transaction.Type.INVESTMENT: "Investment",
+    Transaction.Type.TRANSFER: "Transfer",
+    Transaction.Type.ADJUSTMENT: "Adjustment",
+}
+
+
+def _parse_period_param(period_value: str | None) -> tuple[int, int] | None:
+    """Parse a ``YYYY-MM`` string into ``(year, month)``."""
+    if not period_value or not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", period_value):
+        return None
+
+    year, month = period_value.split("-", 1)
+    return int(year), int(month)
+
+
+def _parse_transaction_request_data(request) -> dict:
+    """Return request data for transaction endpoints from GET or JSON POST."""
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = {}
+        return payload if isinstance(payload, dict) else {}
+    return request.GET.dict()
+
+
+def _request_bool(value, default: bool = False) -> bool:
+    """Parse common truthy/falsey request values."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _request_int(
+    value, default: int, *, minimum: int = 1, maximum: int | None = None
+) -> int:
+    """Parse an integer request parameter with bounds and sensible defaults."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+
+    if parsed < minimum:
+        parsed = minimum
+    if maximum is not None:
+        parsed = min(parsed, maximum)
+    return parsed
+
+
+def _parse_decimal_filter(value, label: str) -> Decimal | None:
+    """Parse an optional decimal filter and log invalid input once."""
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value).strip())
+    except (ArithmeticError, TypeError, ValueError):
+        logger.warning("Invalid %s value '%s'", label, value)
+        return None
+
+
+def _normalize_transaction_filters(data: dict) -> dict:
+    """Normalize request parameters for the transactions v2 endpoints."""
+    raw_start = data.get("date_start", data.get("start_date"))
+    raw_end = data.get("date_end", data.get("end_date"))
+
+    if not raw_start and not raw_end:
+        start_date = date(2020, 1, 1)
+        end_date = date(2030, 12, 31)
+    else:
+        start_date = parse_safe_date(raw_start, date(date.today().year, 1, 1))
+        end_date = parse_safe_date(raw_end, date.today())
+
+    sort_field = str(data.get("sort_field", "date") or "date").strip().lower()
+    if sort_field not in {
+        "date",
+        "period",
+        "type",
+        "amount",
+        "category",
+        "tags",
+        "account",
+    }:
+        sort_field = "date"
+
+    sort_direction = (
+        "asc"
+        if str(data.get("sort_direction", "desc") or "desc").strip().lower() == "asc"
+        else "desc"
+    )
+
+    period_value = str(data.get("period", "") or "").strip()
+    parsed_period = _parse_period_param(period_value)
+    if period_value and parsed_period is None:
+        logger.warning("Invalid period value '%s'", period_value)
+        period_value = ""
+
+    tags_terms = [
+        term.strip().lower()
+        for term in str(data.get("tags", "") or "").split(",")
+        if term.strip()
+    ]
+
+    return {
+        "date_start": start_date,
+        "date_end": end_date,
+        "page": _request_int(data.get("page"), 1, minimum=1),
+        "page_size": _request_int(data.get("page_size"), 25, minimum=1, maximum=1000),
+        "sort_field": sort_field,
+        "sort_direction": sort_direction,
+        "include_system": _request_bool(data.get("include_system"), default=False),
+        "type": str(data.get("type", "") or "").strip(),
+        "category": str(data.get("category", "") or "").strip(),
+        "account": str(data.get("account", "") or "").strip(),
+        "period": period_value,
+        "period_tuple": parsed_period,
+        "search": str(data.get("search", "") or "").strip(),
+        "amount_min": _parse_decimal_filter(data.get("amount_min"), "amount_min"),
+        "amount_max": _parse_decimal_filter(data.get("amount_max"), "amount_max"),
+        "tags_terms": tags_terms,
+        "force_refresh": _request_bool(data.get("force"), default=False),
+    }
+
+
+def _matching_transaction_type_codes(term: str) -> list[str]:
+    """Return type codes whose display labels match a search term."""
+    term_lower = term.strip().lower()
+    if not term_lower:
+        return []
+    return [
+        code
+        for code, label in TRANSACTION_TYPE_LABELS.items()
+        if term_lower in label.lower()
+    ]
+
+
+def _apply_transactions_v2_filters(
+    queryset, filters: dict, exclude_filters: set[str] | None = None
+):
+    """Apply transactions v2 filters to a queryset."""
+    excluded = exclude_filters or set()
+    needs_distinct = False
+
+    if not filters["include_system"] and "include_system" not in excluded:
+        queryset = queryset.filter(Q(is_system=False) | Q(is_system__isnull=True))
+
+    if filters["type"] and "type" not in excluded:
+        queryset = queryset.filter(type=filters["type"])
+
+    if filters["category"] and "category" not in excluded:
+        queryset = queryset.filter(category__name__icontains=filters["category"])
+
+    if filters["account"] and "account" not in excluded:
+        queryset = queryset.filter(account__name__icontains=filters["account"])
+
+    if filters["period_tuple"] and "period" not in excluded:
+        year, month = filters["period_tuple"]
+        queryset = queryset.filter(period__year=year, period__month=month)
+
+    if filters["amount_min"] is not None and "amount_min" not in excluded:
+        queryset = queryset.filter(amount__gte=filters["amount_min"])
+
+    if filters["amount_max"] is not None and "amount_max" not in excluded:
+        queryset = queryset.filter(amount__lte=filters["amount_max"])
+
+    if filters["search"] and "search" not in excluded:
+        search_term = filters["search"]
+        search_query = (
+            Q(category__name__icontains=search_term)
+            | Q(account__name__icontains=search_term)
+            | Q(tags__name__icontains=search_term)
+        )
+        matching_types = _matching_transaction_type_codes(search_term)
+        if matching_types:
+            search_query |= Q(type__in=matching_types)
+        queryset = queryset.filter(search_query)
+        needs_distinct = True
+
+    if filters["tags_terms"] and "tags" not in excluded:
+        tags_query = Q()
+        for tag_term in filters["tags_terms"]:
+            tags_query |= Q(tags__name__icontains=tag_term)
+        queryset = queryset.filter(tags_query)
+        needs_distinct = True
+
+    if needs_distinct:
+        queryset = queryset.distinct()
+
+    return queryset
+
+
+def _transactions_v2_cache_key(
+    user_id: int,
+    filters: dict,
+    *,
+    suffix: str = "list",
+    include_view_state: bool = True,
+) -> str:
+    """Build a short cache key that stays compatible with existing invalidation."""
+    cache_payload = {
+        "suffix": suffix,
+        "date_start": filters["date_start"].isoformat(),
+        "date_end": filters["date_end"].isoformat(),
+        "include_system": filters["include_system"],
+        "type": filters["type"],
+        "category": filters["category"],
+        "account": filters["account"],
+        "period": filters["period"],
+        "search": filters["search"],
+        "amount_min": (
+            str(filters["amount_min"]) if filters["amount_min"] is not None else ""
+        ),
+        "amount_max": (
+            str(filters["amount_max"]) if filters["amount_max"] is not None else ""
+        ),
+        "tags_terms": filters["tags_terms"],
+    }
+    if include_view_state:
+        cache_payload.update(
+            {
+                "page": filters["page"],
+                "page_size": filters["page_size"],
+                "sort_field": filters["sort_field"],
+                "sort_direction": filters["sort_direction"],
+            }
+        )
+    digest = hashlib.sha256(
+        json.dumps(cache_payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return f"tx_v2_{user_id}_{suffix}_{digest}"
+
+
+def _build_cached_json_response(
+    request,
+    cache_entry: dict,
+    *,
+    force_refresh: bool = False,
+) -> HttpResponse | JsonResponse:
+    """Serve JSON with conditional ETag/Last-Modified support."""
+    last_modified = cache_entry["last_modified"]
+    etag = cache_entry["etag"]
+
+    if not force_refresh and request.headers.get("If-None-Match") == etag:
+        return HttpResponse(status=304)
+
+    ims = request.headers.get("If-Modified-Since")
+    if not force_refresh and ims:
+        ims_ts = parse_http_date_safe(ims)
+        if ims_ts is not None and int(last_modified.timestamp()) <= ims_ts:
+            return HttpResponse(status=304)
+
+    response = JsonResponse(cache_entry["response_data"])
+    response["ETag"] = etag
+    response["Last-Modified"] = http_date(last_modified.timestamp())
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
+    return response
+
+
+def _make_cached_json_entry(response_data: dict, last_modified) -> dict:
+    """Build a cache entry with serialized metadata for conditional requests."""
+    response_json = json.dumps(response_data, sort_keys=True, cls=DjangoJSONEncoder)
+    return {
+        "response_data": response_data,
+        "etag": hashlib.md5(response_json.encode("utf-8")).hexdigest(),
+        "last_modified": last_modified,
+    }
+
+
+def _annotate_transactions_v2_sort_fields(queryset):
+    """Annotate reusable fields for UI sorting without materializing full datasets."""
+    first_tag_name = Subquery(
+        Tag.objects.filter(transaction_links__transaction=OuterRef("pk"))
+        .order_by("name")
+        .values("name")[:1]
+    )
+
+    return queryset.annotate(
+        sort_category=Lower(Coalesce("category__name", Value(""))),
+        sort_account=Lower(Coalesce("account__name", Value(""))),
+        sort_type=Case(
+            *[
+                When(type=code, then=Value(label.lower()))
+                for code, label in TRANSACTION_TYPE_LABELS.items()
+            ],
+            default=Lower(Coalesce("type", Value(""))),
+            output_field=CharField(),
+        ),
+        sort_tags=Lower(Coalesce(first_tag_name, Value(""))),
+        sort_period_year=Coalesce("period__year", Value(0)),
+        sort_period_month=Coalesce("period__month", Value(0)),
+    )
+
+
+def _order_transactions_v2_queryset(queryset, filters: dict):
+    """Apply UI sorting to the filtered transactions queryset."""
+    queryset = _annotate_transactions_v2_sort_fields(queryset)
+    direction = "-" if filters["sort_direction"] == "desc" else ""
+    sort_field = filters["sort_field"]
+
+    if sort_field == "amount":
+        order_by = [f"{direction}amount", f"{direction}date", f"{direction}id"]
+    elif sort_field == "type":
+        order_by = [f"{direction}sort_type", f"{direction}date", f"{direction}id"]
+    elif sort_field == "category":
+        order_by = [
+            f"{direction}sort_category",
+            f"{direction}date",
+            f"{direction}id",
+        ]
+    elif sort_field == "account":
+        order_by = [
+            f"{direction}sort_account",
+            f"{direction}date",
+            f"{direction}id",
+        ]
+    elif sort_field == "tags":
+        order_by = [f"{direction}sort_tags", f"{direction}date", f"{direction}id"]
+    elif sort_field == "period":
+        order_by = [
+            f"{direction}sort_period_year",
+            f"{direction}sort_period_month",
+            f"{direction}date",
+            f"{direction}id",
+        ]
+    else:
+        order_by = [f"{direction}date", f"{direction}id"]
+
+    return queryset.order_by(*order_by)
+
+
+def _transactions_v2_filter_options(user_id: int, filters: dict) -> dict:
+    """Return dropdown options based on the current filter context."""
+    cache_key = _transactions_v2_cache_key(
+        user_id,
+        filters,
+        suffix="filters",
+        include_view_state=False,
+    )
+
+    if not filters["force_refresh"]:
+        cached_options = cache.get(cache_key)
+        if cached_options is not None:
+            logger.debug(
+                "[transactions_json_v2] filter options cache hit user=%s",
+                user_id,
+            )
+            return cached_options
+
+    base_qs = Transaction.objects.filter(
+        user_id=user_id,
+        date__range=(filters["date_start"], filters["date_end"]),
+    )
+
+    def filtered_qs(excluded_filter: str):
+        return _apply_transactions_v2_filters(base_qs, filters, {excluded_filter})
+
+    type_values = sorted(
+        {
+            TRANSACTION_TYPE_LABELS.get(code, code)
+            for code in filtered_qs("type").values_list("type", flat=True).distinct()
+        }
+    )
+
+    category_values = list(
+        filtered_qs("category")
+        .exclude(category__name__isnull=True)
+        .exclude(category__name="")
+        .values_list("category__name", flat=True)
+        .order_by("category__name")
+        .distinct()
+    )
+
+    account_values = list(
+        filtered_qs("account")
+        .exclude(account__name__isnull=True)
+        .exclude(account__name="")
+        .values_list("account__name", flat=True)
+        .order_by("account__name")
+        .distinct()
+    )
+
+    period_values = [
+        period_key(year, month)
+        for year, month in (
+            filtered_qs("period")
+            .exclude(period__year__isnull=True)
+            .values_list("period__year", "period__month")
+            .order_by("-period__year", "-period__month")
+            .distinct()
+        )
+    ]
+
+    filter_options = {
+        "types": type_values,
+        "categories": category_values,
+        "accounts": account_values,
+        "periods": period_values,
+    }
+    cache.set(cache_key, filter_options, timeout=300)
+    return filter_options
+
+
+def _format_transaction_amount_v2(amount: Decimal, currency_symbol: str) -> str:
+    """Preserve the existing table formatting for transaction amounts."""
+    normalized_amount = f"\u20ac {abs(amount):,.2f}".replace(",", "X").replace(".", ",")
+    normalized_amount = normalized_amount.replace("X", ".")
+    return f"{normalized_amount} {currency_symbol}"
+
+
+def _serialize_transactions_v2(transactions) -> list[dict]:
+    """Serialize paginated transaction objects for the v2 table."""
+    serialized = []
+    for tx in transactions:
+        currency_symbol = "\u20ac"
+        if tx.account and tx.account.currency and tx.account.currency.symbol:
+            currency_symbol = tx.account.currency.symbol
+
+        period_value = ""
+        year = None
+        month = None
+        if tx.period_id and tx.period:
+            year = tx.period.year
+            month = tx.period.month
+            period_value = period_key(year, month)
+
+        serialized.append(
+            {
+                "id": tx.id,
+                "date": tx.date.isoformat(),
+                "year": year,
+                "month": month,
+                "type": TRANSACTION_TYPE_LABELS.get(tx.type, tx.type),
+                "amount": float(tx.amount),
+                "amount_formatted": _format_transaction_amount_v2(
+                    tx.amount, currency_symbol
+                ),
+                "category": tx.category.name if tx.category else "",
+                "account": tx.account.name if tx.account else "No account",
+                "currency": currency_symbol,
+                "tags": ", ".join(sorted(tag.name for tag in tx.tags.all())),
+                "is_system": tx.is_system,
+                "editable": tx.editable,
+                "is_estimated": tx.is_estimated,
+                "period": period_value,
+            }
+        )
+
+    return serialized
+
+
+@login_required
+def clear_session_flag(request):
+    """Clear session flags."""
+    if "transaction_changed" in request.session:
+        del request.session["transaction_changed"]
+    return JsonResponse({"success": True})
+
+
+@login_required
+def transaction_list_v2(request):
+    """Modern transaction list view."""
+    context = {
+        "force_refresh_once": request.session.pop("transaction_changed", False),
+    }
+    return render(request, "core/transaction_list_v2.html", context)
+
+
+@login_required
+def transactions_json_v2(request):
+    """JSON API for the transactions v2 table using database-side filtering."""
+    user_id = request.user.id
+    filters = _normalize_transaction_filters(_parse_transaction_request_data(request))
+    cache_key = _transactions_v2_cache_key(user_id, filters, suffix="list")
+
+    if not filters["force_refresh"]:
+        cached_entry = cache.get(cache_key)
+        if cached_entry is not None:
+            logger.debug(
+                "[transactions_json_v2] cache hit user=%s page=%s sort=%s/%s",
+                user_id,
+                filters["page"],
+                filters["sort_field"],
+                filters["sort_direction"],
+            )
+            return _build_cached_json_response(
+                request,
+                cached_entry,
+                force_refresh=False,
+            )
+
+    logger.debug(
+        "[transactions_json_v2] query user=%s page=%s page_size=%s sort=%s/%s",
+        user_id,
+        filters["page"],
+        filters["page_size"],
+        filters["sort_field"],
+        filters["sort_direction"],
+    )
+
+    base_queryset = Transaction.objects.filter(
+        user_id=user_id,
+        date__range=(filters["date_start"], filters["date_end"]),
+    )
+    filtered_queryset = _apply_transactions_v2_filters(base_queryset, filters)
+    query_metrics = filtered_queryset.aggregate(
+        total_count=Count("pk", distinct=True),
+        max_updated=Max("updated_at"),
+    )
+    total_count = query_metrics["total_count"] or 0
+    last_modified = query_metrics["max_updated"] or now()
+
+    start_idx = (filters["page"] - 1) * filters["page_size"]
+    end_idx = start_idx + filters["page_size"]
+    page_queryset = (
+        _order_transactions_v2_queryset(filtered_queryset, filters)
+        .select_related("category", "account__currency", "period")
+        .prefetch_related("tags")
+    )
+    page_transactions = list(page_queryset[start_idx:end_idx])
+
+    response_data = {
+        "transactions": _serialize_transactions_v2(page_transactions),
+        "total_count": total_count,
+        "current_page": filters["page"],
+        "page_size": filters["page_size"],
+        "filters": _transactions_v2_filter_options(user_id, filters),
+    }
+
+    if total_count == 0:
+        total_tx_count = Transaction.objects.filter(user_id=user_id).count()
+        logger.warning(
+            "[transactions_json_v2] no transactions for user=%s in range %s..%s (user total=%s)",
+            user_id,
+            filters["date_start"],
+            filters["date_end"],
+            total_tx_count,
+        )
+
+    cache_entry = _make_cached_json_entry(response_data, last_modified)
+    cache.set(cache_key, cache_entry, timeout=300)
+    return _build_cached_json_response(
+        request,
+        cache_entry,
+        force_refresh=filters["force_refresh"],
+    )
+
+
+@login_required
+def transactions_totals_v2(request):
+    """Get transaction totals using the same database-side filters as the table."""
+    user_id = request.user.id
+    filters = _normalize_transaction_filters(_parse_transaction_request_data(request))
+    cache_key = _transactions_v2_cache_key(
+        user_id,
+        filters,
+        suffix="totals",
+        include_view_state=False,
+    )
+
+    if not filters["force_refresh"]:
+        cached_entry = cache.get(cache_key)
+        if cached_entry is not None:
+            logger.debug("[transactions_totals_v2] cache hit user=%s", user_id)
+            return _build_cached_json_response(
+                request,
+                cached_entry,
+                force_refresh=False,
+            )
+
+    logger.debug(
+        "[transactions_totals_v2] query user=%s range=%s..%s",
+        user_id,
+        filters["date_start"],
+        filters["date_end"],
+    )
+
+    queryset = Transaction.objects.filter(
+        user_id=user_id,
+        date__range=(filters["date_start"], filters["date_end"]),
+    )
+    filtered_queryset = _apply_transactions_v2_filters(queryset, filters)
+    aggregates = filtered_queryset.aggregate(
+        income=Sum("amount", filter=Q(type=Transaction.Type.INCOME)),
+        expenses=Sum("amount", filter=Q(type=Transaction.Type.EXPENSE)),
+        investments=Sum("amount", filter=Q(type=Transaction.Type.INVESTMENT)),
+        transfers=Sum("amount", filter=Q(type=Transaction.Type.TRANSFER)),
+        last_modified=Max("updated_at"),
+    )
+
+    totals = {
+        "income": aggregates["income"] or Decimal("0"),
+        "expenses": aggregates["expenses"] or Decimal("0"),
+        "investments": aggregates["investments"] or Decimal("0"),
+        "transfers": aggregates["transfers"] or Decimal("0"),
+    }
+    totals["balance"] = totals["income"] - totals["expenses"]
+
+    rounded_totals = {
+        key: float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        for key, value in totals.items()
+    }
+    last_modified = aggregates["last_modified"] or now()
+
+    cache_entry = _make_cached_json_entry(rounded_totals, last_modified)
+    cache.set(cache_key, cache_entry, timeout=300)
+    return _build_cached_json_response(
+        request,
+        cache_entry,
+        force_refresh=filters["force_refresh"],
+    )
+
+
+__all__ = [
+    "clear_session_flag",
+    "transaction_list_v2",
+    "transactions_json_v2",
+    "transactions_totals_v2",
+]
