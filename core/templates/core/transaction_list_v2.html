@@ -44,7 +44,7 @@
   </div>
 
   <!-- Filters Section -->
-  <div class="card mb-3 shadow-sm">
+  <div class="card mb-3 shadow-sm transactions-filters-card">
     <div class="card-header py-2">
       <div class="d-flex justify-content-between align-items-center">
         <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" 
@@ -86,7 +86,13 @@
             </div>
             <div class="col-lg-2 col-md-3 col-6">
               <label class="form-label fw-bold small">📊 Type</label>
-              <select id="filter-type" class="form-select form-select-sm">
+              <select
+                id="filter-type"
+                class="form-select form-select-sm"
+                data-ctrl-multiselect="true"
+                data-placeholder-label="All Types"
+                title="Hold Ctrl to select multiple options"
+              >
                 <option value="">All Types</option>
                 <option value="EX">Expense</option>
                 <option value="IN">Income</option>
@@ -97,19 +103,37 @@
             </div>
             <div class="col-lg-2 col-md-3 col-6">
               <label class="form-label fw-bold small">🏦 Account</label>
-              <select id="filter-account" class="form-select form-select-sm">
+              <select
+                id="filter-account"
+                class="form-select form-select-sm"
+                data-ctrl-multiselect="true"
+                data-placeholder-label="All Accounts"
+                title="Hold Ctrl to select multiple options"
+              >
                 <option value="">All Accounts</option>
               </select>
             </div>
             <div class="col-lg-3 col-md-6">
               <label class="form-label fw-bold small">🏷️ Category</label>
-              <select id="filter-category" class="form-select form-select-sm">
+              <select
+                id="filter-category"
+                class="form-select form-select-sm"
+                data-ctrl-multiselect="true"
+                data-placeholder-label="All Categories"
+                title="Hold Ctrl to select multiple options"
+              >
                 <option value="">All Categories</option>
               </select>
             </div>
             <div class="col-lg-2 col-md-6">
               <label class="form-label fw-bold small">📆 Period</label>
-              <select id="filter-period" class="form-select form-select-sm">
+              <select
+                id="filter-period"
+                class="form-select form-select-sm"
+                data-ctrl-multiselect="true"
+                data-placeholder-label="All Periods"
+                title="Hold Ctrl to select multiple options"
+              >
                 <option value="">All Periods</option>
               </select>
             </div>

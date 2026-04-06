@@ -93,6 +93,85 @@
     box-shadow: 0 0 0 0.2rem rgba(58, 180, 158, 0.25);
   }
 
+  .tx-filter-native-select {
+    display: none !important;
+  }
+
+  .tx-filter-dropdown {
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  .tx-filter-dropdown.tx-filter-dropdown-open {
+    z-index: 1045;
+  }
+
+  .tx-filter-dropdown-toggle {
+    width: 100%;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background-color: #ffffff;
+  }
+
+  .tx-filter-dropdown-menu {
+    max-height: 18rem;
+    overflow-y: auto;
+    z-index: 1045;
+  }
+
+  .tx-filter-dropdown-item {
+    padding: 0.45rem 0.75rem;
+  }
+
+  .tx-filter-dropdown-clear {
+    border-bottom: 1px solid #E9E5DB;
+    font-weight: 500;
+  }
+
+  .tx-filter-dropdown-item.active,
+  .tx-filter-dropdown-item:active {
+    background-color: rgba(58, 180, 158, 0.12);
+    color: #24282C;
+  }
+
+  .tx-filter-dropdown-checkbox {
+    pointer-events: none;
+  }
+
+  .tx-filter-dropdown-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .transactions-filters-card,
+  .transactions-filters-card .collapse,
+  .transactions-filters-card .card-body {
+    overflow: visible !important;
+  }
+
+  .transactions-filters-card {
+    position: relative;
+    z-index: auto;
+  }
+
+  .transactions-filters-card.tx-filters-layer-open {
+    z-index: 1040;
+  }
+
+  #totals-section,
+  #totals-section .col-md-3,
+  .financial-card,
+  .table-responsive {
+    position: relative;
+    z-index: 1;
+  }
+
   .transaction-amount {
     font-family: "JetBrains Mono", "Courier New", monospace;
     font-weight: 600;

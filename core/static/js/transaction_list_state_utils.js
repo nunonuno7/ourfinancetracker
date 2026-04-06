@@ -1,8 +1,21 @@
 (function initializeTransactionListStateUtils(global) {
   const STORAGE_KEY = "transaction_filters_v2";
+  const filterUtils = global.TransactionListFilterUtils || {};
 
   function isBlank(value) {
-    return value === "" || value === null || value === undefined;
+    return (
+      value === "" ||
+      value === null ||
+      value === undefined ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  }
+
+  function getFilterValue(selector) {
+    if (typeof filterUtils.getFilterElementValue === "function") {
+      return filterUtils.getFilterElementValue(selector);
+    }
+    return $(selector).val();
   }
 
   function shouldLogDebug() {
@@ -67,15 +80,17 @@
     filterSelectors,
     typeLabelToCode,
   }) {
-    const selectedType = $(filterSelectors.type).val();
-    const mappedType = typeLabelToCode[selectedType] || selectedType;
+    const selectedType = getFilterValue(filterSelectors.type);
+    const mappedType = Array.isArray(selectedType)
+      ? selectedType.map((value) => typeLabelToCode[value] || value)
+      : typeLabelToCode[selectedType] || selectedType;
     const filters = {
       date_start: $(filterSelectors.date_start).val(),
       date_end: $(filterSelectors.date_end).val(),
       type: mappedType,
-      account_id: $(filterSelectors.account_id).val(),
-      category_id: $(filterSelectors.category_id).val(),
-      period: $(filterSelectors.period).val(),
+      account_id: getFilterValue(filterSelectors.account_id),
+      category_id: getFilterValue(filterSelectors.category_id),
+      period: getFilterValue(filterSelectors.period),
       amount_min: $(filterSelectors.amount_min).val(),
       amount_max: $(filterSelectors.amount_max).val(),
       tags: $(filterSelectors.tags).val(),

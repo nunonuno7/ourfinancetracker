@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
@@ -169,6 +170,75 @@ def test_transactions_json_v2_filter_options_follow_other_active_filters(
     assert payload["filters"]["periods"] == [
         {"value": "2024-02", "label": "2024-02"}
     ]
+
+
+@pytest.mark.django_db
+def test_transactions_json_v2_supports_multiple_values_per_filter(
+    client, django_user_model
+):
+    user = django_user_model.objects.create_user(
+        username="json-v2-multi-filters", password="p"
+    )
+    client.force_login(user)
+
+    cash = _cash_account_for(user)
+    second_account = Account.objects.create(
+        user=user,
+        name="Savings Pot",
+        account_type=cash.account_type,
+        currency=cash.currency,
+    )
+
+    groceries = Category.objects.create(user=user, name="Groceries")
+    rent = Category.objects.create(user=user, name="Rent")
+    travel = Category.objects.create(user=user, name="Travel")
+    feb_2024 = DatePeriod.objects.create(year=2024, month=2, label="2024-02")
+    mar_2024 = DatePeriod.objects.create(year=2024, month=3, label="2024-03")
+
+    feb_expense = _make_transaction(
+        user=user,
+        account=cash,
+        category=groceries,
+        amount="45.00",
+        tx_type=Transaction.Type.EXPENSE,
+        tx_date=date(2024, 2, 1),
+        period=feb_2024,
+    )
+    mar_income = _make_transaction(
+        user=user,
+        account=second_account,
+        category=rent,
+        amount="1200.00",
+        tx_type=Transaction.Type.INCOME,
+        tx_date=date(2024, 3, 1),
+        period=mar_2024,
+    )
+    _make_transaction(
+        user=user,
+        account=cash,
+        category=travel,
+        amount="300.00",
+        tx_type=Transaction.Type.EXPENSE,
+        tx_date=date(2024, 3, 5),
+        period=mar_2024,
+    )
+
+    response = client.get(
+        reverse("transactions_json_v2"),
+        {
+            "date_start": "2024-01-01",
+            "date_end": "2024-12-31",
+            "type": [Transaction.Type.EXPENSE, Transaction.Type.INCOME],
+            "account_id": [cash.id, second_account.id],
+            "category_id": [groceries.id, rent.id],
+            "period": ["2024-02", "2024-03"],
+            "include_system": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [tx["id"] for tx in payload["transactions"]] == [mar_income.id, feb_expense.id]
 
 
 @pytest.mark.django_db
@@ -354,6 +424,80 @@ def test_transactions_totals_v2_respects_tag_filters_without_double_counting(
     assert payload["income"] == 0.0
     assert payload["expenses"] == 30.0
     assert payload["balance"] == -30.0
+
+
+@pytest.mark.django_db
+def test_transactions_totals_v2_supports_array_filters_in_json_payload(
+    client, django_user_model
+):
+    user = django_user_model.objects.create_user(
+        username="json-v2-array-totals", password="p"
+    )
+    client.force_login(user)
+
+    cash = _cash_account_for(user)
+    second_account = Account.objects.create(
+        user=user,
+        name="Savings Pot",
+        account_type=cash.account_type,
+        currency=cash.currency,
+    )
+
+    groceries = Category.objects.create(user=user, name="Groceries")
+    rent = Category.objects.create(user=user, name="Rent")
+    feb_2024 = DatePeriod.objects.create(year=2024, month=2, label="2024-02")
+    mar_2024 = DatePeriod.objects.create(year=2024, month=3, label="2024-03")
+
+    _make_transaction(
+        user=user,
+        account=cash,
+        category=groceries,
+        amount="40.00",
+        tx_type=Transaction.Type.EXPENSE,
+        tx_date=date(2024, 2, 1),
+        period=feb_2024,
+    )
+    _make_transaction(
+        user=user,
+        account=second_account,
+        category=rent,
+        amount="900.00",
+        tx_type=Transaction.Type.INCOME,
+        tx_date=date(2024, 3, 1),
+        period=mar_2024,
+    )
+    _make_transaction(
+        user=user,
+        account=second_account,
+        category=rent,
+        amount="150.00",
+        tx_type=Transaction.Type.INVESTMENT,
+        tx_date=date(2024, 3, 2),
+        period=mar_2024,
+    )
+
+    response = client.post(
+        reverse("transactions_totals_v2"),
+        data=json.dumps(
+            {
+                "date_start": "2024-01-01",
+                "date_end": "2024-12-31",
+                "type": [Transaction.Type.EXPENSE, Transaction.Type.INCOME],
+                "account_id": [cash.id, second_account.id],
+                "category_id": [groceries.id, rent.id],
+                "period": ["2024-02", "2024-03"],
+                "include_system": True,
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["income"] == 900.0
+    assert payload["expenses"] == 40.0
+    assert payload["investments"] == 0.0
+    assert payload["balance"] == 860.0
 
 
 @pytest.mark.django_db

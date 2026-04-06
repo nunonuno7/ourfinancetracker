@@ -44,6 +44,9 @@ TRANSACTION_TYPE_LABELS = {
     Transaction.Type.TRANSFER: "Transfer",
     Transaction.Type.ADJUSTMENT: "Adjustment",
 }
+TRANSACTION_TYPE_LABEL_TO_CODE = {
+    label.lower(): code for code, label in TRANSACTION_TYPE_LABELS.items()
+}
 
 
 def get_transaction_list_default_date_range(
@@ -64,7 +67,7 @@ def _parse_period_param(period_value: str | None) -> tuple[int, int] | None:
     return int(year), int(month)
 
 
-def _parse_transaction_request_data(request) -> dict:
+def _parse_transaction_request_data(request):
     """Return request data for transaction endpoints from GET or JSON POST."""
     if request.method == "POST":
         try:
@@ -72,7 +75,67 @@ def _parse_transaction_request_data(request) -> dict:
         except (TypeError, ValueError, json.JSONDecodeError):
             payload = {}
         return payload if isinstance(payload, dict) else {}
-    return request.GET.dict()
+    return request.GET
+
+
+def _request_value(data, *keys):
+    """Return the last non-blank request value for any key."""
+    for key in keys:
+        if hasattr(data, "getlist"):
+            values = [value for value in data.getlist(key) if value not in (None, "")]
+            if values:
+                return values[-1]
+            continue
+
+        if key not in data:
+            continue
+
+        raw_value = data.get(key)
+        if isinstance(raw_value, list):
+            values = [value for value in raw_value if value not in (None, "")]
+            if values:
+                return values[-1]
+            continue
+
+        if raw_value not in (None, ""):
+            return raw_value
+
+    return None
+
+
+def _request_list(data, *keys) -> list:
+    """Return a normalized list of repeated or array-based request values."""
+    values: list = []
+
+    for key in keys:
+        if hasattr(data, "getlist"):
+            values.extend(data.getlist(key))
+            continue
+
+        if key not in data:
+            continue
+
+        raw_value = data.get(key)
+        if isinstance(raw_value, list):
+            values.extend(raw_value)
+        else:
+            values.append(raw_value)
+
+    normalized: list = []
+    seen: set[str] = set()
+    for value in values:
+        if value in (None, ""):
+            continue
+
+        parts = value if isinstance(value, list) else str(value).split(",")
+        for part in parts:
+            normalized_value = str(part).strip()
+            if not normalized_value or normalized_value in seen:
+                continue
+            seen.add(normalized_value)
+            normalized.append(normalized_value)
+
+    return normalized
 
 
 def _request_bool(value, default: bool = False) -> bool:
@@ -129,10 +192,39 @@ def _parse_positive_int_filter(value, label: str) -> int | None:
     return parsed
 
 
+def _parse_positive_int_filters(values: list, label: str) -> list[int]:
+    """Parse repeated positive integer filters while preserving request order."""
+    parsed_values: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        parsed = _parse_positive_int_filter(value, label)
+        if parsed is None or parsed in seen:
+            continue
+        seen.add(parsed)
+        parsed_values.append(parsed)
+    return parsed_values
+
+
+def _normalize_transaction_type_filters(values: list[str]) -> list[str]:
+    """Normalize transaction type values from labels/codes to canonical codes."""
+    normalized_values: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = TRANSACTION_TYPE_LABEL_TO_CODE.get(value.lower(), value)
+        if normalized not in TRANSACTION_TYPE_LABELS:
+            logger.warning("Invalid type value '%s'", value)
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_values.append(normalized)
+    return normalized_values
+
+
 def _normalize_transaction_filters(data: dict) -> dict:
     """Normalize request parameters for the transactions v2 endpoints."""
-    raw_start = data.get("date_start", data.get("start_date"))
-    raw_end = data.get("date_end", data.get("end_date"))
+    raw_start = _request_value(data, "date_start", "start_date")
+    raw_end = _request_value(data, "date_end", "end_date")
     default_start, default_end = get_transaction_list_default_date_range()
 
     if not raw_start and not raw_end:
@@ -142,7 +234,7 @@ def _normalize_transaction_filters(data: dict) -> dict:
         start_date = parse_safe_date(raw_start, default_start)
         end_date = parse_safe_date(raw_end, default_end)
 
-    sort_field = str(data.get("sort_field", "date") or "date").strip().lower()
+    sort_field = str(_request_value(data, "sort_field") or "date").strip().lower()
     if sort_field not in {
         "date",
         "period",
@@ -156,44 +248,76 @@ def _normalize_transaction_filters(data: dict) -> dict:
 
     sort_direction = (
         "asc"
-        if str(data.get("sort_direction", "desc") or "desc").strip().lower() == "asc"
+        if str(_request_value(data, "sort_direction") or "desc").strip().lower()
+        == "asc"
         else "desc"
     )
 
-    period_value = str(data.get("period", "") or "").strip()
-    parsed_period = _parse_period_param(period_value)
-    if period_value and parsed_period is None:
-        logger.warning("Invalid period value '%s'", period_value)
-        period_value = ""
+    type_values = _normalize_transaction_type_filters(_request_list(data, "type"))
+    category_ids = _parse_positive_int_filters(
+        _request_list(data, "category_id"),
+        "category_id",
+    )
+    account_ids = _parse_positive_int_filters(
+        _request_list(data, "account_id"),
+        "account_id",
+    )
+
+    period_values: list[str] = []
+    period_tuples: list[tuple[int, int]] = []
+    for period_value in _request_list(data, "period"):
+        parsed_period = _parse_period_param(period_value)
+        if parsed_period is None:
+            logger.warning("Invalid period value '%s'", period_value)
+            continue
+        period_values.append(period_value)
+        period_tuples.append(parsed_period)
 
     tags_terms = [
         term.strip().lower()
-        for term in str(data.get("tags", "") or "").split(",")
+        for term in str(_request_value(data, "tags") or "").split(",")
         if term.strip()
     ]
 
     return {
         "date_start": start_date,
         "date_end": end_date,
-        "page": _request_int(data.get("page"), 1, minimum=1),
-        "page_size": _request_int(data.get("page_size"), 25, minimum=1, maximum=1000),
+        "page": _request_int(_request_value(data, "page"), 1, minimum=1),
+        "page_size": _request_int(
+            _request_value(data, "page_size"),
+            25,
+            minimum=1,
+            maximum=1000,
+        ),
         "sort_field": sort_field,
         "sort_direction": sort_direction,
-        "include_system": _request_bool(data.get("include_system"), default=False),
-        "type": str(data.get("type", "") or "").strip(),
-        "category_id": _parse_positive_int_filter(
-            data.get("category_id"), "category_id"
+        "include_system": _request_bool(
+            _request_value(data, "include_system"),
+            default=False,
         ),
-        "category": str(data.get("category", "") or "").strip(),
-        "account_id": _parse_positive_int_filter(data.get("account_id"), "account_id"),
-        "account": str(data.get("account", "") or "").strip(),
-        "period": period_value,
-        "period_tuple": parsed_period,
-        "search": str(data.get("search", "") or "").strip(),
-        "amount_min": _parse_decimal_filter(data.get("amount_min"), "amount_min"),
-        "amount_max": _parse_decimal_filter(data.get("amount_max"), "amount_max"),
+        "type": type_values[0] if len(type_values) == 1 else "",
+        "types": type_values,
+        "category_id": category_ids[0] if len(category_ids) == 1 else None,
+        "category_ids": category_ids,
+        "category": str(_request_value(data, "category") or "").strip(),
+        "account_id": account_ids[0] if len(account_ids) == 1 else None,
+        "account_ids": account_ids,
+        "account": str(_request_value(data, "account") or "").strip(),
+        "period": period_values[0] if len(period_values) == 1 else "",
+        "periods": period_values,
+        "period_tuple": period_tuples[0] if len(period_tuples) == 1 else None,
+        "period_tuples": period_tuples,
+        "search": str(_request_value(data, "search") or "").strip(),
+        "amount_min": _parse_decimal_filter(
+            _request_value(data, "amount_min"),
+            "amount_min",
+        ),
+        "amount_max": _parse_decimal_filter(
+            _request_value(data, "amount_max"),
+            "amount_max",
+        ),
         "tags_terms": tags_terms,
-        "force_refresh": _request_bool(data.get("force"), default=False),
+        "force_refresh": _request_bool(_request_value(data, "force"), default=False),
     }
 
 
@@ -202,7 +326,7 @@ def _hydrate_initial_filter_labels(user_id: int, initial_filters: dict) -> dict:
     hydrated = dict(initial_filters)
 
     category_id = hydrated.get("category_id")
-    if category_id and not hydrated.get("category"):
+    if category_id and not isinstance(category_id, list) and not hydrated.get("category"):
         category_name = (
             Category.objects.filter(user_id=user_id, pk=category_id)
             .values_list("name", flat=True)
@@ -212,7 +336,7 @@ def _hydrate_initial_filter_labels(user_id: int, initial_filters: dict) -> dict:
             hydrated["category"] = category_name
 
     account_id = hydrated.get("account_id")
-    if account_id and not hydrated.get("account"):
+    if account_id and not isinstance(account_id, list) and not hydrated.get("account"):
         account_name = (
             Account.objects.filter(user_id=user_id, pk=account_id)
             .values_list("name", flat=True)
@@ -233,9 +357,35 @@ def _initial_transaction_filters_for_view(request) -> dict:
     normalized = _normalize_transaction_filters(request_data)
     initial_filters = {}
 
-    if "date_start" in request_data or "start_date" in request_data:
+    def has_request_key(*keys) -> bool:
+        return any(key in request_data for key in keys)
+
+    def normalized_filter_value(key: str):
+        if key == "type":
+            return normalized["types"] if len(normalized["types"]) > 1 else normalized["type"]
+        if key == "account_id":
+            return (
+                normalized["account_ids"]
+                if len(normalized["account_ids"]) > 1
+                else normalized["account_id"]
+            )
+        if key == "category_id":
+            return (
+                normalized["category_ids"]
+                if len(normalized["category_ids"]) > 1
+                else normalized["category_id"]
+            )
+        if key == "period":
+            return (
+                normalized["periods"]
+                if len(normalized["periods"]) > 1
+                else normalized["period"]
+            )
+        return normalized.get(key)
+
+    if has_request_key("date_start", "start_date"):
         initial_filters["date_start"] = normalized["date_start"].isoformat()
-    if "date_end" in request_data or "end_date" in request_data:
+    if has_request_key("date_end", "end_date"):
         initial_filters["date_end"] = normalized["date_end"].isoformat()
 
     for key in (
@@ -254,8 +404,9 @@ def _initial_transaction_filters_for_view(request) -> dict:
         "sort_field",
         "sort_direction",
     ):
-        if key in request_data and normalized.get(key) not in (None, ""):
-            initial_filters[key] = normalized[key]
+        value = normalized_filter_value(key)
+        if has_request_key(key) and value not in (None, "", []):
+            initial_filters[key] = value
 
     return _hydrate_initial_filter_labels(request.user.id, initial_filters)
 
@@ -282,26 +433,28 @@ def _apply_transactions_v2_filters(
     if not filters["include_system"] and "include_system" not in excluded:
         queryset = queryset.filter(Q(is_system=False) | Q(is_system__isnull=True))
 
-    if filters["type"] and "type" not in excluded:
-        queryset = queryset.filter(type=filters["type"])
+    if filters["types"] and "type" not in excluded:
+        queryset = queryset.filter(type__in=filters["types"])
 
-    if filters["category_id"] and "category" not in excluded:
-        queryset = queryset.filter(category_id=filters["category_id"])
+    if filters["category_ids"] and "category" not in excluded:
+        queryset = queryset.filter(category_id__in=filters["category_ids"])
     elif filters["category"] and "category" not in excluded:
         # Temporary compatibility for older deep links/session state.
         # New callers should send category_id instead of partial names.
         queryset = queryset.filter(category__name__icontains=filters["category"])
 
-    if filters["account_id"] and "account" not in excluded:
-        queryset = queryset.filter(account_id=filters["account_id"])
+    if filters["account_ids"] and "account" not in excluded:
+        queryset = queryset.filter(account_id__in=filters["account_ids"])
     elif filters["account"] and "account" not in excluded:
         # Temporary compatibility for older deep links/session state.
         # New callers should send account_id instead of partial names.
         queryset = queryset.filter(account__name__icontains=filters["account"])
 
-    if filters["period_tuple"] and "period" not in excluded:
-        year, month = filters["period_tuple"]
-        queryset = queryset.filter(period__year=year, period__month=month)
+    if filters["period_tuples"] and "period" not in excluded:
+        period_query = Q()
+        for year, month in filters["period_tuples"]:
+            period_query |= Q(period__year=year, period__month=month)
+        queryset = queryset.filter(period_query)
 
     if filters["amount_min"] is not None and "amount_min" not in excluded:
         queryset = queryset.filter(amount__gte=filters["amount_min"])
@@ -348,12 +501,12 @@ def _transactions_v2_cache_key(
         "date_start": filters["date_start"].isoformat(),
         "date_end": filters["date_end"].isoformat(),
         "include_system": filters["include_system"],
-        "type": filters["type"],
-        "category_id": filters["category_id"],
+        "types": filters["types"],
+        "category_ids": filters["category_ids"],
         "category": filters["category"],
-        "account_id": filters["account_id"],
+        "account_ids": filters["account_ids"],
         "account": filters["account"],
-        "period": filters["period"],
+        "periods": filters["periods"],
         "search": filters["search"],
         "amount_min": (
             str(filters["amount_min"]) if filters["amount_min"] is not None else ""

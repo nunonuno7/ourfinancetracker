@@ -109,6 +109,9 @@ class TransactionManager {
     this.loadPageSizePreference();
     console.log("📄 [init] Page size loaded from storage");
 
+    this.initCtrlMultiSelectFilters();
+    console.log("Ctrl multi-select filters initialized");
+
     this.loadFiltersFromStorage();
     const hasInitialFilters = this.loadInitialFiltersFromPage();
     if (hasInitialFilters) {
@@ -141,6 +144,24 @@ class TransactionManager {
     $("#transactions-table thead th:first-child").addClass("d-none");
 
     console.log("✅ [init] Complete initialization finished");
+  }
+
+  initCtrlMultiSelectFilters() {
+    this.ctrlMultiSelectSelectors = [
+      "#filter-type",
+      "#filter-account",
+      "#filter-category",
+      "#filter-period",
+    ];
+
+    this.ctrlMultiSelectSelectors.forEach((selector) => {
+      const select = $(selector);
+      if (!select.length || !transactionListFilters.isCtrlMultiSelect(selector)) {
+        return;
+      }
+
+      transactionListFilters.initializeCtrlMultiSelect(selector);
+    });
   }
 
   loadPageSizePreference() {
@@ -185,11 +206,20 @@ class TransactionManager {
     };
   }
 
-  resetFiltersToDefaults() {
-    const defaultDates = this.getDefaultDateRange();
-    this.setDateFilterValue("#date-start", defaultDates.date_start);
-    this.setDateFilterValue("#date-end", defaultDates.date_end);
-    $("#filter-type, #filter-account, #filter-category, #filter-period").val("");
+  resetFiltersToDefaults({ preserveDateRange = false } = {}) {
+    if (!preserveDateRange) {
+      const defaultDates = this.getDefaultDateRange();
+      this.setDateFilterValue("#date-start", defaultDates.date_start);
+      this.setDateFilterValue("#date-end", defaultDates.date_end);
+    }
+    [
+      "#filter-type",
+      "#filter-account",
+      "#filter-category",
+      "#filter-period",
+    ].forEach((selector) => {
+      transactionListFilters.setFilterElementValue(selector, "");
+    });
     $("#filter-amount-min, #filter-amount-max, #filter-tags, #global-search").val("");
   }
 
@@ -214,7 +244,7 @@ class TransactionManager {
     let applied = false;
 
     Object.entries(normalizedFilters).forEach(([key, rawValue]) => {
-      if (rawValue === "" || rawValue === null || rawValue === undefined) {
+      if (transactionListFilters.isBlank(rawValue)) {
         return;
       }
 
@@ -261,7 +291,8 @@ class TransactionManager {
         return;
       }
 
-      const value = String(rawValue);
+      const values = transactionListFilters.normalizeStringArray(rawValue);
+      const value = values[0] || String(rawValue);
 
       if (key === "date_start" || key === "date_end") {
         this.setDateFilterValue(FILTER_FIELD_SELECTORS[key], value);
@@ -270,20 +301,29 @@ class TransactionManager {
       }
 
       if (element.is("select")) {
-        let optionLabel = value;
-        if (key === "type") {
-          optionLabel = TRANSACTION_TYPE_CODE_TO_LABEL[value] || value;
-        }
-        if (key === "account_id" && normalizedFilters.account) {
-          optionLabel = String(normalizedFilters.account);
-        }
-        if (key === "category_id" && normalizedFilters.category) {
-          optionLabel = String(normalizedFilters.category);
-        }
-        this.ensureSelectOption(FILTER_FIELD_SELECTORS[key], value, optionLabel);
+        values.forEach((selectValue) => {
+          let optionLabel = selectValue;
+          if (key === "type") {
+            optionLabel = TRANSACTION_TYPE_CODE_TO_LABEL[selectValue] || selectValue;
+          }
+          if (key === "account_id" && normalizedFilters.account && values.length === 1) {
+            optionLabel = String(normalizedFilters.account);
+          }
+          if (key === "category_id" && normalizedFilters.category && values.length === 1) {
+            optionLabel = String(normalizedFilters.category);
+          }
+          this.ensureSelectOption(
+            FILTER_FIELD_SELECTORS[key],
+            selectValue,
+            optionLabel,
+          );
+        });
       }
 
-      element.val(value);
+      transactionListFilters.setFilterElementValue(
+        FILTER_FIELD_SELECTORS[key],
+        Array.isArray(rawValue) ? values : value,
+      );
       applied = true;
     });
 
@@ -564,12 +604,10 @@ class TransactionManager {
     console.table({
       dateStart: $("#date-start").val(),
       dateEnd: $("#date-end").val(),
-      type: $("#filter-type").val(),
-      typeMapped:
-        TRANSACTION_TYPE_LABEL_TO_CODE[$("#filter-type").val()] || $("#filter-type").val(),
-      accountId: $("#filter-account").val(),
-      categoryId: $("#filter-category").val(),
-      period: $("#filter-period").val(),
+      type: transactionListFilters.getFilterElementValue("#filter-type"),
+      accountId: transactionListFilters.getFilterElementValue("#filter-account"),
+      categoryId: transactionListFilters.getFilterElementValue("#filter-category"),
+      period: transactionListFilters.getFilterElementValue("#filter-period"),
       amountMin: $("#filter-amount-min").val(),
       amountMax: $("#filter-amount-max").val(),
       tags: $("#filter-tags").val(),
@@ -667,10 +705,10 @@ class TransactionManager {
   }
 
   clearFilters() {
-    this.resetFiltersToDefaults();
-    transactionListState.clearSavedFilters();
+    this.resetFiltersToDefaults({ preserveDateRange: true });
     this.currentPage = 1;
     this.cache.clear(); // Clear cache when clearing filters
+    this.saveFiltersToStorage();
     this.showFilterFeedback();
     this.loadTransactions();
     this.loadTotals();
@@ -1321,7 +1359,7 @@ class TransactionManager {
 
   updateSelectOptions(selector, options, filterType) {
     const select = $(selector);
-    const currentValue = select.val();
+    const currentValue = transactionListFilters.getFilterElementValue(selector);
 
     console.log(
       `🔧 [updateSelectOptions] Updating ${filterType} - current value: '${currentValue}', available options:`,
@@ -1334,11 +1372,6 @@ class TransactionManager {
       currentValue,
       filterType,
     });
-
-    if (selectedValue && selectedValue !== currentValue) {
-      select.val(selectedValue);
-    }
-
     // Excel behavior: keep current selection when it still maps to an option.
     if (reset) {
       console.log(
@@ -1352,7 +1385,7 @@ class TransactionManager {
         );
         select.trigger("change");
       }, 100);
-    } else if (select.val()) {
+    } else if (!transactionListFilters.isBlank(selectedValue)) {
       console.log(
         `✅ [updateSelectOptions] Filter ${filterType} kept - value '${select.val()}' exists in filtered data`,
       );
@@ -1656,7 +1689,9 @@ class TransactionManager {
   }
 
   getDefaultDuplicatePeriod() {
-    const selectedPeriod = String($("#filter-period").val() || "").trim();
+    const selectedPeriod = String(
+      transactionListFilters.getFilterElementValues("#filter-period")[0] || "",
+    ).trim();
     if (/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedPeriod)) {
       return selectedPeriod;
     }
@@ -1700,7 +1735,10 @@ class TransactionManager {
     let changed = false;
     const currentStart = String($("#date-start").val() || "").trim();
     const currentEnd = String($("#date-end").val() || "").trim();
-    const currentPeriod = String($("#filter-period").val() || "").trim();
+    const currentPeriods = transactionListFilters.getFilterElementValues(
+      "#filter-period",
+    );
+    const currentPeriod = String(currentPeriods[0] || "").trim();
 
     if (!currentStart || currentStart > bounds.start) {
       this.setDateFilterValue("#date-start", bounds.start);
@@ -1712,8 +1750,11 @@ class TransactionManager {
       changed = true;
     }
 
-    if (currentPeriod && currentPeriod !== targetPeriod) {
-      $("#filter-period").val(targetPeriod);
+    if (
+      currentPeriods.length > 0 &&
+      (currentPeriods.length !== 1 || currentPeriod !== targetPeriod)
+    ) {
+      transactionListFilters.setFilterElementValue("#filter-period", targetPeriod);
       changed = true;
     }
 
