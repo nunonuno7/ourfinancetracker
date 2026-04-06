@@ -212,6 +212,8 @@ class BrowserSmokeTests(StaticLiveServerTestCase):
         self.page.goto(dashboard_path)
 
         expect(self.page.get_by_text("Period Analysis")).to_be_visible()
+        self.page.get_by_role("button", name="List").click()
+        expect(self.page.locator("#list-view")).to_be_visible()
         self.page.get_by_role("link", name="View transactions").first.click()
         self.page.wait_for_url(lambda url: "/transactions/" in url)
 
