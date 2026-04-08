@@ -124,6 +124,30 @@ CSRF_COOKIE_SAMESITE=Lax
 
 Use `None`, `Lax`, or `Strict` as needed.
 
+## 🔀 Sigarra API helpers
+
+The project bundles a lightweight `sigarra_api` module with utilities for
+execução paralela de chamadas ao Sigarra.
+
+- `parallel_process` – executa funções em paralelo com *rate limiting* e
+  retentativas.
+- `get_batch` – estratégia *cache-first, parallel-on-miss*: resultados em
+  cache são devolvidos de imediato e faltas são obtidas em paralelo. A cache
+  fica persistida em ``sigarra_cache.json``.
+
+Example:
+
+```python
+from sigarra_api import get_batch
+
+def fetch_student(code: str) -> dict:
+    return requests.get(f"https://sigarra.example/api/students/{code}").json()
+
+students = get_batch(["2023001", "2023002"], fetch_student, max_workers=8, rate_limit=0.1, retries=2)
+```
+
+Uma barra de progresso é mostrada com `tqdm` quando disponível.
+
 ## 📄 Licence
 
 Distributed under the MIT licence. See the `LICENSE` file for more details.
