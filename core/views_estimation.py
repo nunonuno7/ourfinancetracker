@@ -250,6 +250,8 @@ def get_estimation_summaries(request):
         for period in periods_with_data:
             try:
                 summary = estimation_service.get_estimation_summary(period)
+                summary["_sort_year"] = period.year
+                summary["_sort_month"] = period.month
                 summaries.append(summary)
                 logger.debug(
                     f"Generated summary for period {period.label}: {summary['status']}"
@@ -268,39 +270,19 @@ def get_estimation_summaries(request):
                         "has_estimated_transaction": False,
                         "estimated_transaction_id": None,
                         "details": {},
+                        "_sort_year": period.year,
+                        "_sort_month": period.month,
                     }
                 )
 
-        # Ensure summaries are properly ordered by period (most recent first)
+        # Keep a stable chronological order without depending on localized labels.
         summaries.sort(
-            key=lambda x: (
-                (
-                    int(x["period"].split(" ")[1])
-                    if len(x["period"].split(" ")) > 1
-                    else 0
-                ),  # Year
-                (
-                    [
-                        "January",
-                        "February",
-                        "March",
-                        "April",
-                        "May",
-                        "June",
-                        "July",
-                        "August",
-                        "September",
-                        "October",
-                        "November",
-                        "December",
-                    ].index(x["period"].split(" ")[0])
-                    + 1
-                    if len(x["period"].split(" ")) > 1
-                    else 0
-                ),  # Month
-            ),
+            key=lambda x: (x.get("_sort_year", 0), x.get("_sort_month", 0)),
             reverse=True,
         )
+        for summary in summaries:
+            summary.pop("_sort_year", None)
+            summary.pop("_sort_month", None)
 
         logger.info(
             f"Returning {len(summaries)} estimation summaries for user {request.user.id}"

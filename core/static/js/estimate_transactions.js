@@ -148,11 +148,21 @@ class EstimationManager {
                             const parts = periodStr.split(' ');
                             if (parts.length === 2) {
                                 const months = {
-                                    'January': 1, 'February': 2, 'March': 3, 'April': 4,
-                                    'May': 5, 'June': 6, 'July': 7, 'August': 8,
-                                    'September': 9, 'October': 10, 'November': 11, 'December': 12
+                                    'Jan': 1, 'January': 1,
+                                    'Feb': 2, 'February': 2,
+                                    'Mar': 3, 'March': 3,
+                                    'Apr': 4, 'April': 4,
+                                    'May': 5,
+                                    'Jun': 6, 'June': 6,
+                                    'Jul': 7, 'July': 7,
+                                    'Aug': 8, 'August': 8,
+                                    'Sep': 9, 'September': 9,
+                                    'Oct': 10, 'October': 10,
+                                    'Nov': 11, 'November': 11,
+                                    'Dec': 12, 'December': 12,
                                 };
-                                return new Date(parseInt(parts[1]), months[parts[0]] - 1);
+                                const month = months[parts[0]];
+                                return month ? new Date(parseInt(parts[1]), month - 1) : new Date(0);
                             }
                             return new Date(0);
                         };
