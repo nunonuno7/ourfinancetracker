@@ -19,3 +19,4 @@ def test_profile_renders_for_authenticated_user(client, settings):
     response = client.get(reverse("accounts:profile"))
     assert response.status_code == 200
     assert "accounts/profile.html" in [t.name for t in response.templates]
+    assert "Username: tester" in response.content.decode()
